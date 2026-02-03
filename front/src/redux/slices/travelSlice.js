@@ -18,6 +18,31 @@ export const createTravel = createAsyncThunk(
   }
 );
 
+export const searchTour = createAsyncThunk(
+  'travel/searchTour',
+  async ({ from, to }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get('/search-tours/from-to', {
+        params: { from, to },
+      });
+      return response?.data?.data ?? response?.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || error.message);
+    }
+  }
+);
+
+export const getAllVisitingPlaces = createAsyncThunk(
+  'travel/getAllVisitingPlaces',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get('/tours/visiting-places');
+      return response?.data?.data ?? response?.data ?? [];
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || error.message);
+    }
+  }
+);
 export const getTravelList = createAsyncThunk(
   'travel/getTravelList',
   async (_, { rejectWithValue }) => {
@@ -132,6 +157,7 @@ const travelSlice = createSlice({
   name: 'travel',
   initialState: {
     data: [],
+    visitingPlaces: [],
     bookings: [],
     travelById: null,
     loading: false,
@@ -177,8 +203,25 @@ const travelSlice = createSlice({
         state.data = action.payload;
         state.loading = false;
       })
+      .addCase(getAllVisitingPlaces.fulfilled, (state, action) => {
+        const payload = action.payload;
+        state.visitingPlaces = Array.isArray(payload) ? payload : [];
+      })
+      .addCase(searchTour.fulfilled, (state, action) => {
+        state.data = action.payload;
+        state.loading = false;
+      })
       .addCase(getBookings.fulfilled, (state, action) => {
-        state.bookings = action.payload;
+        const payload = action.payload;
+        if (Array.isArray(payload)) {
+          state.bookings = payload;
+        } else if (Array.isArray(payload?.data)) {
+          state.bookings = payload.data;
+        } else if (Array.isArray(payload?.bookings)) {
+          state.bookings = payload.bookings;
+        } else {
+          state.bookings = [];
+        }
         state.loading = false;
       })
       .addCase(fetchSeatMap.pending, (state) => {

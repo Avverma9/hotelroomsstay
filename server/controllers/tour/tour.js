@@ -277,3 +277,80 @@ exports.getRequestedTour = async (_, res) => {
   const data = await Tour.find({ isAccepted: false }).sort({ createdAt: -1 });
   return res.json({ success: true, data });
 };
+
+const escapeRegex = (value) =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const normalizeQuery = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/\s+/g, " "); // multiple spaces -> single
+
+const buildLooseSpaceRegex = (value) => {
+  const normalized = normalizeQuery(value);
+  if (!normalized) return null;
+
+  // escape special chars first, then make spaces flexible
+  const escaped = escapeRegex(normalized);
+  const pattern = escaped.replace(/\s+/g, "\\s*"); // "new york" => "new\\s*york"
+  return new RegExp(pattern, "i");
+};
+
+exports.searchTours = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+
+    const queryObj = { isAccepted: true };
+    const andFilters = [];
+
+    const fromRegex = buildLooseSpaceRegex(from);
+    if (fromRegex) {
+      andFilters.push({ visitngPlaces: { $regex: fromRegex } });
+    }
+
+    const toRegex = buildLooseSpaceRegex(to);
+    if (toRegex) {
+      andFilters.push({ visitngPlaces: { $regex: toRegex } });
+    }
+
+    if (andFilters.length) queryObj.$and = andFilters;
+
+    const data = await Tour.find(queryObj).sort({ createdAt: -1 });
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to search tours",
+      error: error.message,
+    });
+  }
+};
+
+/* =========================================================
+   VISITING PLACES LIST
+========================================================= */
+exports.getAllVisitingPlaces = async (_, res) => {
+  try {
+    const docs = await Tour.find({ isAccepted: true }).select("visitngPlaces");
+    const set = new Set();
+
+    docs.forEach((d) => {
+      const raw = d.visitngPlaces;
+      if (!raw || typeof raw !== "string") return;
+
+      raw
+        .split(/[|,]/g)
+        .map((p) => p.replace(/\d+\s*[Nn]\s*/g, "").trim())
+        .filter(Boolean)
+        .forEach((p) => set.add(p));
+    });
+
+    return res.json({ success: true, data: Array.from(set) });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch visiting places",
+      error: error.message,
+    });
+  }
+};

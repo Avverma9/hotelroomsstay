@@ -12,6 +12,8 @@ const {
   getTourByOwner,
   changeTourImage,
   deleteTourImage,
+  searchTours,
+  getAllVisitingPlaces,
 } = require("../../controllers/tour/tour");
 const { upload } = require("../../aws/upload");
 const {
@@ -40,6 +42,8 @@ router.patch("/update-tour/data/:id", updateTour);
 router.patch("/update-tour-image/:id", upload, changeTourImage);
 router.delete("/delete-tour-image/:id",  deleteTourImage);
 router.get("/tours/:tourId/vehicles/:vehicleId/seats", getVehicleSeats);
+router.get('/search-tours/from-to', searchTours)
+router.get('/tours/visiting-places', getAllVisitingPlaces)
 
 
 
