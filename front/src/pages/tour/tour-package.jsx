@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { getTravelList } from "../../redux/slices/travelSlice";
+import { getAllVisitingPlaces, getTravelList, searchTour } from "../../redux/slices/travelSlice";
 import { useLoader } from "../../utils/loader";
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
@@ -78,9 +78,11 @@ const bannerImages = {
 };
 
 
-const HeroBanner = ({ onSearch, searchTerm }) => {
+const HeroBanner = ({ onSearch, onDraftChange, searchTerm, visitingOptions }) => {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState(searchTerm);
+  const [showFromList, setShowFromList] = useState(false);
+  const [showToList, setShowToList] = useState(false);
 
 
   useEffect(() => setTo(searchTerm), [searchTerm]);
@@ -88,12 +90,36 @@ const HeroBanner = ({ onSearch, searchTerm }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSearch(to);
+    onSearch({ from, to });
   };
 
 
   const bannerImage = bannerImages[searchTerm.toLowerCase()] || bannerImages.default;
 
+
+  const filteredFrom = useMemo(() => {
+    const q = from.trim().toLowerCase();
+    if (!q) return visitingOptions.slice(0, 8);
+    return visitingOptions.filter((p) => p.toLowerCase().includes(q)).slice(0, 8);
+  }, [from, visitingOptions]);
+
+  const filteredTo = useMemo(() => {
+    const q = to.trim().toLowerCase();
+    if (!q) return visitingOptions.slice(0, 8);
+    return visitingOptions.filter((p) => p.toLowerCase().includes(q)).slice(0, 8);
+  }, [to, visitingOptions]);
+
+  const selectFrom = (value) => {
+    setFrom(value);
+    setShowFromList(false);
+    onDraftChange();
+  };
+
+  const selectTo = (value) => {
+    setTo(value);
+    setShowToList(false);
+    onDraftChange();
+  };
 
   return (
     <div className="relative h-48 md:h-64 rounded-xl overflow-hidden mb-6 group">
@@ -103,21 +129,63 @@ const HeroBanner = ({ onSearch, searchTerm }) => {
         <h1 className="text-2xl md:text-3xl font-bold text-white mb-4 drop-shadow-md">
           {searchTerm ? `Explore ${searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1)}` : 'Find Your Next Adventure'}
         </h1>
-        <form onSubmit={handleSubmit} className="w-full max-w-2xl bg-white rounded-lg p-1.5 flex shadow-lg">
-          <input
-            type="text"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            placeholder="From"
-            className="flex-1 min-w-0 px-3 py-2 text-sm text-gray-700 placeholder-gray-400 bg-transparent border-r border-gray-100 focus:outline-none"
-          />
-          <input
-            type="text"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            placeholder="Destination"
-            className="flex-1 min-w-0 px-3 py-2 text-sm text-gray-700 placeholder-gray-400 bg-transparent focus:outline-none"
-          />
+        <form onSubmit={handleSubmit} className="w-full max-w-2xl bg-white rounded-lg p-1.5 flex shadow-lg relative">
+          <div className="relative flex-1 min-w-0">
+            <input
+              type="text"
+              value={from}
+              onChange={(e) => {
+                setFrom(e.target.value);
+                onDraftChange();
+              }}
+              onFocus={() => setShowFromList(true)}
+              onBlur={() => setTimeout(() => setShowFromList(false), 120)}
+              placeholder="From"
+              className="w-full px-3 py-2 text-sm text-gray-700 placeholder-gray-400 bg-transparent border-r border-gray-100 focus:outline-none"
+            />
+            {showFromList && filteredFrom.length > 0 && (
+              <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-auto z-20">
+                {filteredFrom.map((place) => (
+                  <button
+                    key={`from-${place}`}
+                    type="button"
+                    onMouseDown={() => selectFrom(place)}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50"
+                  >
+                    {place}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="relative flex-1 min-w-0">
+            <input
+              type="text"
+              value={to}
+              onChange={(e) => {
+                setTo(e.target.value);
+                onDraftChange();
+              }}
+              onFocus={() => setShowToList(true)}
+              onBlur={() => setTimeout(() => setShowToList(false), 120)}
+              placeholder="To"
+              className="w-full px-3 py-2 text-sm text-gray-700 placeholder-gray-400 bg-transparent focus:outline-none"
+            />
+            {showToList && filteredTo.length > 0 && (
+              <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-auto z-20">
+                {filteredTo.map((place) => (
+                  <button
+                    key={`to-${place}`}
+                    type="button"
+                    onMouseDown={() => selectTo(place)}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50"
+                  >
+                    {place}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-6 py-2 rounded-md transition-colors">
             Search
           </button>
@@ -274,16 +342,29 @@ const FilterSidebar = ({ filters, handleFilterChange, maxPrice, allThemes, allAm
 
 function TourPackages() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isServerSearch, setIsServerSearch] = useState(false);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { showLoader, hideLoader } = useLoader();  
-  const { data } = useSelector((state) => state.travel);
+  const { data, visitingPlaces } = useSelector((state) => state.travel);
   const travelData = Array.isArray(data) ? data : [];
+  const visitingOptions = useMemo(() => {
+    const raw = Array.isArray(visitingPlaces) ? visitingPlaces : [];
+    const normalized = raw
+      .map((place) => {
+        if (typeof place === 'string') return place;
+        return place?.name || place?.place || place?.city || place?.location || '';
+      })
+      .map((place) => place.trim())
+      .filter(Boolean);
+    return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b));
+  }, [visitingPlaces]);
 
 console.log("Travel Data:", travelData);
   useEffect(() => {
     showLoader();
     dispatch(getTravelList({})).finally(() => hideLoader());
+    dispatch(getAllVisitingPlaces());
   }, [dispatch]);
 
 
@@ -332,15 +413,23 @@ console.log("Travel Data:", travelData);
     });
   };
   
-  const handleSearch = (term) => {
+  const handleSearch = ({ from, to }) => {
     showLoader();
-    setTimeout(() => {
-      const newFilters = {...activeFilters, searchTerm: term };
-      setActiveFilters(newFilters);
-      setTempFilters(newFilters);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      hideLoader();
-    }, 300);
+    const newFilters = { ...activeFilters, searchTerm: to };
+    setActiveFilters(newFilters);
+    setTempFilters(newFilters);
+    setIsServerSearch(true);
+    dispatch(searchTour({ from, to }))
+      .unwrap()
+      .catch(() => {})
+      .finally(() => hideLoader());
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  
+  const handleDraftChange = () => {
+    if (!isServerSearch) return;
+    setIsServerSearch(false);
+    dispatch(getTravelList({}));
   };
   
   const applyFilters = () => { 
@@ -358,6 +447,8 @@ console.log("Travel Data:", travelData);
     setTimeout(() => {
       setActiveFilters(prev => ({...initialFilters, searchTerm: ""})); 
       setTempFilters(prev => ({...initialFilters, searchTerm: ""})); 
+      setIsServerSearch(false);
+      dispatch(getTravelList({}));
       window.scrollTo({ top: 0, behavior: 'smooth' });
       hideLoader();
     }, 300);
@@ -388,16 +479,22 @@ console.log("Travel Data:", travelData);
       
       const amenityMatch = activeFilters.amenities.every(amenity => item.amenities?.includes(amenity));
       
-      return (nameMatch || cityMatch) && priceMatch && ratingMatch && themeMatch && amenityMatch;
+      const searchMatch = isServerSearch ? true : (nameMatch || cityMatch);
+      return searchMatch && priceMatch && ratingMatch && themeMatch && amenityMatch;
     });
-  }, [activeFilters, travelData]);
+  }, [activeFilters, travelData, isServerSearch]);
 
 
   return (
     <div className="bg-white min-h-screen font-sans text-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         
-        <HeroBanner onSearch={handleSearch} searchTerm={activeFilters.searchTerm} />
+        <HeroBanner
+          onSearch={handleSearch}
+          onDraftChange={handleDraftChange}
+          searchTerm={activeFilters.searchTerm}
+          visitingOptions={visitingOptions}
+        />
 
 
         <div className="flex flex-col lg:flex-row gap-8">
