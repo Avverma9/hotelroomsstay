@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { getTravelById, bookNow, fetchSeatMap } from "../../redux/slices/travelSlice";
 import { getGst } from "../../redux/slices/gstSlice";
 import { useLoader } from "../../utils/loader";
@@ -9,15 +9,8 @@ import { userId } from "../../utils/Unauthorized";
 import { 
   Calendar, Moon, BedDouble, Info, CheckCircle, XCircle, 
   Check, X, Bus, ArrowRight, Armchair, Settings2, User, Baby,
-  MapPin, CheckCircle2, AlertCircle, UserPlus, ChevronLeft, ChevronRight
-} from 'lucide-react';
+  MapPin, CheckCircle2, AlertCircle, UserPlus} from 'lucide-react';
 
-const formatReadableDate = (dateString) => {
-  if (!dateString) return "";
-  const parsed = new Date(dateString);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return parsed.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-};
 
 const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
 const formatDate = (dateStr) => {
@@ -184,7 +177,6 @@ export default function TourBookNowPage() {
   const gstData = useSelector((state) => state.gst.gst);
 
   const dispatch = useDispatch();
-  const navigate = useNavigate();
 
   const { showLoader, hideLoader } = useLoader();
   const toast = useToast();
@@ -382,6 +374,7 @@ export default function TourBookNowPage() {
       vehicleId: selectedVehicleId,
       seats: selectedSeats,
       status: "pending",
+      bookingSource: "Site",
       numberOfAdults: totalAdults,
       numberOfChildren: totalChildren,
       passengers: passengerList,
