@@ -140,6 +140,11 @@ const BookingModal = ({ booking, onClose }) => {
                 value={row.value}
               />
             ))}
+            <DetailItem
+              icon={<IoPricetagOutline />}
+              label="Booking Source"
+              value={booking.bookingSource || "N/A"}
+            />
             <div className="flex items-center gap-4 col-span-full">
               <DetailItem icon={<FaSun />} label="Days" value={booking.days} />
               <DetailItem icon={<FaMoon />} label="Nights" value={booking.nights} />
@@ -399,6 +404,12 @@ export default function TourBooking() {
                       <span className="text-slate-500">Duration</span>
                       <span className="font-semibold text-slate-900">
                         {booking.nights}N / {booking.days}D
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Booking Source</span>
+                      <span className="font-semibold text-slate-900">
+                        {booking.bookingSource || "N/A"}
                       </span>
                     </div>
                     {booking.visitngPlaces && (
