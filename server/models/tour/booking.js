@@ -67,7 +67,7 @@ const tourBookingSchema = new mongoose.Schema(
     state: String,
     city: String,
     themes: String,
-
+    bookingSource: String,
     tourStartDate: Date,
 
     nights: Number,

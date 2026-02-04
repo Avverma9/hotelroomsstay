@@ -16,6 +16,7 @@ exports.createBooking = async (req, res) => {
       userId,
       tourId,
       vehicleId,
+      bookingSource,
 
       seats = [],
       numberOfAdults = 0,
@@ -148,6 +149,7 @@ exports.createBooking = async (req, res) => {
           state: tour.state,
           city: tour.city,
           themes: tour.themes,
+          bookingSource,
 
           nights: tour.nights,
           days: tour.days,
