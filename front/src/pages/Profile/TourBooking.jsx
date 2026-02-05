@@ -189,7 +189,7 @@ const BookingModal = ({ booking, onClose }) => {
               }).format(booking.price || booking.totalAmount || booking.basePrice || 0)}
             </p>
             <p className="text-xs text-blue-600 mt-1">
-              Booking ID: <span className="font-mono">{booking.bookingId}</span>
+              Booking ID: <span className="font-mono">{booking.bookingCode}</span>
             </p>
           </div>
         </section>
