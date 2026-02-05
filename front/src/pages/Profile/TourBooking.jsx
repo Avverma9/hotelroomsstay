@@ -429,7 +429,7 @@ export default function TourBooking() {
                   </button>
                   <div className="text-center text-xs text-slate-400 mt-2">
                     Booking ID:{" "}
-                    <span className="font-mono">{booking.bookingId}</span>
+                    <span className="font-mono">{booking.bookingCode}</span>
                   </div>
                 </footer>
               </div>
