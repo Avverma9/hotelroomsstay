@@ -186,6 +186,7 @@ export default function TourBookNowPage() {
   const [finalPrice, setFinalPrice] = useState(0);
   const [bookingStartDate, setBookingStartDate] = useState("");
   const [bookingEndDate, setBookingEndDate] = useState("");
+  const [bookingCode, setBookingCode] = useState("");
   
   // Booking state
   const [selectedSeats, setSelectedSeats] = useState([]);
@@ -403,8 +404,18 @@ export default function TourBookNowPage() {
       showLoader();
       const res = await dispatch(bookNow(bookingData)).unwrap();
       const data = res?.payload || res;
-      const bookingCode = data?.bookingCode || data?.bookingId || "N/A";
-      toast.success(`Booking Confirmed!\nBooking ID: ${bookingCode}`);
+      const resolvedBookingCode =
+        data?.bookingCode ||
+        data?.bookingId ||
+        data?.data?.bookingCode ||
+        data?.data?.bookingId ||
+        (data?._id ? data._id.slice(-8).toUpperCase() : "");
+      setBookingCode(resolvedBookingCode || "");
+      if (resolvedBookingCode) {
+        toast.success(`Booking Confirmed!\nBooking ID: ${resolvedBookingCode}`);
+      } else {
+        toast.success("Booking Confirmed!");
+      }
       setView('success');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
@@ -418,6 +429,7 @@ export default function TourBookNowPage() {
     setView('details');
     setSelectedSeats([]);
     setPassengers({});
+    setBookingCode("");
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -934,6 +946,12 @@ export default function TourBookNowPage() {
               <div className="absolute top-0 right-0 p-2 opacity-10">
                 <Bus size={100} />
               </div>
+              {bookingCode && (
+                <div className="flex justify-between mb-2 relative z-10">
+                  <span className="text-sm text-gray-500">Booking ID</span>
+                  <span className="font-mono font-medium text-gray-800">{bookingCode}</span>
+                </div>
+              )}
               <div className="flex justify-between mb-2 relative z-10">
                 <span className="text-sm text-gray-500">Trip</span>
                 <span className="font-medium text-gray-800">{travelById.travelAgencyName}</span>
