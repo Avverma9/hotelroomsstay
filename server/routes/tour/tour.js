@@ -14,6 +14,7 @@ const {
   deleteTourImage,
   searchTours,
   getAllVisitingPlaces,
+  filterTours,
 } = require("../../controllers/tour/tour");
 const { upload } = require("../../aws/upload");
 const {
@@ -32,6 +33,7 @@ const router = express.Router();
 router.post("/create-tour", upload, createTour);
 router.get("/get-tour-list", getTourList);
 router.get("/get-tour/:id", getTourById);
+router.get("/filter-tour/by-query", filterTours);
 router.get("/sort-tour/by-order", sortByOrder);
 router.get("/sort-tour/by-price", sortByPrice);
 router.get("/sort-tour/by-duration", sortByDuration);
