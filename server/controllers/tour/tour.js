@@ -247,6 +247,246 @@ exports.getTourById = async (req, res) => {
     return res.status(404).json({ success: false, message: "Tour not found" });
   return res.json({ success: true, data });
 };
+// controllers/tour.controller.js
+const mongoose = require("mongoose");
+
+const toNum = (v) => {
+  const n = Number(String(v ?? "").trim());
+  return Number.isFinite(n) ? n : null;
+};
+
+const toBool = (v) => {
+  if (v === undefined) return null;
+  const s = String(v).toLowerCase().trim();
+  if (["true", "1", "yes"].includes(s)) return true;
+  if (["false", "0", "no"].includes(s)) return false;
+  return null;
+};
+
+const toDate = (v) => {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isFinite(d.getTime()) ? d : null;
+};
+
+const splitList = (v) =>
+  String(v || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+const escapeRegexExact = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+exports.filterTours = async (req, res) => {
+  try {
+    const {
+      // text search
+      q,
+
+      // location
+      country,
+      state,
+      city,
+
+      // themes & amenities
+      themes, // comma separated: "Culture,Heritage"
+      amenities, // comma separated: "Hotel Stay,Breakfast"
+      amenitiesMode, // "all" (default) | "any"
+
+      // numeric filters
+      minPrice,
+      maxPrice,
+      minNights,
+      maxNights,
+      minRating, // starRating >= minRating
+      nights, // exact nights (optional)
+      price, // exact price (optional)
+      starRating, // exact starRating (optional)
+
+      // date filters (data me from/to/tourStartDate)
+      fromDate, // e.g. 2025-02-20
+      toDate: toDateQuery, // e.g. 2025-02-24
+      startDate, // alias
+      endDate,   // alias
+
+      // flags
+      isCustomizable,
+      hasImages,
+      hasVehicles,
+
+      // pagination/sort
+      page = 1,
+      limit = 10,
+      sortBy = "createdAt", // createdAt | price | starRating | nights | tourStartDate
+      sortOrder = "desc",   // asc | desc
+    } = req.query;
+
+    const filter = { isAccepted: true };
+
+    // --- location exact (case-insensitive safe) ---
+    if (country) filter.country = new RegExp(`^${escapeRegexExact(country)}$`, "i");
+    if (state) filter.state = new RegExp(`^${escapeRegexExact(state)}$`, "i");
+    if (city) filter.city = new RegExp(`^${escapeRegexExact(city)}$`, "i");
+
+    // --- themes: match ANY theme token inside string like "Culture, Heritage, Group" OR "धार्मिक यात्रा" ---
+    if (themes) {
+      const list = splitList(themes);
+      if (list.length) {
+        // themes is a string in your data, so regex OR works best
+        filter.themes = { $in: list.map((t) => new RegExp(escapeRegexExact(t), "i")) };
+      }
+    }
+
+    // --- amenities: data me amenities array hai (most), kabhi string bhi ho sakta ---
+    if (amenities) {
+      const list = splitList(amenities);
+      if (list.length) {
+        const mode = String(amenitiesMode || "all").toLowerCase().trim();
+        if (mode === "any") {
+          filter.amenities = { $in: list };
+        } else {
+          // default ALL
+          filter.amenities = { $all: list };
+        }
+      }
+    }
+
+    // --- numeric ranges ---
+    const minP = toNum(minPrice);
+    const maxP = toNum(maxPrice);
+    if (minP !== null || maxP !== null) {
+      filter.price = {};
+      if (minP !== null) filter.price.$gte = minP;
+      if (maxP !== null) filter.price.$lte = maxP;
+    }
+    const exactPrice = toNum(price);
+    if (exactPrice !== null) filter.price = exactPrice;
+
+    const minN = toNum(minNights);
+    const maxN = toNum(maxNights);
+    if (minN !== null || maxN !== null) {
+      filter.nights = {};
+      if (minN !== null) filter.nights.$gte = minN;
+      if (maxN !== null) filter.nights.$lte = maxN;
+    }
+    const exactNights = toNum(nights);
+    if (exactNights !== null) filter.nights = exactNights;
+
+    const minR = toNum(minRating);
+    if (minR !== null) filter.starRating = { $gte: minR };
+
+    const exactRating = toNum(starRating);
+    if (exactRating !== null) filter.starRating = exactRating;
+
+    // --- flags ---
+    const customizable = toBool(isCustomizable);
+    if (customizable !== null) filter.isCustomizable = customizable;
+
+    const imgFlag = toBool(hasImages);
+    if (imgFlag !== null) {
+      filter.images = imgFlag ? { $exists: true, $ne: [] } : { $in: [[], null] };
+    }
+
+    const vehFlag = toBool(hasVehicles);
+    if (vehFlag !== null) {
+      filter.vehicles = vehFlag ? { $exists: true, $ne: [] } : { $in: [[], null] };
+    }
+
+    // --- date range ---
+    const d1 = toDate(fromDate || startDate);
+    const d2 = toDate(toDateQuery || endDate);
+
+    if (d1 || d2) {
+      // your docs may have `from`, `to`, or `tourStartDate`
+      // We’ll match if any of these fall in range.
+      const range = {};
+      if (d1) range.$gte = d1;
+      if (d2) range.$lte = d2;
+
+      filter.$or = [
+        { from: range },          // if from is Date
+        { to: range },            // if to is Date
+        { tourStartDate: range }, // if tourStartDate is Date/String(Date)
+      ];
+    }
+
+    // --- search (agency/city/places/themes) ---
+    if (q && String(q).trim()) {
+      const needle = escapeRegex(String(q).trim());
+      const rx = new RegExp(needle, "i");
+
+      // combine with existing $or if already present (date-range)
+      const searchOr = [
+        { travelAgencyName: rx },
+        { city: rx },
+        { state: rx },
+        { country: rx },
+        { visitngPlaces: rx },
+        { visitingPlaces: rx },
+        { themes: rx },
+        { overview: rx },
+      ];
+
+      if (filter.$or) {
+        filter.$and = filter.$and || [];
+        filter.$and.push({ $or: searchOr });
+      } else {
+        filter.$or = searchOr;
+      }
+    }
+
+    // --- sorting ---
+    const allowedSort = new Set(["createdAt", "price", "starRating", "nights", "tourStartDate"]);
+    const sortField = allowedSort.has(sortBy) ? sortBy : "createdAt";
+    const sortDir = String(sortOrder).toLowerCase() === "asc" ? 1 : -1;
+    const sort = { [sortField]: sortDir };
+
+    // --- pagination ---
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.min(50, Math.max(1, Number(limit) || 10));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [items, total] = await Promise.all([
+      Tour.find(filter).sort(sort).skip(skip).limit(limitNum).lean(),
+      Tour.countDocuments(filter),
+    ]);
+
+    return res.json({
+      success: true,
+      data: items,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        hasNextPage: skip + items.length < total,
+        hasPrevPage: pageNum > 1,
+      },
+      applied: {
+        q: q || "",
+        country: country || "",
+        state: state || "",
+        city: city || "",
+        themes: themes || "",
+        amenities: amenities || "",
+        amenitiesMode: amenitiesMode || "all",
+        minPrice: minP,
+        maxPrice: maxP,
+        minNights: minN,
+        maxNights: maxN,
+        minRating: minR,
+        fromDate: d1 ? d1.toISOString() : null,
+        toDate: d2 ? d2.toISOString() : null,
+        sortBy: sortField,
+        sortOrder: sortDir === 1 ? "asc" : "desc",
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err?.message || "Server error",
+    });
+  }
+};
 
 exports.getTourByOwner = async (req, res) => {
   const { email } = req.query;
