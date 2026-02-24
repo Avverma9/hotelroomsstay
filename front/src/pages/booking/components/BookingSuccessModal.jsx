@@ -23,7 +23,6 @@ export default function BookingSuccessModal({ isOpen, onClose, bookingData }) {
   if (!isOpen || !data || Object.keys(data).length === 0) return null;
 
   const {
-    bookingId,
     bookingStatus,
     price,
     gstPrice,
@@ -33,7 +32,6 @@ export default function BookingSuccessModal({ isOpen, onClose, bookingData }) {
     guests,
     hotelDetails,
     guestDetails,
-    roomDetails,
     pm,
   } = data;
 
@@ -62,6 +60,11 @@ export default function BookingSuccessModal({ isOpen, onClose, bookingData }) {
     })}`;
   };
 
+  const toNumberOrNull = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
   const nights = (() => {
     if (!checkInDate || !checkOutDate) return 0;
     const start = new Date(checkInDate);
@@ -70,7 +73,28 @@ export default function BookingSuccessModal({ isOpen, onClose, bookingData }) {
     return diff || 0;
   })();
 
-  const baseAmount = (price || 0) - (gstPrice || 0);
+  const totalPrice = toNumberOrNull(price) ?? 0;
+  const gstAmountValue = toNumberOrNull(data?.gstAmount);
+  const gstFieldValue = toNumberOrNull(data?.gst);
+  const gstPriceValue = toNumberOrNull(gstPrice);
+  const isLikelyPercent = (value) => value !== null && value > 0 && value <= 30;
+
+  const gstPercentValue =
+    toNumberOrNull(data?.gstPercent) ??
+    toNumberOrNull(data?.gstPercentage) ??
+    (isLikelyPercent(gstFieldValue) ? gstFieldValue : null) ??
+    (isLikelyPercent(gstPriceValue) ? gstPriceValue : null);
+
+  const resolvedGstAmount =
+    gstAmountValue ??
+    (gstPriceValue !== null && !isLikelyPercent(gstPriceValue) ? gstPriceValue : null) ??
+    (gstFieldValue !== null && !isLikelyPercent(gstFieldValue) ? gstFieldValue : null) ??
+    (gstPercentValue !== null
+      ? Math.round((totalPrice * gstPercentValue) / (100 + gstPercentValue))
+      : 0);
+
+  const gstTaxAmount = Math.max(resolvedGstAmount || 0, 0);
+  const baseAmount = Math.max(totalPrice - gstTaxAmount, 0);
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60">
@@ -199,13 +223,13 @@ export default function BookingSuccessModal({ isOpen, onClose, bookingData }) {
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-slate-500">GST & Taxes</span>
                 <span className="text-[11px] font-medium text-slate-900">
-                  {formatCurrency(gstPrice || 0)}
+                  {formatCurrency(gstTaxAmount)}
                 </span>
               </div>
               <div className="border-t border-slate-200 pt-1.5 flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-slate-900">Total Paid</span>
                 <span className="text-lg font-bold text-emerald-600">
-                  {formatCurrency(price || 0)}
+                  {formatCurrency(totalPrice)}
                 </span>
               </div>
             </div>
