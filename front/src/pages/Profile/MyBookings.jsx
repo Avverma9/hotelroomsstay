@@ -1,8 +1,6 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchFilteredBooking } from "../../redux/slices/bookingSlice";
-import baseURL from "../../utils/baseURL";
 import { useLoader } from "../../utils/loader";
 import NotFoundPage from "../../utils/Not-found";
 import { Unauthorized } from "../../utils/Unauthorized";
@@ -13,9 +11,123 @@ import { useMediaQuery } from "@mui/material";
 
 // --- 1. UTILITIES ---
 
+const decodeHtmlEntities = (input = "") => {
+  if (typeof document === "undefined") return input;
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = input;
+  return textarea.value;
+};
+
+const hasHtmlTag = (input = "") => /<[a-z][\s\S]*>/i.test(input);
+
+const escapeHtml = (value = "") =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const formatDateTime = (value) => {
+  if (!value) return "N/A";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+
+const calculateNightsBetween = (checkInDate, checkOutDate) => {
+  if (!checkInDate || !checkOutDate) return 0;
+  const start = new Date(checkInDate);
+  const end = new Date(checkOutDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+  const diffMs = end.getTime() - start.getTime();
+  return Math.max(Math.ceil(diffMs / (1000 * 60 * 60 * 24)), 0);
+};
+
+const formatCurrency = (value) => {
+  const amount = Number(value) || 0;
+  return `₹${amount.toLocaleString("en-IN")}`;
+};
+
+const replaceIsoDateTimesInHtml = (html = "") =>
+  String(html).replace(
+    /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z\b/g,
+    (match) => formatDateTime(match)
+  );
+
+const buildPrintableBookingHtml = (booking = {}) => {
+  const bookingRef = booking.bookingId || booking.bookingCode || booking._id || "N/A";
+  const hotelName = booking.hotelDetails?.hotelName || booking.hotelName || "Hotel";
+  const destination = booking.destination || booking.hotelDetails?.destination || "N/A";
+  const guestName = booking.user?.name || booking.guestDetails?.fullName || "Guest";
+  const roomType = booking.roomDetails?.[0]?.type || "Standard";
+  const guests = booking.guests || booking.numberOfGuests || 0;
+  const checkIn = formatDateTime(booking.checkInDate);
+  const checkOut = formatDateTime(booking.checkOutDate);
+  const nights = calculateNightsBetween(booking.checkInDate, booking.checkOutDate);
+  const totalAmount = Number(booking.price) || 0;
+  const gstAmount = Number(booking.gstAmount ?? booking.taxes ?? 0) || 0;
+  const baseAmount = Math.max(totalAmount - gstAmount, 0);
+
+  return `
+    <div class="print-container" style="border-radius:12px; border:1px solid #dbe2ea; padding:16px; max-width:420px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px dashed #cbd5e1; padding-bottom:10px; margin-bottom:12px;">
+        <div>
+          <div style="font-size:20px; font-weight:800; color:#0f172a;">${escapeHtml(hotelName)}</div>
+          <div style="font-size:12px; color:#64748b; margin-top:2px;">${escapeHtml(destination)}</div>
+        </div>
+        <div style="font-size:11px; font-weight:700; color:#0f766e; border:1px solid #99f6e4; border-radius:999px; padding:4px 8px;">
+          ${escapeHtml(booking.bookingStatus || "Confirmed")}
+        </div>
+      </div>
+      <div style="font-size:12px; color:#334155; margin-bottom:6px;"><strong>Booking ID:</strong> ${escapeHtml(bookingRef)}</div>
+      <div style="font-size:12px; color:#334155; margin-bottom:6px;"><strong>Guest:</strong> ${escapeHtml(guestName)}</div>
+      <div style="font-size:12px; color:#334155; margin-bottom:6px;"><strong>Room:</strong> ${escapeHtml(roomType)} (${escapeHtml(guests)} Guests)</div>
+      <div style="font-size:12px; color:#334155; margin-bottom:6px;"><strong>Check-in:</strong> ${escapeHtml(checkIn)}</div>
+      <div style="font-size:12px; color:#334155; margin-bottom:6px;"><strong>Check-out:</strong> ${escapeHtml(checkOut)}</div>
+      <div style="font-size:12px; color:#334155; margin-bottom:12px;"><strong>Nights:</strong> ${escapeHtml(nights || 0)}</div>
+      <div style="border-top:1px solid #e2e8f0; padding-top:10px;">
+        <div style="display:flex; justify-content:space-between; font-size:12px; color:#475569; margin-bottom:4px;">
+          <span>Base Amount</span>
+          <span>${formatCurrency(baseAmount)}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; color:#475569; margin-bottom:8px;">
+          <span>GST & Taxes</span>
+          <span>${formatCurrency(gstAmount)}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:18px; font-weight:800; color:#0f172a;">
+          <span>Total Paid</span>
+          <span>${formatCurrency(totalAmount)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+const normalizePrintableHtml = (htmlContent) => {
+  const raw = String(htmlContent || "").trim();
+  if (!raw) return "";
+
+  if (hasHtmlTag(raw)) return raw;
+
+  const decoded = decodeHtmlEntities(raw).trim();
+  if (hasHtmlTag(decoded)) return decoded;
+
+  return `<div class="print-container">${decoded || raw}</div>`;
+};
+
 // Print Function (Opens a new window with Tailwind CDN for styling)
 const printSpecificContent = (htmlContent) => {
-  if (!htmlContent) return;
+  const printableHtml = normalizePrintableHtml(htmlContent);
+  if (!printableHtml) return;
+
   const printWindow = window.open('', '_blank', 'width=900,height=800');
   if (printWindow) {
     printWindow.document.write(`
@@ -30,7 +142,7 @@ const printSpecificContent = (htmlContent) => {
           </style>
         </head>
         <body>
-          ${htmlContent}
+          ${printableHtml}
           <script>
             setTimeout(() => { window.print(); window.close(); }, 800);
           </script>
@@ -42,7 +154,7 @@ const printSpecificContent = (htmlContent) => {
 };
 
 // Modal Shell
-const ModalShell = ({ open, onClose, children }) => {
+const ModalShell = ({ open, children }) => {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
@@ -59,16 +171,17 @@ export default function MyBookings() {
   const dispatch = useDispatch();
   const { showLoader, hideLoader } = useLoader();
   const toast = useToast();
+  const showLoaderRef = useRef(showLoader);
+  const hideLoaderRef = useRef(hideLoader);
+  const toastRef = useRef(toast);
   
   // State
   const [htmlContent, setHtmlContent] = useState("");
   const [bookings, setBookings] = useState([]);
-  const [paginationInfo, setPaginationInfo] = useState({ currentPage: 1, totalPages: 1 });
   
   // Modal State
   const [modalData, setModalData] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [showReviewForm, setShowReviewForm] = useState(false);
   
   // Filters
   const [currentPage, setCurrentPage] = useState(1);
@@ -80,6 +193,30 @@ export default function MyBookings() {
   const isSmallScreen = useMediaQuery('(max-width:768px)');
   const bookingsPerPage = isSmallScreen ? 5 : 10;
 
+  useEffect(() => {
+    showLoaderRef.current = showLoader;
+    hideLoaderRef.current = hideLoader;
+    toastRef.current = toast;
+  }, [showLoader, hideLoader, toast]);
+
+  const findBookingByRef = useCallback((value) => {
+    const normalizedRef = String(value || "").trim().toLowerCase();
+    if (!normalizedRef) return null;
+    return (
+      bookings.find((booking) =>
+        [
+          booking?.bookingId,
+          booking?._id,
+          booking?.bookingCode,
+          booking?.reference,
+          booking?.referenceCode,
+        ]
+          .filter(Boolean)
+          .some((candidate) => String(candidate).trim().toLowerCase() === normalizedRef)
+      ) || null
+    );
+  }, [bookings]);
+
   // --- 3. WINDOW HANDLERS (Bridge Backend to Frontend) ---
   useEffect(() => {
     window.handlePageChange = (page) => {
@@ -88,7 +225,7 @@ export default function MyBookings() {
     };
 
     window.handleShowDetails = (id) => {
-      const booking = bookings.find(b => b.bookingId === id || b._id === id);
+      const booking = findBookingByRef(id);
       if (booking) {
         setModalData(booking);
         setShowModal(true);
@@ -96,7 +233,28 @@ export default function MyBookings() {
     };
 
     window.handlePrintTicket = (contentHtml) => {
-      printSpecificContent(contentHtml);
+      const rawInput = String(contentHtml || "").trim();
+      if (!rawInput) return;
+
+      const decodedInput = decodeHtmlEntities(rawInput).trim();
+      if (hasHtmlTag(rawInput) || hasHtmlTag(decodedInput)) {
+        printSpecificContent(decodedInput || rawInput);
+        return;
+      }
+
+      const booking = findBookingByRef(decodedInput || rawInput);
+      if (booking) {
+        printSpecificContent(buildPrintableBookingHtml(booking));
+        return;
+      }
+
+      const hiddenElement = document.getElementById(`print-view-${decodedInput || rawInput}`);
+      if (hiddenElement?.innerHTML) {
+        printSpecificContent(hiddenElement.innerHTML);
+        return;
+      }
+
+      toastRef.current?.error("Ticket details available nahi hain print ke liye.");
     };
 
     return () => {
@@ -104,35 +262,34 @@ export default function MyBookings() {
       delete window.handleShowDetails;
       delete window.handlePrintTicket;
     };
-  }, [bookings]);
+  }, [findBookingByRef]);
 
   // --- 4. DATA FETCHING ---
   useEffect(() => {
     const fetchData = async () => {
       if (!userIdLocal) return;
       try {
-        showLoader();
+        showLoaderRef.current?.();
         await dispatch(fetchFilteredBooking({ 
           selectedStatus, 
           userId: userIdLocal, 
           page: currentPage, 
           limit: bookingsPerPage 
         }));
-      } catch (error) {
-        toast.error("Failed to load bookings");
+      } catch {
+        toastRef.current?.error("Failed to load bookings");
       } finally {
-        hideLoader();
+        hideLoaderRef.current?.();
       }
     };
     fetchData();
-  }, [dispatch, selectedStatus, currentPage, userIdLocal]);
+  }, [dispatch, selectedStatus, currentPage, userIdLocal, bookingsPerPage]);
 
   // Sync Redux Data
   useEffect(() => {
     if (filteredBookings) {
-      setHtmlContent(filteredBookings.html || "");
+      setHtmlContent(replaceIsoDateTimesInHtml(filteredBookings.html || ""));
       setBookings(Array.isArray(filteredBookings.data) ? filteredBookings.data : []);
-      if (filteredBookings.pagination) setPaginationInfo(filteredBookings.pagination);
     }
   }, [filteredBookings]);
 
@@ -144,8 +301,15 @@ export default function MyBookings() {
       if (hiddenElement) {
         printSpecificContent(hiddenElement.innerHTML);
       } else {
-        // Fallback: Print the current window
-        window.print();
+        const visibleReceipt = document.getElementById(
+          `booking-receipt-${modalData.bookingId || "active"}`
+        );
+        if (visibleReceipt) {
+          printSpecificContent(visibleReceipt.outerHTML);
+        } else {
+          // Final fallback: Print current screen
+          window.print();
+        }
       }
     }
   };
@@ -169,6 +333,7 @@ export default function MyBookings() {
   if (!userIdLocal) return <Unauthorized />;
 
   const costs = calculateCosts(modalData);
+  const stayNights = calculateNightsBetween(modalData?.checkInDate, modalData?.checkOutDate);
 
   return (
     <main className="p-2 md:p-6 bg-gray-50 min-h-screen font-sans">
@@ -202,7 +367,7 @@ export default function MyBookings() {
       </div>
 
       {/* --- TICKET MODAL (Receipt Style) --- */}
-      <ModalShell open={showModal} onClose={() => setShowModal(false)}>
+      <ModalShell open={showModal}>
         {modalData && (
           <div className="flex flex-col h-full bg-white">
             
@@ -216,7 +381,10 @@ export default function MyBookings() {
 
             {/* Receipt Content */}
             <div className="flex-1 overflow-y-auto p-5 bg-white">
-              <div className="border-2 border-slate-800 p-5 rounded-sm relative">
+              <div
+                id={`booking-receipt-${modalData.bookingId || "active"}`}
+                className="border-2 border-slate-800 p-5 rounded-sm relative"
+              >
                 
                 {/* 1. Ticket Header */}
                 <div className="flex justify-between items-start mb-6 border-b border-dashed border-slate-300 pb-4">
@@ -230,7 +398,12 @@ export default function MyBookings() {
                     <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded border ${modalData.bookingStatus === 'Confirmed' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
                       {modalData.bookingStatus}
                     </span>
-                    <p className="text-[10px] text-slate-400 mt-1">ID: #{modalData.bookingId.slice(-6).toUpperCase()}</p>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        ID: #
+                        {String(modalData.bookingId || modalData.bookingCode || modalData._id || "N/A")
+                          .slice(-6)
+                          .toUpperCase()}
+                      </p>
                   </div>
                 </div>
 
@@ -238,15 +411,17 @@ export default function MyBookings() {
                 <div className="flex items-center justify-between bg-slate-50 p-3 rounded border border-slate-100 mb-5">
                    <div className="text-left">
                       <p className="text-[10px] font-bold text-slate-400 uppercase">Check-in</p>
-                      <p className="text-sm font-bold text-slate-900">{modalData.checkInDate}</p>
+                      <p className="text-sm font-bold text-slate-900">{formatDateTime(modalData.checkInDate)}</p>
                    </div>
                    <div className="flex-1 px-4 flex flex-col items-center">
                       <div className="w-full h-px bg-slate-300"></div>
-                      <span className="text-[9px] bg-white px-2 -mt-2 text-slate-400 font-medium">1 Night</span>
+                      <span className="text-[9px] bg-white px-2 -mt-2 text-slate-400 font-medium">
+                        {stayNights} Night{stayNights > 1 ? "s" : ""}
+                      </span>
                    </div>
                    <div className="text-right">
                       <p className="text-[10px] font-bold text-slate-400 uppercase">Check-out</p>
-                      <p className="text-sm font-bold text-slate-900">{modalData.checkOutDate}</p>
+                      <p className="text-sm font-bold text-slate-900">{formatDateTime(modalData.checkOutDate)}</p>
                    </div>
                 </div>
 
