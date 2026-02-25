@@ -20,11 +20,13 @@ const carSchema = new Schema({
     type: String,
     enum: ["Bike", "Car", "Bus"],
     required: true,
+    trim: true,
   },
   sharingType: {
     type: String,
     enum: ["Private", "Shared"],
     required: true,
+    trim: true,
   },
   images: {
     type: [String],
@@ -61,6 +63,7 @@ const carSchema = new Schema({
       },
       isBooked: {
         type: Boolean,
+        default: false,
       },
       seatPrice: {
         type: Number,
@@ -87,16 +90,6 @@ const carSchema = new Schema({
     type: Number,
     required: true,
     min: 0,
-  },
-  vehicleType: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  sharingType: {
-    type: String,
-    required: true,
-    trim: true,
   },
   color: {
     type: String,

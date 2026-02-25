@@ -251,7 +251,10 @@ exports.getTourById = async (req, res) => {
 const mongoose = require("mongoose");
 
 const toNum = (v) => {
-  const n = Number(String(v ?? "").trim());
+  if (v === undefined || v === null) return null;
+  const raw = String(v).trim();
+  if (!raw) return null;
+  const n = Number(raw);
   return Number.isFinite(n) ? n : null;
 };
 
@@ -276,6 +279,24 @@ const splitList = (v) =>
     .filter(Boolean);
 
 const escapeRegexExact = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const normalizeSpace = (s) => String(s || "").trim().replace(/\s+/g, " ");
+const sanitizeKeyword = (v) => {
+  const normalized = normalizeSpace(v);
+  if (!normalized) return "";
+  const lower = normalized.toLowerCase();
+  if (["null", "undefined"].includes(lower)) return "";
+  return normalized;
+};
+
+// Match a place token in comma/pipe separated strings, with optional prefix like "1N "
+const buildPlaceTokenRegex = (place) => {
+  const normalized = normalizeSpace(place);
+  if (!normalized) return null;
+
+  const escaped = escapeRegexExact(normalized).replace(/\s+/g, "\\s+");
+  const pattern = `(?:^|[|,])\\s*(?:\\d+\\s*[Nn]\\s*)?${escaped}\\s*(?=[|,]|$)`;
+  return new RegExp(pattern, "i");
+};
 
 exports.filterTours = async (req, res) => {
   try {
@@ -292,6 +313,8 @@ exports.filterTours = async (req, res) => {
       themes, // comma separated: "Culture,Heritage"
       amenities, // comma separated: "Hotel Stay,Breakfast"
       amenitiesMode, // "all" (default) | "any"
+      fromWhere, // match token in visitngPlaces (supports optional "1N " prefix)
+      to, // match token in visitngPlaces (supports optional "1N " prefix)
 
       // numeric filters
       minPrice,
@@ -349,6 +372,35 @@ exports.filterTours = async (req, res) => {
           filter.amenities = { $all: list };
         }
       }
+    }
+
+    // --- route keywords inside visitngPlaces string ---
+    const routeAnd = [];
+    const fromWhereValue = sanitizeKeyword(fromWhere);
+    const toValue = sanitizeKeyword(to);
+
+    // Apply route filter only when BOTH inputs are present.
+    // If user clears either input, route filter is ignored and all tours can return.
+    if (fromWhereValue && toValue) {
+      const fromWhereRx = buildPlaceTokenRegex(fromWhereValue);
+      const toRx = buildPlaceTokenRegex(toValue);
+
+      if (fromWhereRx) {
+        routeAnd.push({
+          $or: [{ visitngPlaces: fromWhereRx }, { visitingPlaces: fromWhereRx }],
+        });
+      }
+
+      if (toRx) {
+        routeAnd.push({
+          $or: [{ visitngPlaces: toRx }, { visitingPlaces: toRx }],
+        });
+      }
+    }
+
+    if (routeAnd.length > 0) {
+      filter.$and = filter.$and || [];
+      filter.$and.push(...routeAnd);
     }
 
     // --- numeric ranges ---
@@ -469,6 +521,8 @@ exports.filterTours = async (req, res) => {
         themes: themes || "",
         amenities: amenities || "",
         amenitiesMode: amenitiesMode || "all",
+        fromWhere: sanitizeKeyword(fromWhere),
+        to: sanitizeKeyword(to),
         minPrice: minP,
         maxPrice: maxP,
         minNights: minN,

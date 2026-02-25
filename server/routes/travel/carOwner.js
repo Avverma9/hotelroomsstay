@@ -6,7 +6,8 @@ const router = express.Router();
 router.post('/add-an-owner', upload, addOwner);
 router.get('/get-all-owner', getOwner);
 router.get('/get-an-owner/:id', getOwnerById);
-router.post('/get-an-owner/email',getOwnerByEmail );
+router.get('/get-an-owner/email', getOwnerByEmail);
+router.post('/get-an-owner/email', getOwnerByEmail);
 router.delete('/delete-an-owner/:id', deleteOwner);
 router.patch('/update-an-owner/:id', upload, updateOwner);
 
