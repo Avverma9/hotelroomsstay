@@ -52,9 +52,14 @@ exports.getOwnerById = async (req, res) => {
 
 exports.getOwnerByEmail = async (req, res) => {
   try {
-    const { email } = req.query;
+    const email = req.query?.email || req.body?.email;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const owner = await Owner.find({
-      email: { $regex: `^${email}$`, $options: 'i' }
+      email: { $regex: `^${escapedEmail}$`, $options: 'i' }
     });
     return res.status(200).json(owner);
   } catch (error) {
