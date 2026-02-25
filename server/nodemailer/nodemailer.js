@@ -24,25 +24,56 @@ transporter.verify()
     console.warn('Mailer verification failed. Emails may not be sent. Error:', err && err.message ? err.message : err);
   });
 
-// --- HELPER: Base Email Container (To keep design consistent) ---
-const wrapInTemplate = (content) => {
+const BRAND_NAME = "HotelRoomsStay";
+const SUPPORT_EMAIL = "info@hotelrroomsstay.com";
+
+const buildLuxuryEmailTemplate = ({ title, content, hotelName }) => {
   return `
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
-      <meta charset="utf-8">
+      <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>HotelRoomsStay Notification</title>
+      <title>${title}</title>
     </head>
-    <body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; margin-top: 20px; margin-bottom: 20px; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-        ${content}
-        <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
-          <p style="margin: 0; font-size: 12px; color: #6b7280;">
-            &copy; ${new Date().getFullYear()} HotelRoomsStay. All rights reserved.
-          </p>
-        </div>
-      </div>
+    <body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: Arial, Helvetica, sans-serif;">
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed; background-color: #f5f5f5; padding: 40px 20px;">
+        <tr>
+          <td align="center">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border: 1px solid #e0e0e0;">
+              <tr>
+                <td align="center" style="padding: 50px 40px 30px 40px; border-bottom: 1px solid #eeeeee;">
+                  <h1 style="font-family: Georgia, 'Times New Roman', serif; color: #1a1a1a; margin: 0; font-size: 28px; font-weight: normal; letter-spacing: 1px;">${title}</h1>
+                  <p style="font-family: Georgia, 'Times New Roman', serif; font-style: italic; color: #777777; margin: 15px 0 0 0; font-size: 16px;">Thank you for choosing ${BRAND_NAME}</p>
+                  ${hotelName ? `<p style="font-size: 13px; color: #666666; margin: 10px 0 0 0;">Hotel: ${hotelName}</p>` : ""}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 40px;">
+                  ${content}
+                </td>
+              </tr>
+              <tr>
+                <td style="background-color: #1a1a1a; padding: 30px; text-align: center;">
+                  <p style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 14px; color: #cccccc; line-height: 1.6;">
+                    For any help and inquiry, contact and mail us at<br>
+                    <a href="mailto:${SUPPORT_EMAIL}" style="color: #ffffff; text-decoration: none; border-bottom: 1px solid #555555;">${SUPPORT_EMAIL}</a>
+                  </p>
+                </td>
+              </tr>
+            </table>
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;">
+              <tr>
+                <td style="padding: 25px 20px; text-align: center;">
+                  <p style="margin: 0; font-size: 12px; color: #999999; font-family: Arial, Helvetica, sans-serif;">
+                    &copy; ${new Date().getFullYear()} ${BRAND_NAME}. All rights reserved.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
     </body>
     </html>
   `;
@@ -63,22 +94,28 @@ const sendOtpEmail = async (email, otp) => {
     throw new Error("Email not registered. Please sign up first.");
   }
 
-  const htmlContent = `
-    <div style="padding: 40px 30px; text-align: center;">
-      <div style="background-color: #eff6ff; width: 60px; height: 60px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
-        <span style="font-size: 30px;">🔒</span>
-      </div>
-      <h1 style="color: #111827; font-size: 24px; font-weight: 700; margin: 0 0 10px 0;">Verify Your Email</h1>
-      <p style="color: #4b5563; font-size: 16px; line-height: 24px; margin-bottom: 30px;">
-        Hello,<br>To complete your registration, please use the One-Time Password (OTP) below.
-      </p>
-      
-      <div style="background: linear-gradient(to right, #2563eb, #3b82f6); padding: 15px 30px; border-radius: 8px; display: inline-block; color: white; letter-spacing: 8px; font-weight: bold; font-size: 32px; margin-bottom: 30px;">
-        ${otp}
-      </div>
+  const otpContent = `
+    <p style="font-size: 15px; color: #333333; margin: 0 0 25px 0; line-height: 1.8;">
+      Dear Guest,<br><br>
+      To continue securely, please use the verification code below.
+    </p>
 
-      <p style="color: #6b7280; font-size: 14px;">This OTP is valid for 10 minutes.<br>Please do not share it with anyone.</p>
-    </div>
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 30px; border-top: 1px solid #1a1a1a; border-bottom: 1px solid #1a1a1a;">
+      <tr>
+        <td style="padding: 20px 10px;">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+              <td align="left" style="font-family: Georgia, 'Times New Roman', serif; color: #555555; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">One-Time Password</td>
+              <td align="right" style="font-size: 28px; font-weight: bold; color: #1a1a1a; letter-spacing: 8px;">${otp}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <p style="font-size: 14px; color: #555555; margin: 0; line-height: 1.7;">
+      This OTP is valid for 10 minutes. Please do not share this code with anyone.
+    </p>
   `;
 
   const mailOptions = {
@@ -86,7 +123,10 @@ const sendOtpEmail = async (email, otp) => {
     to: email,
     subject: "Your OTP for Email Verification - HotelRoomsStay",
     text: `Your OTP is: ${otp}`,
-    html: wrapInTemplate(htmlContent),
+    html: buildLuxuryEmailTemplate({
+      title: "Email Verification",
+      content: otpContent,
+    }),
   };
 
   try {
@@ -101,10 +141,9 @@ const sendOtpEmail = async (email, otp) => {
 // --- 2. BOOKING CONFIRMATION ---
 
 const generateBookingHtml = (data) => {
-  // Safe extraction of data (structure fixing)
   const bookingId = data.bookingId || "N/A";
   const hotelName = data.hotelDetails?.hotelName || "Hotel";
-  const destination = data.hotelDetails?.destination || "Unknown";
+  const destination = data.hotelDetails?.destination || data.destination || "Unknown";
   const userName = data.user?.name || "Guest";
   const price = data.price || 0;
   const guests = data.guests || 1;
@@ -112,85 +151,89 @@ const generateBookingHtml = (data) => {
   const checkIn = data.checkInDate ? format(new Date(data.checkInDate), "dd MMM yyyy") : "N/A";
   const checkOut = data.checkOutDate ? format(new Date(data.checkOutDate), "dd MMM yyyy") : "N/A";
   
-  // Handling Room Types Array safely
-  const roomTypes = Array.isArray(data.roomDetails) 
-    ? data.roomDetails.map((r) => r.type).join(", ") 
+  const roomTypes = Array.isArray(data.roomDetails)
+    ? data.roomDetails.map((room) => room.type || room.roomType || "Standard Room").join(", ")
     : (data.roomTypes || "Standard Room");
 
-  return `
-    <div style="background-color: #2563eb; padding: 30px; text-align: center;">
-      <h1 style="color: #ffffff; margin: 0; font-size: 26px;">Booking Confirmed!</h1>
-      <p style="color: #dbeafe; margin-top: 5px; font-size: 16px;">We're excited to host you.</p>
-    </div>
-    
-    <div style="padding: 30px;">
-      <p style="font-size: 16px; color: #374151; margin-bottom: 20px;">
-        Hi <strong>${userName}</strong>,<br>
-        Your reservation at <span style="color: #2563eb; font-weight: 600;">${hotelName}</span> has been confirmed.
-      </p>
+  const bookingContent = `
+    <p style="font-size: 15px; color: #333333; margin: 0 0 30px 0; line-height: 1.8;">
+      Dear <strong>${userName}</strong>,<br><br>
+      We are delighted to confirm your upcoming reservation. We eagerly anticipate your arrival and remain at your disposal to ensure a truly memorable stay. Please review the details of your booking below.
+    </p>
 
-      <!-- Booking ID Box -->
-      <div style="background-color: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <span style="color: #6b7280; text-transform: uppercase; font-size: 12px; font-weight: bold;">Booking Reference</span>
-        <span style="font-family: monospace; font-size: 18px; font-weight: bold; color: #111827;">${bookingId}</span>
-      </div>
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 35px; border-top: 1px solid #1a1a1a; border-bottom: 1px solid #1a1a1a;">
+      <tr>
+        <td style="padding: 20px 10px;">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+              <td align="left" style="font-family: Georgia, 'Times New Roman', serif; color: #555555; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Confirmation Number</td>
+              <td align="right" style="font-size: 18px; font-weight: bold; color: #1a1a1a; letter-spacing: 2px;">${bookingId}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
 
-      <!-- Details Grid -->
-      <table width="100%" cellpadding="5" cellspacing="0" style="font-size: 14px; margin-bottom: 20px;">
-        <tr>
-          <td style="color: #6b7280; width: 30%;">Hotel</td>
-          <td style="font-weight: 600; color: #111827;">${hotelName}</td>
-        </tr>
-        <tr>
-          <td style="color: #6b7280;">Destination</td>
-          <td style="font-weight: 600; color: #111827;">${destination}</td>
-        </tr>
-        <tr>
-          <td style="color: #6b7280;">Room Type</td>
-          <td style="font-weight: 600; color: #111827;">${roomTypes}</td>
-        </tr>
-        <tr>
-          <td style="color: #6b7280;">Guests</td>
-          <td style="font-weight: 600; color: #111827;">${guests} (${numRooms} Room)</td>
-        </tr>
-      </table>
+    <table border="0" cellpadding="15" cellspacing="0" width="100%" style="font-size: 14px; margin-bottom: 40px; border-collapse: collapse;">
+      <tr style="border-bottom: 1px solid #f0f0f0;">
+        <td style="color: #666666; width: 40%; padding-left: 5px; font-family: Georgia, 'Times New Roman', serif;">Hotel Name</td>
+        <td style="color: #1a1a1a; padding-right: 5px; text-align: right;">${hotelName}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #f0f0f0;">
+        <td style="color: #666666; width: 40%; padding-left: 5px; font-family: Georgia, 'Times New Roman', serif;">Destination</td>
+        <td style="color: #1a1a1a; padding-right: 5px; text-align: right;">${destination}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #f0f0f0;">
+        <td style="color: #666666; padding-left: 5px; font-family: Georgia, 'Times New Roman', serif;">Room Category</td>
+        <td style="color: #1a1a1a; padding-right: 5px; text-align: right;">${roomTypes}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #f0f0f0;">
+        <td style="color: #666666; padding-left: 5px; font-family: Georgia, 'Times New Roman', serif;">Guests</td>
+        <td style="color: #1a1a1a; padding-right: 5px; text-align: right;">${guests} Guests, ${numRooms} Room(s)</td>
+      </tr>
+    </table>
 
-      <!-- Dates Box -->
-      <div style="border-top: 1px dashed #d1d5db; border-bottom: 1px dashed #d1d5db; padding: 15px 0; display: flex; margin-bottom: 20px;">
-        <div style="width: 50%; border-right: 1px solid #e5e7eb; padding-right: 10px;">
-          <div style="font-size: 11px; color: #9ca3af; font-weight: bold; text-transform: uppercase;">Check-In</div>
-          <div style="font-size: 16px; font-weight: bold; color: #1f2937; margin-top: 4px;">${checkIn}</div>
-          <div style="font-size: 12px; color: #6b7280;">12:00 PM</div>
-        </div>
-        <div style="width: 50%; padding-left: 15px;">
-          <div style="font-size: 11px; color: #9ca3af; font-weight: bold; text-transform: uppercase;">Check-Out</div>
-          <div style="font-size: 16px; font-weight: bold; color: #1f2937; margin-top: 4px;">${checkOut}</div>
-          <div style="font-size: 12px; color: #6b7280;">11:00 AM</div>
-        </div>
-      </div>
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 40px; background-color: #fafafa; border: 1px solid #eeeeee;">
+      <tr>
+        <td width="50%" align="center" style="padding: 30px 20px; border-right: 1px solid #eeeeee;">
+          <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 12px; color: #888888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Check-In</div>
+          <div style="font-size: 18px; color: #1a1a1a; margin-bottom: 5px;">${checkIn}</div>
+          <div style="font-size: 13px; color: #555555;">From 12:00 PM</div>
+        </td>
+        <td width="50%" align="center" style="padding: 30px 20px;">
+          <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 12px; color: #888888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Check-Out</div>
+          <div style="font-size: 18px; color: #1a1a1a; margin-bottom: 5px;">${checkOut}</div>
+          <div style="font-size: 13px; color: #555555;">By 11:00 AM</div>
+        </td>
+      </tr>
+    </table>
 
-      <div style="text-align: right;">
-        <span style="font-size: 13px; color: #6b7280;">Total Paid: </span>
-        <span style="font-size: 24px; font-weight: bold; color: #2563eb;">₹${price}</span>
-      </div>
-    </div>
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+      <tr>
+        <td align="right" style="padding-top: 15px; border-top: 1px solid #eeeeee;">
+          <span style="font-family: Georgia, 'Times New Roman', serif; font-size: 14px; color: #666666; margin-right: 15px; text-transform: uppercase; letter-spacing: 1px;">Total Amount</span>
+          <span style="font-size: 26px; color: #1a1a1a;">₹${price}</span>
+        </td>
+      </tr>
+    </table>
   `;
+
+  return buildLuxuryEmailTemplate({
+    title: "Reservation Confirmation",
+    content: bookingContent,
+    hotelName,
+  });
 };
 
-const sendBookingConfirmationMail = async ({ email, subject, bookingData, link }) => {
+const sendBookingConfirmationMail = async ({ email, subject, bookingData }) => {
   const messageHtml = generateBookingHtml(bookingData);
-  const linkHtml = link
-    ? `<div style="text-align:center; padding: 0 30px 30px 30px;">
-         <a href="${link}" style="background-color: #111827; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View Full Itinerary</a>
-       </div>`
-    : "";
 
   const mailOptions = {
     from: `"HRS (HotelRoomsStay)" <${process.env.NODEMAILER_EMAIL}>`,
     to: email,
     subject: subject || "Booking Confirmation",
     text: `Booking Confirmed: ${bookingData.bookingId}`,
-    html: wrapInTemplate(`${messageHtml}${linkHtml}`),
+    html: messageHtml,
   };
 
   try {
@@ -207,34 +250,47 @@ const sendBookingConfirmationMail = async ({ email, subject, bookingData, link }
 const generateThankYouHtml = (data) => {
   const userName = data.user?.name || "Guest";
   const hotelName = data.hotelDetails?.hotelName || "Our Hotel";
+  const bookingId = data.bookingId || "N/A";
 
   return `
-    <div style="background-color: #10b981; padding: 25px; text-align: center; color: white;">
-      <h2 style="margin: 0; font-size: 24px;">🌟 Thank You For Your Stay!</h2>
-    </div>
-    <div style="padding: 30px;">
-      <p style="font-size: 16px; color: #374151;">Hi <strong>${userName}</strong>,</p>
-      <p style="font-size: 15px; line-height: 1.6; color: #4b5563;">
-        Thank you for choosing <strong>${hotelName}</strong>. We hope you had a wonderful visit. 
-        Your feedback helps us create better experiences.
-      </p>
-    </div>
+    <p style="font-size: 15px; color: #333333; margin: 0 0 25px 0; line-height: 1.8;">
+      Dear <strong>${userName}</strong>,<br><br>
+      Thank you for staying with us. We hope your experience at <strong>${hotelName}</strong> was truly memorable.
+    </p>
+    <table border="0" cellpadding="15" cellspacing="0" width="100%" style="font-size: 14px; margin-bottom: 30px; border-collapse: collapse;">
+      <tr style="border-bottom: 1px solid #f0f0f0;">
+        <td style="color: #666666; width: 40%; padding-left: 5px; font-family: Georgia, 'Times New Roman', serif;">Hotel Name</td>
+        <td style="color: #1a1a1a; padding-right: 5px; text-align: right;">${hotelName}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #f0f0f0;">
+        <td style="color: #666666; padding-left: 5px; font-family: Georgia, 'Times New Roman', serif;">Booking ID</td>
+        <td style="color: #1a1a1a; padding-right: 5px; text-align: right;">${bookingId}</td>
+      </tr>
+    </table>
+    <p style="font-size: 14px; color: #555555; margin: 0; line-height: 1.7;">
+      We look forward to welcoming you again soon.
+    </p>
   `;
 };
 
 const sendThankYouForVisitMail = async ({ email, subject, bookingData, link }) => {
+  const hotelName = bookingData?.hotelDetails?.hotelName || "Our Hotel";
   const thankYouMessageHtml = generateThankYouHtml(bookingData);
   const reviewLinkHtml = link
-    ? `<div style="text-align:center; padding-bottom: 30px;">
-         <a href="${link}" style="background-color: #f59e0b; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Leave a Review</a>
+    ? `<div style="text-align:center; padding-top: 25px;">
+         <a href="${link}" style="background-color: #1a1a1a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 0; font-weight: normal; font-family: Georgia, 'Times New Roman', serif;">Leave a Review</a>
        </div>`
     : "";
 
   const mailOptions = {
     from: `"HRS (HotelRoomsStay)" <${process.env.NODEMAILER_EMAIL}>`,
     to: email,
-    subject: subject || `Thank you for staying at ${bookingData.hotelDetails.hotelName}!`,
-    html: wrapInTemplate(`${thankYouMessageHtml}${reviewLinkHtml}`),
+    subject: subject || `Thank you for staying at ${hotelName}!`,
+    html: buildLuxuryEmailTemplate({
+      title: "Thank You For Your Stay",
+      content: `${thankYouMessageHtml}${reviewLinkHtml}`,
+      hotelName,
+    }),
   };
 
   try {
@@ -249,42 +305,64 @@ const sendThankYouForVisitMail = async ({ email, subject, bookingData, link }) =
 const generateBookingCancellationHtml = (data) => {
   const userName = data.user?.name || "Guest";
   const hotelName = data.hotelDetails?.hotelName || "Hotel";
+  const destination = data.hotelDetails?.destination || data.destination || "Unknown";
   const bookingId = data.bookingId || "N/A";
+  const checkIn = data.checkInDate ? format(new Date(data.checkInDate), "dd MMM yyyy") : "N/A";
+  const checkOut = data.checkOutDate ? format(new Date(data.checkOutDate), "dd MMM yyyy") : "N/A";
+  const refundAmount = data.price || 0;
 
   return `
-    <div style="background-color: #ef4444; padding: 25px; text-align: center; color: white;">
-      <h2 style="margin: 0; font-size: 24px;">Booking Cancelled</h2>
-    </div>
-    <div style="padding: 30px;">
-      <p style="font-size: 16px; color: #374151;">Hi <strong>${userName}</strong>,</p>
-      <p style="color: #4b5563;">This email confirms that your booking has been cancelled.</p>
-      
-      <table width="100%" style="margin-top: 20px; background-color: #fef2f2; border-radius: 8px; padding: 15px;">
-        <tr>
-          <td style="padding: 5px; font-weight: bold; color: #991b1b;">Hotel:</td>
-          <td style="padding: 5px; color: #111827;">${hotelName}</td>
-        </tr>
-        <tr>
-          <td style="padding: 5px; font-weight: bold; color: #991b1b;">ID:</td>
-          <td style="padding: 5px; color: #111827;">${bookingId}</td>
-        </tr>
-      </table>
-      
-      <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">
-        Refunds (if applicable) will be processed within 5-7 business days.
-      </p>
-    </div>
+    <p style="font-size: 15px; color: #333333; margin: 0 0 30px 0; line-height: 1.8;">
+      Dear <strong>${userName}</strong>,<br><br>
+      This is to confirm that your reservation has been cancelled. Please review the cancellation details below.
+    </p>
+
+    <table border="0" cellpadding="15" cellspacing="0" width="100%" style="font-size: 14px; margin-bottom: 30px; border-collapse: collapse;">
+      <tr style="border-bottom: 1px solid #f0f0f0;">
+        <td style="color: #666666; width: 40%; padding-left: 5px; font-family: Georgia, 'Times New Roman', serif;">Confirmation Number</td>
+        <td style="color: #1a1a1a; padding-right: 5px; text-align: right;">${bookingId}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #f0f0f0;">
+        <td style="color: #666666; padding-left: 5px; font-family: Georgia, 'Times New Roman', serif;">Hotel Name</td>
+        <td style="color: #1a1a1a; padding-right: 5px; text-align: right;">${hotelName}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #f0f0f0;">
+        <td style="color: #666666; padding-left: 5px; font-family: Georgia, 'Times New Roman', serif;">Destination</td>
+        <td style="color: #1a1a1a; padding-right: 5px; text-align: right;">${destination}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #f0f0f0;">
+        <td style="color: #666666; padding-left: 5px; font-family: Georgia, 'Times New Roman', serif;">Check-In</td>
+        <td style="color: #1a1a1a; padding-right: 5px; text-align: right;">${checkIn}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #f0f0f0;">
+        <td style="color: #666666; padding-left: 5px; font-family: Georgia, 'Times New Roman', serif;">Check-Out</td>
+        <td style="color: #1a1a1a; padding-right: 5px; text-align: right;">${checkOut}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #f0f0f0;">
+        <td style="color: #666666; padding-left: 5px; font-family: Georgia, 'Times New Roman', serif;">Eligible Refund</td>
+        <td style="color: #1a1a1a; padding-right: 5px; text-align: right;">₹${refundAmount}</td>
+      </tr>
+    </table>
+
+    <p style="font-size: 14px; color: #555555; margin: 0; line-height: 1.7;">
+      Refunds (if applicable) are generally processed within 5-7 business days.
+    </p>
   `;
 };
 
-const sendBookingCancellationMail = async ({ email, subject, bookingData, link }) => {
+const sendBookingCancellationMail = async ({ email, subject, bookingData }) => {
   const content = generateBookingCancellationHtml(bookingData);
+  const hotelName = bookingData?.hotelDetails?.hotelName || "Hotel";
   
   const mailOptions = {
     from: `"HRS (HotelRoomsStay)" <${process.env.NODEMAILER_EMAIL}>`,
     to: email,
     subject: subject || `Cancellation: ${bookingData.bookingId}`,
-    html: wrapInTemplate(content),
+    html: buildLuxuryEmailTemplate({
+      title: "Reservation Cancellation",
+      content,
+      hotelName,
+    }),
   };
 
   try {
@@ -301,23 +379,23 @@ const sendBookingCancellationMail = async ({ email, subject, bookingData, link }
 const sendCustomEmail = async ({ email, subject, message, link }) => {
   const linkHtml = link
     ? `<div style="text-align:center; margin-top: 30px;">
-         <a href="${link}" style="background-color: #3b82f6; color: white; padding: 12px 25px; border-radius: 6px; text-decoration: none; font-weight: bold;">Click Here</a>
+         <a href="${link}" style="background-color: #1a1a1a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 0; font-family: Georgia, 'Times New Roman', serif;">Click Here</a>
        </div>`
     : "";
 
   const content = `
-    <div style="padding: 40px 30px;">
-      <h2 style="color: #1a202c; text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-top: 0;">${subject}</h2>
-      <p style="font-size: 16px; line-height: 1.6; color: #4a5568; white-space: pre-wrap;">${message}</p>
-      ${linkHtml}
-    </div>
+    <p style="font-size: 15px; color: #333333; margin: 0; line-height: 1.8; white-space: pre-wrap;">${message}</p>
+    ${linkHtml}
   `;
 
   const mailOptions = {
     from: `"HRS (HotelRoomsStay)" <${process.env.NODEMAILER_EMAIL}>`,
     to: email,
     subject,
-    html: wrapInTemplate(content),
+    html: buildLuxuryEmailTemplate({
+      title: subject || "Notification",
+      content,
+    }),
   };
 
   try {
