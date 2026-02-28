@@ -16,7 +16,9 @@ router.get('/get/all/hotels', hotelController.getAllHotels); // on panel
 router.delete('/delete/hotels/by/:hotelId', hotelController.deleteHotelById); // on panel
 router.get('/get/main/get/hotels', hotelController.getHotels);
 router.get('/get/offers/main/hotels', hotelController.setOnFront); // on site
+router.get('/hotels/front', hotelController.setOnFront); // clearer alias
 router.get('/hotels/get-by-id/:hotelId', hotelController.getHotelsById);
+router.get('/hotels/:hotelId/rooms/:roomId/offer-status', hotelController.getRoomOfferStatus);
 router.get('/hotelsLocalId', hotelController.getHotelsByLocalID);
 router.get('/hotels/filters', hotelController.getHotelsByFilters); // Using on main site
 router.get('/hotels/destination/get/all', hotelController.getCity); //filter hotel by city
@@ -26,6 +28,7 @@ router.get('/see-all/hotels-state/get/all/hotels', hotelController.getHotelsStat
 router.get('/see-all/hotels-city/get/city', hotelController.getHotelsCityByState); // enter state and get city
 router.get('/get-hotels/count', hotelController.getCount);
 router.get("/get-hotel-list/filter-by-applied-coupons",hotelController.getCouponsAppliedHotels) // on admin panel
+router.get("/hotels/with-active-offers", hotelController.getCouponsAppliedHotels); // clearer alias
 router.get('/get-pending-hotels/count', hotelController.getCountPendingHotels);
 router.patch('/update-hotels-image-by-hotel-id/:hotelId', upload, hotelController.updateHotelImage); // on panel
 router.patch('/update-hotels-policy-by-hotel-id/:hotelId', hotelController.updatePolicies); // on panel

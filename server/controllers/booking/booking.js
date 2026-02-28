@@ -3,6 +3,9 @@ const hotelModel = require("../../models/hotel/basicDetails");
 const userModel = require("../../models/user");
 const { sendBookingConfirmationMail, sendThankYouForVisitMail, sendBookingCancellationMail } = require("../../nodemailer/nodemailer");
 const { getGSTData } = require("../GST/gst");
+const {
+  createUserNotificationSafe,
+} = require("../notification/helpers");
 //==========================================creating booking========================================================================================================
 const createBooking = async (req, res) => {
   try {
@@ -150,6 +153,19 @@ const createBooking = async (req, res) => {
       }
     }
 
+    await createUserNotificationSafe({
+      name: "Hotel Booking Successful",
+      message: `Your hotel booking ${savedBooking.bookingId} is created successfully for ${savedBooking.hotelDetails?.hotelName || "your selected hotel"}.`,
+      path: "/app/bookings/hotel",
+      eventType: "hotel_booking_success",
+      metadata: {
+        bookingId: savedBooking.bookingId,
+        hotelId: savedBooking.hotelDetails?.hotelId,
+        bookingStatus: savedBooking.bookingStatus,
+      },
+      userIds: [String(savedBooking?.user?.userId || userId)],
+    });
+
     res.status(201).json({ success: true, data: savedBooking });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -241,6 +257,19 @@ const updateBooking = async (req, res) => {
         subject: "Booking Confirmed !",
         bookingData: updatedData,
         link: process.env.FRONTEND_URL,
+      });
+
+      await createUserNotificationSafe({
+        name: "Hotel Booking Confirmed",
+        message: `Your hotel booking ${updatedData.bookingId} is confirmed.`,
+        path: "/app/bookings/hotel",
+        eventType: "hotel_booking_confirmed",
+        metadata: {
+          bookingId: updatedData.bookingId,
+          hotelId: updatedData.hotelDetails?.hotelId,
+          bookingStatus: updatedData.bookingStatus,
+        },
+        userIds: [String(updatedData?.user?.userId)],
       });
     }
     res.json(updatedData);
