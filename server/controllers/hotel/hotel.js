@@ -899,39 +899,154 @@ const getHotelsById = async (req, res) => {
       }).filter(Boolean);
     }
 
-    // Map policies
-    const policiesObj = {
-      checkIn: '12:00 PM',
-      checkOut: '11:00 AM',
-      rules: [],
-      restrictions: {
-        petsAllowed: false,
-        smokingAllowed: false,
-        alcoholAllowed: false
-      },
-      cancellationText: ''
+    // Map policies (supports legacy and detailed policy schema)
+    const policyEntries = Array.isArray(hotel.policies)
+      ? hotel.policies.filter((p) => p && typeof p === "object")
+      : hotel.policies && typeof hotel.policies === "object"
+        ? [hotel.policies]
+        : [];
+
+    const detailedPolicyKeys = [
+      "hotelId",
+      "hotelsPolicy",
+      "checkInPolicy",
+      "checkOutPolicy",
+      "outsideFoodPolicy",
+      "cancellationPolicy",
+      "paymentMode",
+      "petsAllowed",
+      "bachelorAllowed",
+      "smokingAllowed",
+      "alcoholAllowed",
+      "unmarriedCouplesAllowed",
+      "internationalGuestAllowed",
+      "refundPolicy",
+      "returnPolicy",
+      "onDoubleSharing",
+      "onQuadSharing",
+      "onBulkBooking",
+      "onTrippleSharing",
+      "onMoreThanFour",
+      "offDoubleSharing",
+      "offQuadSharing",
+      "offBulkBooking",
+      "offTrippleSharing",
+      "offMoreThanFour",
+      "onDoubleSharingAp",
+      "onQuadSharingAp",
+      "onBulkBookingAp",
+      "onTrippleSharingAp",
+      "onMoreThanFourAp",
+      "offDoubleSharingAp",
+      "offQuadSharingAp",
+      "offBulkBookingAp",
+      "offTrippleSharingAp",
+      "offMoreThanFourAp",
+      "onDoubleSharingMAp",
+      "onQuadSharingMAp",
+      "onBulkBookingMAp",
+      "onTrippleSharingMAp",
+      "onMoreThanFourMAp",
+      "offDoubleSharingMAp",
+      "offQuadSharingMAp",
+      "offBulkBookingMAp",
+      "offTrippleSharingMAp",
+      "offMoreThanFourMAp"
+    ];
+
+    const detailedPolicies = detailedPolicyKeys.reduce((acc, key) => {
+      acc[key] = "";
+      return acc;
+    }, {});
+    detailedPolicies.hotelId = hotel.hotelId || "";
+
+    const toBooleanRestriction = (value, fallback = false) => {
+      if (typeof value === "boolean") return value;
+      if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (["true", "yes", "allowed", "accept", "accepted", "y"].includes(normalized)) {
+          return true;
+        }
+        if (["false", "no", "not allowed", "restricted", "denied", "n"].includes(normalized)) {
+          return false;
+        }
+      }
+      return fallback;
     };
 
-    if (hotel.policies) {
-      // If policies is an object with keys, try to map directly
-      if (!Array.isArray(hotel.policies) && typeof hotel.policies === 'object') {
-        policiesObj.checkIn = hotel.policies.checkIn || policiesObj.checkIn;
-        policiesObj.checkOut = hotel.policies.checkOut || policiesObj.checkOut;
-        policiesObj.rules = hotel.policies.rules || policiesObj.rules;
-        policiesObj.restrictions = hotel.policies.restrictions || policiesObj.restrictions;
-        policiesObj.cancellationText = hotel.policies.cancellationText || hotel.policies.cancellationText || policiesObj.cancellationText;
-      } else if (Array.isArray(hotel.policies)) {
-        // If policies is an array of objects, try to extract known keys
-        hotel.policies.forEach(p => {
-          if (!p || typeof p !== 'object') return;
-          if (p.checkIn) policiesObj.checkIn = p.checkIn;
-          if (p.checkOut) policiesObj.checkOut = p.checkOut;
-          if (Array.isArray(p.rules)) policiesObj.rules = p.rules;
-          if (p.restrictions) policiesObj.restrictions = p.restrictions;
-          if (p.cancellationText) policiesObj.cancellationText = p.cancellationText;
-        });
+    const splitRules = (text) => {
+      if (typeof text !== "string" || !text.trim()) return [];
+      return text
+        .split(/\r?\n|\u2022|\*|\u27A4/g)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    };
+
+    const extractTime = (value, fallback) => {
+      if (typeof value !== "string" || !value.trim()) return fallback;
+      const match = value.match(/\b\d{1,2}:\d{2}\s*(?:AM|PM)\b/i);
+      if (match) return match[0].toUpperCase();
+      return value.trim();
+    };
+
+    const explicitRules = [];
+    let mergedRestrictions = {
+      petsAllowed: false,
+      smokingAllowed: false,
+      alcoholAllowed: false
+    };
+
+    policyEntries.forEach((policy) => {
+      if (Array.isArray(policy.rules)) {
+        explicitRules.push(...policy.rules.map((r) => String(r).trim()).filter(Boolean));
       }
-    }
+
+      if (policy.restrictions && typeof policy.restrictions === "object") {
+        mergedRestrictions = {
+          ...mergedRestrictions,
+          ...policy.restrictions
+        };
+      }
+
+      detailedPolicyKeys.forEach((key) => {
+        const value = policy[key];
+        if (value === undefined || value === null) return;
+        if (typeof value === "string" && !value.trim()) return;
+        detailedPolicies[key] = value;
+      });
+    });
+
+    const rulesFromPolicyText = splitRules(detailedPolicies.hotelsPolicy);
+    const rules = explicitRules.length > 0 ? explicitRules : rulesFromPolicyText;
+    const checkInValue =
+      detailedPolicies.checkInPolicy || policyEntries.find((p) => p.checkIn)?.checkIn;
+    const checkOutValue =
+      detailedPolicies.checkOutPolicy || policyEntries.find((p) => p.checkOut)?.checkOut;
+
+    const policiesObj = {
+      checkIn: extractTime(checkInValue, "12:00 PM"),
+      checkOut: extractTime(checkOutValue, "11:00 AM"),
+      rules: [...new Set(rules)],
+      restrictions: {
+        petsAllowed: toBooleanRestriction(
+          detailedPolicies.petsAllowed || mergedRestrictions.petsAllowed,
+          false
+        ),
+        smokingAllowed: toBooleanRestriction(
+          detailedPolicies.smokingAllowed || mergedRestrictions.smokingAllowed,
+          false
+        ),
+        alcoholAllowed: toBooleanRestriction(
+          detailedPolicies.alcoholAllowed || mergedRestrictions.alcoholAllowed,
+          false
+        )
+      },
+      cancellationText:
+        detailedPolicies.cancellationPolicy ||
+        policyEntries.find((p) => p.cancellationText)?.cancellationText ||
+        "",
+      detailed: detailedPolicies
+    };
 
     const responsePayload = {
       _id: hotel._id,

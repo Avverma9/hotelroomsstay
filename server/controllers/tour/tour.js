@@ -298,6 +298,48 @@ const buildPlaceTokenRegex = (place) => {
   return new RegExp(pattern, "i");
 };
 
+const buildLooseContainsRegex = (value) => {
+  const normalized = normalizeSpace(value);
+  if (!normalized) return null;
+
+  const escaped = escapeRegexExact(normalized).replace(/\s+/g, "\\s*");
+  return new RegExp(escaped, "i");
+};
+
+const normalizeMatchText = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/\d+\s*[Nn]\s*/g, " ")
+    .replace(/[^a-z0-9\u0900-\u097f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const splitPlaces = (rawPlaces) =>
+  String(rawPlaces || "")
+    .split(/[|,]/g)
+    .map((part) => normalizeMatchText(part))
+    .filter(Boolean);
+
+const matchesCityLoose = (cityName, keyword) => {
+  const cityNorm = normalizeMatchText(cityName);
+  const keywordNorm = normalizeMatchText(keyword);
+  if (!cityNorm || !keywordNorm) return false;
+  return cityNorm.includes(keywordNorm) || keywordNorm.includes(cityNorm);
+};
+
+const matchesPlaceLoose = (rawPlaces, keyword) => {
+  const keywordNorm = normalizeMatchText(keyword);
+  if (!keywordNorm) return false;
+
+  const rawNorm = normalizeMatchText(rawPlaces);
+  if (rawNorm.includes(keywordNorm)) return true;
+
+  const tokens = splitPlaces(rawPlaces);
+  return tokens.some(
+    (token) => token.includes(keywordNorm) || keywordNorm.includes(token),
+  );
+};
+
 exports.filterTours = async (req, res) => {
   try {
     const {
@@ -308,6 +350,7 @@ exports.filterTours = async (req, res) => {
       country,
       state,
       city,
+      from: fromCity,
 
       // themes & amenities
       themes, // comma separated: "Culture,Heritage"
@@ -315,6 +358,8 @@ exports.filterTours = async (req, res) => {
       amenitiesMode, // "all" (default) | "any"
       fromWhere, // match token in visitngPlaces (supports optional "1N " prefix)
       to, // match token in visitngPlaces (supports optional "1N " prefix)
+      visitingPlace, // single place filter alias
+      visitingPlaces, // single place filter alias
 
       // numeric filters
       minPrice,
@@ -345,11 +390,14 @@ exports.filterTours = async (req, res) => {
     } = req.query;
 
     const filter = { isAccepted: true };
+    const andClauses = [];
+    const routeClauses = [];
+    const cityValue = sanitizeKeyword(city || fromCity);
 
     // --- location exact (case-insensitive safe) ---
     if (country) filter.country = new RegExp(`^${escapeRegexExact(country)}$`, "i");
     if (state) filter.state = new RegExp(`^${escapeRegexExact(state)}$`, "i");
-    if (city) filter.city = new RegExp(`^${escapeRegexExact(city)}$`, "i");
+    if (cityValue) filter.city = new RegExp(`^${escapeRegexExact(cityValue)}$`, "i");
 
     // --- themes: match ANY theme token inside string like "Culture, Heritage, Group" OR "धार्मिक यात्रा" ---
     if (themes) {
@@ -378,29 +426,63 @@ exports.filterTours = async (req, res) => {
     const routeAnd = [];
     const fromWhereValue = sanitizeKeyword(fromWhere);
     const toValue = sanitizeKeyword(to);
+    const singlePlaceValue = sanitizeKeyword(visitingPlace || visitingPlaces);
 
-    // Apply route filter only when BOTH inputs are present.
-    // If user clears either input, route filter is ignored and all tours can return.
-    if (fromWhereValue && toValue) {
-      const fromWhereRx = buildPlaceTokenRegex(fromWhereValue);
-      const toRx = buildPlaceTokenRegex(toValue);
+    const pushFromWhereClause = (placeValue) => {
+      const fromCityRegex = buildLooseContainsRegex(placeValue);
+      const placeRegex = buildPlaceTokenRegex(placeValue);
+      const placeLooseRegex = buildLooseContainsRegex(placeValue);
+      const fromWhereOr = [{ city: fromCityRegex }];
 
-      if (fromWhereRx) {
-        routeAnd.push({
-          $or: [{ visitngPlaces: fromWhereRx }, { visitingPlaces: fromWhereRx }],
-        });
+      if (placeRegex) {
+        fromWhereOr.push(
+          { visitngPlaces: placeRegex },
+          { visitingPlaces: placeRegex },
+        );
       }
 
-      if (toRx) {
-        routeAnd.push({
-          $or: [{ visitngPlaces: toRx }, { visitingPlaces: toRx }],
-        });
+      if (placeLooseRegex) {
+        fromWhereOr.push(
+          { visitngPlaces: placeLooseRegex },
+          { visitingPlaces: placeLooseRegex },
+        );
       }
+
+      routeAnd.push({ $or: fromWhereOr });
+    };
+
+    const pushPlaceClause = (placeValue) => {
+      const placeRegex = buildPlaceTokenRegex(placeValue);
+      const placeLooseRegex = buildLooseContainsRegex(placeValue);
+      const placeOr = [];
+
+      if (placeRegex) {
+        placeOr.push(
+          { visitngPlaces: placeRegex },
+          { visitingPlaces: placeRegex },
+        );
+      }
+
+      if (placeLooseRegex) {
+        placeOr.push(
+          { visitngPlaces: placeLooseRegex },
+          { visitingPlaces: placeLooseRegex },
+        );
+      }
+
+      if (placeOr.length === 0) return;
+      routeAnd.push({ $or: placeOr });
+    };
+
+    if (fromWhereValue) pushFromWhereClause(fromWhereValue);
+    if (toValue) pushPlaceClause(toValue);
+    if (!fromWhereValue && !toValue && singlePlaceValue) {
+      pushPlaceClause(singlePlaceValue);
     }
 
     if (routeAnd.length > 0) {
-      filter.$and = filter.$and || [];
-      filter.$and.push(...routeAnd);
+      routeClauses.push(...routeAnd);
+      andClauses.push(...routeAnd);
     }
 
     // --- numeric ranges ---
@@ -480,11 +562,14 @@ exports.filterTours = async (req, res) => {
       ];
 
       if (filter.$or) {
-        filter.$and = filter.$and || [];
-        filter.$and.push({ $or: searchOr });
+        andClauses.push({ $or: searchOr });
       } else {
         filter.$or = searchOr;
       }
+    }
+
+    if (andClauses.length > 0) {
+      filter.$and = andClauses;
     }
 
     // --- sorting ---
@@ -498,10 +583,80 @@ exports.filterTours = async (req, res) => {
     const limitNum = Math.min(50, Math.max(1, Number(limit) || 10));
     const skip = (pageNum - 1) * limitNum;
 
-    const [items, total] = await Promise.all([
-      Tour.find(filter).sort(sort).skip(skip).limit(limitNum).lean(),
-      Tour.countDocuments(filter),
-    ]);
+    const runQuery = async (queryFilter) => {
+      const [docs, count] = await Promise.all([
+        Tour.find(queryFilter).sort(sort).skip(skip).limit(limitNum).lean(),
+        Tour.countDocuments(queryFilter),
+      ]);
+      return { docs, count };
+    };
+
+    const buildFilterWithoutRouteClauses = () => {
+      const cleanedFilter = { ...filter };
+
+      if (Array.isArray(filter.$and)) {
+        const remainingAnd = filter.$and.filter(
+          (clause) => !routeClauses.includes(clause),
+        );
+
+        if (remainingAnd.length > 0) {
+          cleanedFilter.$and = remainingAnd;
+        } else {
+          delete cleanedFilter.$and;
+        }
+      }
+
+      return cleanedFilter;
+    };
+
+    let { docs: items, count: total } = await runQuery(filter);
+    let usedCityFallback = false;
+    let usedRouteLooseFallback = false;
+
+    const hasCityFilter = Boolean(cityValue);
+    const shouldFallbackToCityOnly =
+      hasCityFilter && routeClauses.length > 0 && items.length === 0;
+
+    if (shouldFallbackToCityOnly) {
+      const fallbackFilter = buildFilterWithoutRouteClauses();
+      ({ docs: items, count: total } = await runQuery(fallbackFilter));
+      usedCityFallback = true;
+    }
+
+    const shouldRunLooseRouteFallback =
+      routeClauses.length > 0 && items.length === 0;
+
+    if (shouldRunLooseRouteFallback) {
+      const looseFilter = buildFilterWithoutRouteClauses();
+      const candidates = await Tour.find(looseFilter).sort(sort).lean();
+
+      const routeMatched = candidates.filter((doc) => {
+        const fromMatch = fromWhereValue
+          ? matchesCityLoose(doc.city, fromWhereValue) ||
+            matchesPlaceLoose(doc.visitngPlaces, fromWhereValue) ||
+            matchesPlaceLoose(doc.visitingPlaces, fromWhereValue)
+          : true;
+
+        const toMatch = toValue
+          ? matchesPlaceLoose(doc.visitngPlaces, toValue) ||
+            matchesPlaceLoose(doc.visitingPlaces, toValue) ||
+            matchesCityLoose(doc.city, toValue)
+          : true;
+
+        const singlePlaceMatch =
+          !fromWhereValue && !toValue && singlePlaceValue
+            ? matchesPlaceLoose(doc.visitngPlaces, singlePlaceValue) ||
+              matchesPlaceLoose(doc.visitingPlaces, singlePlaceValue) ||
+              matchesCityLoose(doc.city, singlePlaceValue)
+            : true;
+
+        return fromMatch && toMatch && singlePlaceMatch;
+      });
+
+      total = routeMatched.length;
+      items = routeMatched.slice(skip, skip + limitNum);
+      usedRouteLooseFallback = true;
+    }
 
     return res.json({
       success: true,
@@ -517,12 +672,14 @@ exports.filterTours = async (req, res) => {
         q: q || "",
         country: country || "",
         state: state || "",
-        city: city || "",
+        city: cityValue || "",
+        from: sanitizeKeyword(fromCity),
         themes: themes || "",
         amenities: amenities || "",
         amenitiesMode: amenitiesMode || "all",
         fromWhere: sanitizeKeyword(fromWhere),
         to: sanitizeKeyword(to),
+        visitingPlace: sanitizeKeyword(visitingPlace || visitingPlaces),
         minPrice: minP,
         maxPrice: maxP,
         minNights: minN,
@@ -532,6 +689,8 @@ exports.filterTours = async (req, res) => {
         toDate: d2 ? d2.toISOString() : null,
         sortBy: sortField,
         sortOrder: sortDir === 1 ? "asc" : "desc",
+        usedCityFallback,
+        usedRouteLooseFallback,
       },
     });
   } catch (err) {
