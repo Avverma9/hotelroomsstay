@@ -3,6 +3,9 @@ const CarBooking = require("../../models/travel/carBooking");
 const Car = require("../../models/travel/cars");
 const { getGSTData } = require("../GST/gst");
 const { sendCustomEmail } = require("../../nodemailer/nodemailer");
+const {
+  createUserNotificationSafe,
+} = require("../notification/helpers");
 
 const BOOKING_STATUS = new Set(["Pending", "Confirmed", "Cancelled", "Failed"]);
 const RELEASE_SEAT_STATUS = new Set(["Cancelled", "Failed"]);
@@ -264,6 +267,19 @@ exports.bookCar = async (req, res) => {
       console.error("Booking email failed:", mailError.message);
     }
 
+    await createUserNotificationSafe({
+      name: "Travel Booking Successful",
+      message: `Your travel booking ${newBooking.bookingId} is created successfully.`,
+      path: "/app/bookings/travel",
+      eventType: "travel_booking_success",
+      metadata: {
+        bookingId: newBooking.bookingId,
+        bookingStatus: newBooking.bookingStatus,
+        carId: String(newBooking.carId),
+      },
+      userIds: [String(newBooking.userId)],
+    });
+
     return res.status(201).json({
       success: true,
       message: "Booking successful",
@@ -298,6 +314,20 @@ exports.changeBookingStatus = async (req, res) => {
     const previousStatus = booking.bookingStatus;
     booking.bookingStatus = bookingStatus;
     await booking.save();
+
+    if (previousStatus !== "Confirmed" && booking.bookingStatus === "Confirmed") {
+      await createUserNotificationSafe({
+        name: "Travel Booking Confirmed",
+        message: `Your travel booking ${booking.bookingId} is confirmed.`,
+        path: "/app/bookings/travel",
+        eventType: "travel_booking_confirmed",
+        metadata: {
+          bookingId: booking.bookingId,
+          bookingStatus: booking.bookingStatus,
+        },
+        userIds: [String(booking.userId)],
+      });
+    }
 
     if (
       RELEASE_SEAT_STATUS.has(bookingStatus) &&
@@ -400,6 +430,23 @@ exports.updateBooking = async (req, res) => {
       previousStatus !== updatedBooking.bookingStatus
     ) {
       await releaseSeatsForBooking(updatedBooking);
+    }
+
+    if (
+      previousStatus !== "Confirmed" &&
+      updatedBooking.bookingStatus === "Confirmed"
+    ) {
+      await createUserNotificationSafe({
+        name: "Travel Booking Confirmed",
+        message: `Your travel booking ${updatedBooking.bookingId} is confirmed.`,
+        path: "/app/bookings/travel",
+        eventType: "travel_booking_confirmed",
+        metadata: {
+          bookingId: updatedBooking.bookingId,
+          bookingStatus: updatedBooking.bookingStatus,
+        },
+        userIds: [String(updatedBooking.userId)],
+      });
     }
 
     return res.status(200).json({

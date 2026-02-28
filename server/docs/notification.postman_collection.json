@@ -1,0 +1,133 @@
+{
+  "info": {
+    "_postman_id": "8a29a907-2f75-4f70-8d78-1476dc3c94a1",
+    "name": "HotelRoomsStay - App Notifications",
+    "description": "Collection for app user notifications by userId.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "user_id",
+      "value": "12345678"
+    },
+    {
+      "key": "notification_id",
+      "value": "replace_with_notification_id"
+    }
+  ],
+  "item": [
+    {
+      "name": "Get Notifications By UserId",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/app/notifications/user/{{user_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "app",
+            "notifications",
+            "user",
+            "{{user_id}}"
+          ]
+        },
+        "description": "Fetch all notifications for one app userId."
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "[\n  {\n    \"_id\": \"67c14d9a4f497fb3bc8d2f20\",\n    \"name\": \"Coupon Received\",\n    \"path\": \"/app/coupons\",\n    \"message\": \"Welcome! You received coupon 728193 worth Rs 50. Valid till 07 Mar 2026.\",\n    \"eventType\": \"coupon_assigned\",\n    \"metadata\": {\n      \"couponCode\": \"728193\",\n      \"discountPrice\": 50,\n      \"validity\": \"2026-03-07T07:30:00.000Z\"\n    },\n    \"seenBy\": {\n      \"12345678\": false\n    },\n    \"userIds\": [\n      \"12345678\"\n    ],\n    \"createdAt\": \"2026-02-28T10:16:12.735Z\",\n    \"updatedAt\": \"2026-02-28T10:16:12.735Z\",\n    \"__v\": 0,\n    \"seen\": false\n  }\n]"
+        }
+      ]
+    },
+    {
+      "name": "Mark Notification Seen",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{base_url}}/app/notifications/{{notification_id}}/seen/{{user_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "app",
+            "notifications",
+            "{{notification_id}}",
+            "seen",
+            "{{user_id}}"
+          ]
+        },
+        "description": "Mark one notification as seen for this userId."
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"_id\": \"67c14d9a4f497fb3bc8d2f20\",\n  \"name\": \"Coupon Received\",\n  \"path\": \"/app/coupons\",\n  \"message\": \"Welcome! You received coupon 728193 worth Rs 50. Valid till 07 Mar 2026.\",\n  \"eventType\": \"coupon_assigned\",\n  \"metadata\": {\n    \"couponCode\": \"728193\",\n    \"discountPrice\": 50,\n    \"validity\": \"2026-03-07T07:30:00.000Z\"\n  },\n  \"seenBy\": {\n    \"12345678\": true\n  },\n  \"userIds\": [\n    \"12345678\"\n  ],\n  \"createdAt\": \"2026-02-28T10:16:12.735Z\",\n  \"updatedAt\": \"2026-02-28T10:17:55.281Z\",\n  \"__v\": 0\n}"
+        }
+      ]
+    },
+    {
+      "name": "Push Notification (Manual Test)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Test Notification\",\n  \"message\": \"This is a test notification for mobile app.\",\n  \"path\": \"/app/notifications\",\n  \"eventType\": \"general\",\n  \"metadata\": {\n    \"source\": \"manual-test\"\n  },\n  \"userIds\": [\"{{user_id}}\"]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/push-a-new-notification-to-the-panel/dashboard/user",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "push-a-new-notification-to-the-panel",
+            "dashboard",
+            "user"
+          ]
+        },
+        "description": "Create one notification manually for testing."
+      },
+      "response": []
+    }
+  ]
+}

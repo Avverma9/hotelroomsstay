@@ -1,4 +1,7 @@
 const mongoose = require('mongoose');
+const RoomModel = require('./rooms');
+
+const roomSchema = RoomModel.roomSchema;
 const generateHotelId = () => {
     const min = 10000000; // Minimum 8-digit number
     const max = 99999999; // Maximum 8-digit number
@@ -77,8 +80,8 @@ const hotelsSchema = new mongoose.Schema(
             default: false,
         },
         rooms: {
-            type: [{}],
-            ref: 'rooms',
+            type: [roomSchema],
+            default: [],
         },
 
         foods: {

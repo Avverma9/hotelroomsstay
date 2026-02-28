@@ -1,11 +1,12 @@
 const mongoose = require("mongoose");
 
-// Define the notification schema
 const notificationSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
-    path: { type: String, required: true },
+    path: { type: String, required: true, default: "/app/notifications" },
     message: { type: String, required: true },
+    eventType: { type: String, default: "general" },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
     seenBy: {
       type: Map,
       of: Boolean,
@@ -13,18 +14,19 @@ const notificationSchema = new mongoose.Schema(
     },
     userIds: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "DashboardUser",
+        type: String,
+        required: true,
+        trim: true,
       },
     ],
   },
   {
-    timestamps: true, // Automatically adds createdAt and updatedAt fields
+    timestamps: true,
   }
 );
 
-// Create the model from the schema
+notificationSchema.index({ userIds: 1, createdAt: -1 });
+
 const Notification = mongoose.model("UserNotification", notificationSchema);
 
-// Export the model
 module.exports = Notification;

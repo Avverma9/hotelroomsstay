@@ -1,11 +1,23 @@
 const hotelModel = require('../models/hotel/basicDetails');
-const couponModel = require('../models/booking/coupon');
+const { getRoomBasePrice } = require("./hotel/offerUtils");
+
+const normalizeHotelIds = (hotelIds) => {
+  if (!Array.isArray(hotelIds)) {
+    return [];
+  }
+
+  const normalized = hotelIds
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+
+  return [...new Set(normalized)];
+};
 
 exports.removeCoupon = async (req, res) => {
-  const { hotelIds } = req.body;
+  const hotelIds = normalizeHotelIds(req.body.hotelIds);
 
-  if (!Array.isArray(hotelIds) || hotelIds.some(isNaN)) {
-    return res.status(400).json({ message: 'hotelIds must be an array of numeric hotel IDs.' });
+  if (hotelIds.length === 0) {
+    return res.status(400).json({ message: 'hotelIds must be a non-empty array.' });
   }
 
   try {
@@ -27,9 +39,10 @@ exports.removeCoupon = async (req, res) => {
                 $set: {
                   'rooms.$.isOffer': false,
                   'rooms.$.offerPriceLess': 0,
-                  'rooms.$.offerExp': '',
-                  'rooms.$.offerName': '',
-                  'rooms.$.price': room.price + room.offerPriceLess,
+                  'rooms.$.offerExp': null,
+                  'rooms.$.offerName': 'N/A',
+                  'rooms.$.price': getRoomBasePrice(room),
+                  'rooms.$.originalPrice': getRoomBasePrice(room),
                 },
               },
             },
@@ -58,10 +71,11 @@ exports.removeCoupon = async (req, res) => {
 };
 
 exports.changeStatus = async (req, res) => {
-  const { hotelIds, isAccepted, soldOut, onFront } = req.body;
+  const hotelIds = normalizeHotelIds(req.body.hotelIds);
+  const { isAccepted, soldOut, onFront } = req.body;
 
-  if (!Array.isArray(hotelIds) || hotelIds.some(isNaN)) {
-    return res.status(400).json({ message: 'hotelIds must be an array of numeric hotel IDs.' });
+  if (hotelIds.length === 0) {
+    return res.status(400).json({ message: 'hotelIds must be a non-empty array.' });
   }
 
   const updates = {};
@@ -99,10 +113,10 @@ exports.changeStatus = async (req, res) => {
 };
 
 exports.bulkDelete = async (req, res) => {
-  const { hotelIds } = req.body;
+  const hotelIds = normalizeHotelIds(req.body.hotelIds);
 
-  if (!Array.isArray(hotelIds) || hotelIds.some(isNaN)) {
-    return res.status(400).json({ message: 'hotelIds must be an array of numeric hotel IDs.' });
+  if (hotelIds.length === 0) {
+    return res.status(400).json({ message: 'hotelIds must be a non-empty array.' });
   }
 
   try {

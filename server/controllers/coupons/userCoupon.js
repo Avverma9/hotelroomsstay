@@ -2,17 +2,80 @@ const UserCoupon = require("../../models/coupons/userCoupon");
 const cron = require("node-cron");
 const moment = require("moment-timezone");
 const hotelModel = require("../../models/hotel/basicDetails");
+const userModel = require("../../models/user");
+const {
+  createUserNotificationSafe,
+} = require("../notification/helpers");
+
+const formatDate = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const resolveCouponUserId = async (coupon) => {
+  if (coupon.userId) {
+    return String(coupon.userId);
+  }
+
+  const assignedTo = String(coupon.assignedTo || "").trim();
+  if (!assignedTo) {
+    return null;
+  }
+
+  const user = await userModel.findOne({
+    email: { $regex: `^${assignedTo}$`, $options: "i" },
+  });
+
+  return user?.userId ? String(user.userId) : null;
+};
 
 const newUserCoupon = async (req, res) => {
   try {
-    const { couponName, discountPrice, validity, quantity, assignedTo } = req.body;
+    const {
+      couponName,
+      discountPrice,
+      validity,
+      quantity,
+      assignedTo,
+      userId,
+    } = req.body;
     const createdCoupon = await UserCoupon.create({
       couponName,
       discountPrice,
       validity,
       quantity,
       assignedTo,
+      userId,
     });
+
+    const targetUserId = await resolveCouponUserId(createdCoupon);
+    if (targetUserId && !createdCoupon.userId) {
+      createdCoupon.userId = targetUserId;
+      await createdCoupon.save();
+    }
+
+    if (targetUserId) {
+      await createUserNotificationSafe({
+        name: "Coupon Received",
+        message: `A new coupon ${createdCoupon.couponCode} worth Rs ${createdCoupon.discountPrice} is added to your account. Valid till ${formatDate(createdCoupon.validity)}.`,
+        path: "/app/coupons",
+        eventType: "coupon_assigned",
+        metadata: {
+          couponCode: createdCoupon.couponCode,
+          discountPrice: createdCoupon.discountPrice,
+          validity: createdCoupon.validity,
+        },
+        userIds: [targetUserId],
+      });
+    }
 
     res
       .status(201)
@@ -95,34 +158,52 @@ const ApplyUserCoupon = async (req, res) => {
 };
 
 
-const deleteUserCouponAutomatically = async () => {
+const expireUserCouponAutomatically = async () => {
   try {
-    const moment = require("moment-timezone");
-
-    const currentIST = moment.tz("Asia/Kolkata");
-    const formattedIST = currentIST.format("YYYY-MM-DDTHH:mm:ss.SSSZ");
-    const utcFormatted = formattedIST.slice(0, -6) + "+00:00";
-
-    const result = await UserCoupon.deleteMany({
+    const now = new Date();
+    const couponsToExpire = await UserCoupon.find({
       expired: false,
-      validity: { $lte: utcFormatted },
+      validity: { $lte: now, $ne: null },
     });
+
+    for (const coupon of couponsToExpire) {
+      const targetUserId = await resolveCouponUserId(coupon);
+
+      coupon.expired = true;
+      if (targetUserId && !coupon.userId) {
+        coupon.userId = targetUserId;
+      }
+      await coupon.save();
+
+      if (targetUserId) {
+        await createUserNotificationSafe({
+          name: "Coupon Expired",
+          message: `Your coupon ${coupon.couponCode} has expired on ${formatDate(coupon.validity)}.`,
+          path: "/app/coupons",
+          eventType: "coupon_expired",
+          metadata: {
+            couponCode: coupon.couponCode,
+            validity: coupon.validity,
+          },
+          userIds: [targetUserId],
+        });
+      }
+    }
   } catch (error) {
-    console.error("Error deleting expired coupons:", error);
+    console.error("Error expiring coupons:", error);
   }
 };
 
 cron.schedule("* * * * *", async () => {
-  await deleteUserCouponAutomatically();
+  await expireUserCouponAutomatically();
 });
 
 const GetAllUserCoupons = async (req, res) => {
   try {
-    // Get the current date in IST timezone
     const currentDate = new Date();
-    const currentDateIST = currentDate.getTime() + 5.5 * 60 * 60 * 1000; // Convert to IST
     const coupons = await UserCoupon.find({
-      validity: { $gte: currentDateIST },
+      validity: { $gte: currentDate },
+      expired: false,
     }).sort({ validity: -1 });
 
     res.status(200).json(coupons);

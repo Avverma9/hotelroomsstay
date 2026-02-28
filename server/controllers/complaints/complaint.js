@@ -1,5 +1,8 @@
 const Complaint = require('../../models/complaint');
 const chat = require('../../models/complaints/chat');
+const {
+  createUserNotificationSafe,
+} = require("../notification/helpers");
 
 const createComplaint = async (req, res) => {
     const { userId, regarding, hotelName, hotelEmail, bookingId, status, issue, hotelId } = req.body;
@@ -35,6 +38,19 @@ const createComplaint = async (req, res) => {
 
         await newComplaint.save();
 
+        await createUserNotificationSafe({
+            name: "Complaint Created",
+            message: `Your complaint ${newComplaint.complaintId} has been created successfully.`,
+            path: "/app/complaints",
+            eventType: "complaint_created",
+            metadata: {
+                complaintId: newComplaint.complaintId,
+                status: newComplaint.status,
+                regarding: newComplaint.regarding,
+            },
+            userIds: [String(newComplaint.userId)],
+        });
+
         res.status(201).json(newComplaint);
     } catch (error) {
         console.error('Error creating complaint:', error); // Log error for debugging
@@ -56,6 +72,12 @@ const updateComplaint = async (req, res) => {
       if (!updatedBy?.name || !updatedBy?.email) {
         return res.status(400).json({ success: false, message: 'UpdatedBy must include name and email' });
       }
+
+      const existingComplaint = await Complaint.findById(id);
+      if (!existingComplaint) {
+        return res.status(404).json({ success: false, message: 'Complaint not found' });
+      }
+      const previousStatus = existingComplaint.status;
 
       // Create new update object with timestamp
       const newUpdate = {
@@ -85,6 +107,21 @@ const updateComplaint = async (req, res) => {
       );
       if (!updatedComplaint) {
         return res.status(404).json({ success: false, message: 'Complaint not found' });
+      }
+
+      if (status && previousStatus !== status) {
+        await createUserNotificationSafe({
+          name: "Complaint Status Updated",
+          message: `Your complaint ${updatedComplaint.complaintId} status changed from ${previousStatus} to ${status}.`,
+          path: "/app/complaints",
+          eventType: "complaint_status_changed",
+          metadata: {
+            complaintId: updatedComplaint.complaintId,
+            previousStatus,
+            currentStatus: status,
+          },
+          userIds: [String(updatedComplaint.userId)],
+        });
       }
   
       return res.status(200).json({ success: true, updatedComplaint });

@@ -4,29 +4,76 @@ const UserCoupon = require("../models/coupons/userCoupon");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const otpAuth = require("../authentication/otpLogin");
+const {
+  createUserNotificationSafe,
+} = require("./notification/helpers");
+
+const formatDate = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const ensureWelcomeCouponForUser = async ({ email, userId }) => {
+  if (!email || !userId) {
+    return null;
+  }
+
+  const existingCoupon = await UserCoupon.findOne({
+    assignedTo: { $regex: `^${email}$`, $options: "i" },
+  });
+
+  if (existingCoupon) {
+    return null;
+  }
+
+  const validity = new Date();
+  validity.setDate(validity.getDate() + 7);
+
+  const coupon = await UserCoupon.create({
+    couponName: "Welcome50",
+    discountPrice: 50,
+    validity,
+    quantity: 1,
+    assignedTo: email,
+    userId: String(userId),
+  });
+
+  await createUserNotificationSafe({
+    name: "Coupon Received",
+    message: `Welcome! You received coupon ${coupon.couponCode} worth Rs ${coupon.discountPrice}. Valid till ${formatDate(coupon.validity)}.`,
+    path: "/app/coupons",
+    eventType: "coupon_assigned",
+    metadata: {
+      couponCode: coupon.couponCode,
+      discountPrice: coupon.discountPrice,
+      validity: coupon.validity,
+    },
+    userIds: [String(userId)],
+  });
+
+  return coupon;
+};
+
+const ensureWelcomeCouponForUserSafe = async ({ email, userId }) => {
+  try {
+    return await ensureWelcomeCouponForUser({ email, userId });
+  } catch (error) {
+    console.error("Failed to create welcome coupon:", error.message);
+    return null;
+  }
+};
 
 const createSignup = async function (req, res) {
   try {
     const { email, mobile } = req.body;
-
-    if (email) {
-      const existingCoupon = await UserCoupon.find({
-        assignedTo: { $regex: `^${email}$`, $options: "i" },
-      });
-
-      if (existingCoupon.length === 0) {
-        const currentDate = new Date();
-        const validity = new Date(currentDate.setDate(currentDate.getDate() + 7));
-
-        await UserCoupon.create({
-          couponName: "Welcome50",
-          discountPrice: 50,
-          validity,
-          quantity: 1,
-          assignedTo: email,
-        });
-      }
-    }
 
     if (email) {
       const findWithEmail = await userModel.findOne({
@@ -52,6 +99,10 @@ const createSignup = async function (req, res) {
     };
 
     const savedUser = await userModel.create(userData);
+    await ensureWelcomeCouponForUserSafe({
+      email: savedUser.email,
+      userId: savedUser.userId,
+    });
 
     return res.status(201).json({
       status: true,
@@ -70,25 +121,6 @@ const createSignup = async function (req, res) {
 const GoogleSignIn = async function (req, res) {
   try {
     const { email, uid, userName, images } = req.body;
-
-    if (email) {
-      const existingCoupon = await UserCoupon.find({
-        assignedTo: { $regex: `^${email}$`, $options: "i" },
-      });
-
-      if (existingCoupon.length === 0) {
-        const currentDate = new Date();
-        const validity = new Date(currentDate.setDate(currentDate.getDate() + 7));
-
-        await UserCoupon.create({
-          couponName: "Welcome50",
-          discountPrice: 50,
-          validity,
-          quantity: 1,
-          assignedTo: email,
-        });
-      }
-    }
 
     const existingUser = await userModel.findOne({
       $or: [{ email: { $regex: `^${email}$`, $options: "i" } }, { uid }],
@@ -111,6 +143,10 @@ const GoogleSignIn = async function (req, res) {
     }
 
     const user = await userModel.create({ email, uid, userName, images });
+    await ensureWelcomeCouponForUserSafe({
+      email: user.email,
+      userId: user.userId,
+    });
 
     const token = jwt.sign({ id: user.userId }, process.env.JWT_SECRET, {
       expiresIn: "24h",
@@ -260,6 +296,14 @@ const totalUser = async function (req, res) {
 const update = async (req, res) => {
   try {
     const { userId, userName, address, email, mobile, password } = req.body;
+    if (!userId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
+
+    const existingUser = await userModel.findOne({ userId });
+    if (!existingUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
     if (email) {
       const findWithEmail = await userModel.findOne({
@@ -285,30 +329,43 @@ const update = async (req, res) => {
       }
     }
 
-    let images = [];
+    const hasPasswordField = Object.prototype.hasOwnProperty.call(
+      req.body,
+      "password"
+    );
+    const isPasswordChanged =
+      hasPasswordField && password !== existingUser.password;
+
+    let images = existingUser.images || [];
     if (req.files && req.files.length > 0) {
       images = req.files.map((file) => file.location);
-    } else {
-      const user = await userModel.findOne({ userId });
-      if (user) {
-        images = user.images || [];
-      }
     }
+
+    const updateData = { images };
+    if (userName !== undefined) updateData.userName = userName;
+    if (address !== undefined) updateData.address = address;
+    if (email !== undefined) updateData.email = email;
+    if (mobile !== undefined) updateData.mobile = mobile;
+    if (password !== undefined) updateData.password = password;
 
     const updatedUser = await userModel.findOneAndUpdate(
       { userId },
-      {
-        userName,
-        address,
-        email,
-        mobile,
-        password,
-        images,
-      },
+      { $set: updateData },
       { new: true }
     );
 
     if (updatedUser) {
+      if (isPasswordChanged) {
+        await createUserNotificationSafe({
+          name: "Password Changed",
+          message:
+            "Your account password was changed successfully. If this was not you, contact support immediately.",
+          path: "/app/profile/security",
+          eventType: "password_changed",
+          metadata: { changedAt: new Date() },
+          userIds: [String(updatedUser.userId)],
+        });
+      }
       return res.json(updatedUser);
     } else {
       return res.status(404).json({ message: "User not found" });

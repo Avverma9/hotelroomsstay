@@ -1,5 +1,8 @@
 const mongoose = require("mongoose");
-const rooms = new mongoose.Schema({
+
+const roomSchema = new mongoose.Schema(
+{
+  roomId: String,
   hotelId: String,
   images: [String],
   type: {
@@ -9,6 +12,9 @@ const rooms = new mongoose.Schema({
     type: String,
   },
   price: {
+    type: Number,
+  },
+  originalPrice: {
     type: Number,
   },
   isOffer: {
@@ -26,9 +32,25 @@ const rooms = new mongoose.Schema({
   offerExp: {
     type: Date,
   },
+  soldOut: {
+    type: Boolean,
+    default: false,
+  },
   countRooms: {
     type: Number,
     default: 1,
   },
-});
-module.exports = mongoose.model("rooms", rooms);
+  totalRooms: {
+    type: Number,
+    default: 1,
+  },
+},
+{
+  strict: false,
+}
+);
+
+const RoomModel = mongoose.models.rooms || mongoose.model("rooms", roomSchema);
+
+module.exports = RoomModel;
+module.exports.roomSchema = roomSchema;

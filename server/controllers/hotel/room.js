@@ -37,6 +37,11 @@ exports.createRooms = async (req, res) => {
             countRooms: parsedCountRooms, // Store as number
             totalRooms: parsedCountRooms,
             price: parsedPrice, // Store as number
+            originalPrice: parsedPrice,
+            isOffer: false,
+            offerName: "N/A",
+            offerPriceLess: 0,
+            offerExp: null,
             ...rooms,
         };
 
@@ -80,16 +85,29 @@ exports.updateRoomsByRoomId = async (req, res) => {
 
     try {
         // Create the update query
+        const existingHotel = await hotelModel.findOne({ 'rooms.roomId': roomId });
+        if (!existingHotel) {
+            return res.status(404).json({ message: 'No data found for the provided roomId' });
+        }
+
+        const existingRoom = existingHotel.rooms.find((room) => room.roomId === roomId);
+        const preserveOfferPricing = Boolean(existingRoom?.isOffer);
+
         let updateQuery = {
             $set: {
                 'rooms.$.type': type,
                 'rooms.$.soldOut': soldOut,
                 'rooms.$.bedTypes': bedTypes,
                 'rooms.$.price': parsedPrice,
+                'rooms.$.originalPrice': parsedPrice,
                 'rooms.$.countRooms': parsedCountRooms,
                 'rooms.$.totalRooms': parsedTotalRooms, // Update totalRooms based on countRooms
             },
         };
+
+        if (preserveOfferPricing) {
+            updateQuery.$set['rooms.$.isOffer'] = true;
+        }
 
         // If images are provided, include them in the update query
         if (images.length > 0) {
@@ -98,10 +116,6 @@ exports.updateRoomsByRoomId = async (req, res) => {
 
         // Find the hotel document based on roomId and update the room
         const updatedHotel = await hotelModel.findOneAndUpdate({ 'rooms.roomId': roomId }, updateQuery, { new: true });
-
-        if (!updatedHotel) {
-            return res.status(404).json({ message: 'No data found for the provided roomId' });
-        }
 
         res.json({
             message: 'Rooms updated successfully',

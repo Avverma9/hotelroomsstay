@@ -15,8 +15,13 @@ router.get(
   "/fetch-all-new-notification-to-the-panel/dashboard/get/:userId",
   getNotificationByUser
 );
+router.get("/app/notifications/user/:userId", getNotificationByUser);
 router.patch(
   "/fetch-all-new-notification-to-the-panel/and-mark-seen/dashboard-user/notification/:notificationId/seen",
+  updateUserNotificationSeen
+);
+router.patch(
+  "/app/notifications/:notificationId/seen/:userId",
   updateUserNotificationSeen
 );
 router.delete(

@@ -7,6 +7,11 @@ const bookingsModel = require("../../models/booking/booking");
 const monthly = require("../../models/booking/monthly");
 const gstModel = require("../../models/GST/gst");
 const { sendCustomEmail } = require("../../nodemailer/nodemailer");
+const {
+  getRoomBasePrice,
+  getOfferAdjustedPrice,
+  isOfferActive,
+} = require("./offerUtils");
 const createHotel = async (req, res) => {
   try {
     const {
@@ -475,7 +480,8 @@ const getAllHotels = async (req, res) => {
         availableRooms += available;
         
         // Get the price - check for monthly special pricing first
-        let finalPrice = room.price || 0;
+        const baseRoomPrice = getRoomBasePrice(room);
+        let finalPrice = baseRoomPrice;
         let isSpecialPrice = false;
         let monthlyPriceDetails = null;
         
@@ -502,16 +508,12 @@ const getAllHotels = async (req, res) => {
           }
         }
         
-        // Apply offer discount if any
-        let offerPrice = finalPrice;
-        let offerApplied = false;
-        if (room.isOffer && room.offerPriceLess > 0) {
-          const offerExpDate = room.offerExp ? new Date(room.offerExp) : null;
-          if (!offerExpDate || offerExpDate >= new Date()) {
-            offerPrice = finalPrice - room.offerPriceLess;
-            offerApplied = true;
-          }
-        }
+        const { finalPrice: offerPrice, offerApplied } = getOfferAdjustedPrice({
+          room,
+          listPrice: finalPrice,
+          isSpecialPrice,
+          at: new Date(),
+        });
         
         // Calculate GST
         const { gstPercent, gstAmount } = calculateGST(offerPrice);
@@ -525,7 +527,7 @@ const getAllHotels = async (req, res) => {
         
         return {
           ...room,
-          originalPrice: room.price,
+          originalPrice: baseRoomPrice,
           finalPrice: offerPrice,
           isSpecialPrice,
           offerApplied,
@@ -636,7 +638,7 @@ const setOnFront = async (req, res) => {
         if (matchingMonthlyEntry) {
           return {
             ...room,
-            originalPrice: room.price,
+            originalPrice: getRoomBasePrice(room),
             price: matchingMonthlyEntry.monthPrice,
             monthlyPriceDetails: {
               monthPrice: matchingMonthlyEntry.monthPrice,
@@ -772,7 +774,8 @@ const getHotelsById = async (req, res) => {
       availableRooms += available;
       
       // Get the price - check for monthly special pricing first
-      let finalPrice = room.price || 0;
+      const baseRoomPrice = getRoomBasePrice(room);
+      let finalPrice = baseRoomPrice;
       let isSpecialPrice = false;
       let monthlyPriceDetails = null;
       
@@ -799,16 +802,12 @@ const getHotelsById = async (req, res) => {
         }
       }
       
-      // Apply offer discount if any
-      let offerPrice = finalPrice;
-      let offerApplied = false;
-      if (room.isOffer && room.offerPriceLess > 0) {
-        const offerExpDate = room.offerExp ? new Date(room.offerExp) : null;
-        if (!offerExpDate || offerExpDate >= new Date()) {
-          offerPrice = finalPrice - room.offerPriceLess;
-          offerApplied = true;
-        }
-      }
+      const { finalPrice: offerPrice, offerApplied } = getOfferAdjustedPrice({
+        room,
+        listPrice: finalPrice,
+        isSpecialPrice,
+        at: new Date(),
+      });
       
       // Calculate GST
       const { gstPercent, gstAmount } = calculateGST(offerPrice);
@@ -822,7 +821,7 @@ const getHotelsById = async (req, res) => {
       
       return {
         ...room,
-        originalPrice: room.price,
+        originalPrice: baseRoomPrice,
         finalPrice: offerPrice,
         isSpecialPrice,
         offerApplied,
@@ -882,8 +881,8 @@ const getHotelsById = async (req, res) => {
           displayPrice: `₹ ${formatCurrency(Number(finalPrice) || 0)}`
         },
         features: {
-          isOffer: !!r.isOffer || !!r.offerApplied,
-          offerText: r.offerText || r.offerExp || ''
+          isOffer: isOfferActive(r),
+          offerText: r.offerName || (r.offerExp ? String(r.offerExp) : '')
         }
       };
     });
@@ -1174,7 +1173,8 @@ const getHotelsByFilters = async (req, res) => {
         availableRooms += available;
         
         // Get the price - check for monthly special pricing first
-        let finalPrice = room.price || 0;
+        const baseRoomPrice = getRoomBasePrice(room);
+        let finalPrice = baseRoomPrice;
         let isSpecialPrice = false;
         let monthlyPriceDetails = null;
         
@@ -1201,14 +1201,12 @@ const getHotelsByFilters = async (req, res) => {
           }
         }
         
-        // Apply offer discount if any
-        let offerPrice = finalPrice;
-        if (room.isOffer && room.offerPriceLess > 0) {
-          const offerExpDate = room.offerExp ? new Date(room.offerExp) : null;
-          if (!offerExpDate || offerExpDate >= new Date()) {
-            offerPrice = finalPrice - room.offerPriceLess;
-          }
-        }
+        const { finalPrice: offerPrice } = getOfferAdjustedPrice({
+          room,
+          listPrice: finalPrice,
+          isSpecialPrice,
+          at: new Date(),
+        });
         
         // Calculate GST
         const { gstPercent, gstAmount } = calculateGST(offerPrice);
@@ -1222,7 +1220,7 @@ const getHotelsByFilters = async (req, res) => {
         
         return {
           ...room,
-          originalPrice: room.price,
+          originalPrice: baseRoomPrice,
           finalPrice: offerPrice,
           isSpecialPrice,
           monthlyPriceDetails,
@@ -1506,6 +1504,7 @@ cron.schedule("*/30 * * * *", async () => {
 //=========================================list of applied coupons hotel==========================
 const getCouponsAppliedHotels = async (req, res) => {
   try {
+    const now = new Date();
     res.setHeader('Content-Type', 'application/json');
     res.write('[');
     let first = true;
@@ -1513,8 +1512,19 @@ const getCouponsAppliedHotels = async (req, res) => {
     const cursor = hotelModel.find({ "rooms.isOffer": true }).cursor();
     
     for await (const hotel of cursor) {
+      const activeOfferRooms = (hotel.rooms || []).filter((room) =>
+        isOfferActive(room, now)
+      );
+
+      if (activeOfferRooms.length === 0) {
+        continue;
+      }
+
       if (!first) res.write(',');
-      res.write(JSON.stringify(hotel));
+      res.write(JSON.stringify({
+        ...hotel.toObject(),
+        rooms: activeOfferRooms,
+      }));
       first = false;
     }
     
@@ -1523,6 +1533,75 @@ const getCouponsAppliedHotels = async (req, res) => {
   } catch (error) {
     console.error("Error fetching hotels with offers:", error);
     res.status(500).json({ message: "Error fetching hotels", error });
+  }
+};
+
+const getRoomOfferStatus = async (req, res) => {
+  try {
+    const { hotelId, roomId } = req.params;
+
+    if (!hotelId || !roomId) {
+      return res.status(400).json({
+        success: false,
+        message: "hotelId and roomId are required",
+      });
+    }
+
+    const hotel = await hotelModel.findOne(
+      { hotelId, "rooms.roomId": roomId },
+      { hotelId: 1, hotelName: 1, rooms: 1 }
+    ).lean();
+
+    if (!hotel) {
+      return res.status(404).json({
+        success: false,
+        message: "Hotel or room not found",
+      });
+    }
+
+    const room = (hotel.rooms || []).find(
+      (item) => String(item.roomId) === String(roomId)
+    );
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: "Room not found",
+      });
+    }
+
+    const basePrice = getRoomBasePrice(room);
+    const { finalPrice, offerApplied } = getOfferAdjustedPrice({
+      room,
+      listPrice: basePrice,
+      isSpecialPrice: false,
+      at: new Date(),
+    });
+
+    return res.status(200).json({
+      success: true,
+      hotelId: hotel.hotelId,
+      hotelName: hotel.hotelName,
+      roomId: room.roomId,
+      isOfferActive: offerApplied,
+      offer: offerApplied
+        ? {
+            name: room.offerName || "Offer",
+            discountPrice: Number(room.offerPriceLess) || 0,
+            expiresAt: room.offerExp || null,
+          }
+        : null,
+      pricing: {
+        basePrice: Number(basePrice) || 0,
+        finalPrice: Number(finalPrice) || 0,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch room offer status",
+      error: error.message,
+    });
   }
 };
 
@@ -1547,6 +1626,7 @@ module.exports = {
   getCount,
   updatePolicies,
   getCouponsAppliedHotels,
+  getRoomOfferStatus,
   getCountPendingHotels,
   updateHotelImage,
   deleteHotelImages,

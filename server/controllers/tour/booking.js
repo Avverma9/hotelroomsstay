@@ -1,6 +1,9 @@
 const mongoose = require("mongoose");
 const TourBooking = require("../../models/tour/booking");
 const TourModel = require("../../models/tour/tour");
+const {
+  createUserNotificationSafe,
+} = require("../notification/helpers");
 
 /* =========================================================
    CREATE BOOKING (TRANSACTION SAFE)
@@ -196,6 +199,19 @@ exports.createBooking = async (req, res) => {
 
     await session.commitTransaction();
     session.endSession();
+
+    await createUserNotificationSafe({
+      name: "Tour Booking Successful",
+      message: `Your tour booking ${booking.bookingCode} is created successfully.`,
+      path: "/app/bookings/tour",
+      eventType: "tour_booking_success",
+      metadata: {
+        bookingCode: booking.bookingCode,
+        bookingStatus: booking.status,
+        tourId: booking.tourId,
+      },
+      userIds: [String(booking.userId)],
+    });
 
     return res.status(201).json({
       success: true,
@@ -406,6 +422,21 @@ exports.updateBooking = async (req, res) => {
 
     await session.commitTransaction();
     session.endSession();
+
+    if (previousStatus !== "confirmed" && booking.status === "confirmed") {
+      await createUserNotificationSafe({
+        name: "Tour Booking Confirmed",
+        message: `Your tour booking ${booking.bookingCode} is confirmed.`,
+        path: "/app/bookings/tour",
+        eventType: "tour_booking_confirmed",
+        metadata: {
+          bookingCode: booking.bookingCode,
+          bookingStatus: booking.status,
+          tourId: booking.tourId,
+        },
+        userIds: [String(booking.userId)],
+      });
+    }
 
     return res.json({
       success: true,
