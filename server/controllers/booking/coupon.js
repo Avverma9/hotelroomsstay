@@ -1,48 +1,43 @@
-const couponModel = require("../../models/booking/coupon");
+const couponModel = require("../../models/coupons/coupon");
 const hotelModel = require("../../models/hotel/basicDetails");
 const cron = require("node-cron");
 const {
   getRoomBasePrice,
   toNumber,
 } = require("../hotel/offerUtils");
+const {
+  normalizeIdList,
+  isCouponExpired,
+  getRemainingQuota,
+  registerCouponUsage,
+} = require("../coupons/couponUtils");
 
-const normalizeIdList = (values) => {
-  if (!Array.isArray(values)) {
+const COUPON_TYPE = "hotel";
+
+const toArray = (value) => {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value === undefined || value === null || value === "") {
     return [];
   }
-
-  const normalized = values
-    .map((value) => String(value || "").trim())
-    .filter(Boolean);
-
-  return [...new Set(normalized)];
+  return [String(value)];
 };
 
-const isCouponExpired = (coupon) => {
-  if (!coupon || !coupon.validity) {
-    return true;
-  }
-
-  if (coupon.expired === true) {
-    return true;
-  }
-
-  const expiry = new Date(coupon.validity);
-  if (Number.isNaN(expiry.getTime())) {
-    return true;
-  }
-
-  return expiry < new Date();
+const uniqueMerge = (existing, incoming) => {
+  return [...new Set([...toArray(existing), ...toArray(incoming)])];
 };
 
 const newCoupon = async (req, res) => {
   try {
-    const { couponName, discountPrice, validity, quantity } = req.body;
+    const { couponName, discountPrice, validity, quantity, maxUsage } = req.body;
     const createdCoupon = await couponModel.create({
+      type: COUPON_TYPE,
       couponName,
       discountPrice,
       validity,
       quantity,
+      maxUsage: maxUsage || quantity,
     });
 
     res
@@ -65,7 +60,7 @@ const ApplyCoupon = async (req, res) => {
       });
     }
 
-    const coupon = await couponModel.findOne({ couponCode });
+    const coupon = await couponModel.findOne({ couponCode, type: COUPON_TYPE });
     if (!coupon) {
       return res.status(404).json({ message: "Coupon code not found" });
     }
@@ -75,15 +70,7 @@ const ApplyCoupon = async (req, res) => {
       return res.status(400).json({ message: "Coupon code has expired" });
     }
 
-    const quantityLimit = toNumber(coupon.quantity);
-    const hasLimit = quantityLimit !== null && quantityLimit > 0;
-    const alreadyAppliedCount = Array.isArray(coupon.roomId)
-      ? coupon.roomId.length
-      : 0;
-    let remainingQuota = hasLimit
-      ? Math.max(0, quantityLimit - alreadyAppliedCount)
-      : Infinity;
-
+    let remainingQuota = getRemainingQuota(coupon);
     if (remainingQuota <= 0) {
       return res.status(400).json({ message: "Coupon usage limit reached" });
     }
@@ -143,7 +130,7 @@ const ApplyCoupon = async (req, res) => {
               "rooms.$.price": basePrice,
               "rooms.$.originalPrice": basePrice,
             },
-          }
+          },
         );
 
         if (updateResult.modifiedCount <= 0) {
@@ -169,19 +156,32 @@ const ApplyCoupon = async (req, res) => {
       });
     }
 
-    coupon.roomId = [...new Set([...(coupon.roomId || []), ...appliedRoomIds])];
-    coupon.hotelId = [...new Set([...(coupon.hotelId || []), ...appliedHotelIds])];
-    if (hasLimit && remainingQuota === 0) {
-      coupon.expired = true;
-    }
+    coupon.roomId = uniqueMerge(coupon.roomId, appliedRoomIds);
+    coupon.hotelId = uniqueMerge(coupon.hotelId, appliedHotelIds);
+    remainingQuota = registerCouponUsage({
+      coupon,
+      usageCount: appliedRoomIds.length,
+      usageEntries: appliedDetails.map((item) => ({
+        hotelId: item.hotelId,
+        roomId: item.roomId,
+        discountPrice: item.discountPrice,
+        finalPrice: item.finalPrice,
+      })),
+    });
+
     await coupon.save();
 
     res.status(200).json({
       message: "Coupon applied successfully.",
+      couponType: coupon.type,
       appliedRoomIds,
       appliedHotelIds,
       appliedDetails,
-      remainingQuota: hasLimit ? remainingQuota : null,
+      usage: {
+        usedCount: coupon.usedCount,
+        maxUsage: coupon.maxUsage || coupon.quantity,
+        remainingQuota,
+      },
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -192,12 +192,13 @@ const expireCouponsAutomatically = async () => {
   try {
     await couponModel.updateMany(
       {
+        type: COUPON_TYPE,
         expired: false,
         validity: { $lte: new Date() },
       },
       {
         $set: { expired: true },
-      }
+      },
     );
   } catch (error) {
     console.error("Error expiring coupons:", error);
@@ -260,6 +261,7 @@ const GetAllCoupons = async (req, res) => {
   try {
     const coupons = await couponModel
       .find({
+        type: COUPON_TYPE,
         expired: false,
         validity: { $gte: new Date() },
       })
@@ -274,6 +276,7 @@ const GetAllCoupons = async (req, res) => {
 const GetValidCoupons = async (req, res) => {
   try {
     const coupons = await couponModel.find({
+      type: COUPON_TYPE,
       roomId: { $exists: true, $ne: [] },
       expired: false,
       validity: { $gte: new Date() },
@@ -285,10 +288,42 @@ const GetValidCoupons = async (req, res) => {
   }
 };
 
+const GetCouponsByType = async (req, res) => {
+  try {
+    const { type = COUPON_TYPE, status = "active", search } = req.query;
+    const allowedTypes = new Set(["hotel", "partner", "user"]);
+    if (!allowedTypes.has(type)) {
+      return res.status(400).json({ message: "type must be hotel, partner or user" });
+    }
+
+    const query = { type };
+    if (status === "active") {
+      query.expired = false;
+      query.validity = { $gte: new Date() };
+    } else if (status === "expired") {
+      query.$or = [{ expired: true }, { validity: { $lt: new Date() } }];
+    }
+
+    if (search) {
+      const pattern = new RegExp(String(search).trim(), "i");
+      query.$or = [...(query.$or || []), { couponCode: pattern }, { couponName: pattern }];
+    }
+
+    const coupons = await couponModel.find(query).sort({ createdAt: -1 });
+    return res.status(200).json({
+      message: "Coupons fetched successfully",
+      data: coupons,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 module.exports = {
   newCoupon,
   ApplyCoupon,
   GetValidCoupons,
   GetAllCoupons,
+  GetCouponsByType,
   removeOffersAutomatically,
 };

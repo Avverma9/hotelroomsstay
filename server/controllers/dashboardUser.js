@@ -2,6 +2,9 @@ const Dashboard = require("../models/dashboardUser");
 const Hotel = require("../models/hotel/basicDetails");
 const jwt = require("jsonwebtoken"); // Import the JWT library
 const { sendCustomEmail, generateOtp, sendOtpEmail } = require("../nodemailer/nodemailer");
+const {
+  getEffectiveSidebarLinksForUser,
+} = require("./addtionalSettings/sidebarPermissionService");
 require("dotenv").config(); // Load environment variables
 
 // Register ===========================
@@ -17,7 +20,6 @@ const registerUser = async (req, res) => {
       state,
       pinCode,
       address,
-      menuItems,
     } = req.body;
     const emailExist = await Dashboard.findOne({ email: email });
     const mobileExist = await Dashboard.findOne({ mobile: mobile });
@@ -39,7 +41,6 @@ const registerUser = async (req, res) => {
       state,
       pinCode,
       password,
-      menuItems,
     });
     const subject = `Congratulations! You are now a ${role} partner of HotelRoomsstay`;
     const message = `Hello,
@@ -101,11 +102,8 @@ const changePassword = async (req, res) => {
       return res.status(400).json({ message: "Invalid or expired OTP." });
     }
 
-    // Hash the new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
     // Save the new password and clear OTP
-    user.password = hashedPassword;
+    user.password = newPassword;
     user.resetOtp = undefined;
     user.otpExpiry = undefined;
 
@@ -145,6 +143,31 @@ const loginUser = async function (req, res) {
       { expiresIn: "24h" },
     );
 
+    let sidebarLinks = {};
+    try {
+      sidebarLinks = await getEffectiveSidebarLinksForUser({
+        user: loggedUser,
+        grouped: true,
+      });
+    } catch (sidebarError) {
+      console.error("Failed to fetch sidebar links:", sidebarError.message);
+    }
+
+    const userSession = {
+      token: rsToken,
+      tokenType: "Bearer",
+      expiresIn: "24h",
+      user: {
+        id: loggedUser._id,
+        role: loggedUser.role,
+        status: loggedUser.status,
+        name: loggedUser.name,
+        email: loggedUser.email,
+        image: loggedUser.images,
+      },
+      sidebarLinks,
+    };
+
     res.status(200).json({
       message: "Logged in as",
       loggedUserRole: loggedUser.role,
@@ -154,6 +177,8 @@ const loginUser = async function (req, res) {
       loggedUserName: loggedUser.name,
       loggedUserEmail: loggedUser.email,
       rsToken, // Include the token in the response
+      sidebarLinks,
+      sessionData: userSession,
     });
   } catch (error) {
     console.error("Error logging in:", error);
@@ -387,92 +412,6 @@ const updatePartner = async function (req, res) {
   }
 };
 
-const addMenu = async (req, res) => {
-  const { id } = req.params;
-  const { menuItems } = req.body; // Expecting array of { name, path }
-
-  try {
-    const user = await Dashboard.findById(id);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Create a Set of existing "name:path" combos
-    const existingSet = new Set(
-      user.menuItems.map((item) => `${item.name}:${item.path}`),
-    );
-
-    // Filter incoming items to only keep ones that aren't already in the DB
-    const uniqueItems = menuItems.filter(
-      (item) => !existingSet.has(`${item.name}:${item.path}`),
-    );
-
-    if (uniqueItems.length === 0) {
-      return res
-        .status(200)
-        .json({ message: "No new unique menu items to add" });
-    }
-
-    // Add the filtered unique items
-    const updatedUser = await Dashboard.findByIdAndUpdate(
-      id,
-      { $push: { menuItems: { $each: uniqueItems } } },
-      { new: true },
-    );
-
-    res.json(updatedUser);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-const deleteMenu = async (req, res) => {
-  const { id } = req.params; // User ID
-  const { menuId } = req.body; // ID of the menu item to remove
-
-  try {
-    // Find the user by ID
-    const user = await Dashboard.findById(id);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Filter out the menu item with the matching _id
-    user.menuItems = user.menuItems.filter(
-      (item) => item._id.toString() !== menuId,
-    );
-
-    // Save the updated user
-    await user.save();
-
-    res.status(200).json({ message: "Menu item removed", user });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-const deleteAllMenus = async (req, res) => {
-  const { id } = req.params; // User ID
-
-  try {
-    // Find the user by ID
-    const user = await Dashboard.findById(id);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Clear all menu items
-    user.menuItems = [];
-
-    // Save the updated user
-    await user.save();
-
-    res.status(200).json({ message: "All menu items removed", user });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
 const filterPartner = async (req, res) => {
   try {
     const { search } = req.query;
@@ -589,9 +528,6 @@ module.exports = {
   deletePartner,
   updatePartner,
   updateStatus,
-  addMenu,
-  deleteMenu,
-  deleteAllMenus,
   getPartnersById,
   filterPartner,
   forgotPassword,

@@ -12,6 +12,7 @@ router.patch(
 );
 router.get("/coupon/get/all", couponController.GetAllCoupons); // on panel
 router.get("/coupon/get/active", couponController.GetAllCoupons);
+router.get("/coupon/get/by-type", couponController.GetCouponsByType);
 router.get("/valid-coupons",couponController.GetValidCoupons) // on panel
  
 router.patch(

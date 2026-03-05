@@ -1456,8 +1456,11 @@ const getHotelsCityByState = async function (req, res) {
       return res.status(400).json({ error: "State parameter is missing" });
     }
 
+    const normalizedState = String(state).trim();
+    const stateRegex = new RegExp(`^${normalizedState.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+
     const uniqueCitiesSet = new Set();
-    const cursor = hotelModel.find({ state }).select('city').cursor();
+    const cursor = hotelModel.find({ state: stateRegex }).select('city').cursor();
     
     for await (const hotel of cursor) {
       if (hotel.city) {

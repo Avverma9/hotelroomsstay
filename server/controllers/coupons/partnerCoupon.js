@@ -1,47 +1,43 @@
-const PartnerCoupon = require("../../models/coupons/partnerCoupon");
+const PartnerCoupon = require("../../models/coupons/coupon");
 const hotelModel = require("../../models/hotel/basicDetails");
 const cron = require("node-cron");
 const {
   getRoomBasePrice,
   toNumber,
 } = require("../hotel/offerUtils");
+const {
+  normalizeIdList,
+  isCouponExpired,
+  getRemainingQuota,
+  registerCouponUsage,
+} = require("./couponUtils");
 
-const normalizeIdList = (values) => {
-  if (!Array.isArray(values)) {
+const COUPON_TYPE = "partner";
+
+const toArray = (value) => {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value === undefined || value === null || value === "") {
     return [];
   }
-
-  const normalized = values
-    .map((value) => String(value || "").trim())
-    .filter(Boolean);
-
-  return [...new Set(normalized)];
+  return [String(value)];
 };
 
-const isCouponExpired = (coupon) => {
-  if (!coupon || !coupon.validity) {
-    return true;
-  }
-  if (coupon.expired === true) {
-    return true;
-  }
-
-  const validity = new Date(coupon.validity);
-  if (Number.isNaN(validity.getTime())) {
-    return true;
-  }
-
-  return validity < new Date();
+const uniqueMerge = (existing, incoming) => {
+  return [...new Set([...toArray(existing), ...toArray(incoming)])];
 };
 
 const newPartnerCoupon = async (req, res) => {
   try {
-    const { couponName, discountPrice, validity, quantity } = req.body;
+    const { couponName, discountPrice, validity, quantity, maxUsage } = req.body;
     const createdCoupon = await PartnerCoupon.create({
+      type: COUPON_TYPE,
       couponName,
       discountPrice,
       validity,
       quantity,
+      maxUsage: maxUsage || quantity,
     });
 
     res
@@ -65,7 +61,10 @@ const ApplyPartnerCoupon = async (req, res) => {
       });
     }
 
-    const coupon = await PartnerCoupon.findOne({ couponCode });
+    const coupon = await PartnerCoupon.findOne({
+      couponCode,
+      type: COUPON_TYPE,
+    });
     if (!coupon) {
       return res.status(404).json({ message: "Coupon code not found" });
     }
@@ -75,15 +74,7 @@ const ApplyPartnerCoupon = async (req, res) => {
       return res.status(400).json({ message: "Coupon code has expired" });
     }
 
-    const quantityLimit = toNumber(coupon.quantity);
-    const hasLimit = quantityLimit !== null && quantityLimit > 0;
-    const alreadyAppliedCount = Array.isArray(coupon.roomId)
-      ? coupon.roomId.length
-      : 0;
-    let remainingQuota = hasLimit
-      ? Math.max(0, quantityLimit - alreadyAppliedCount)
-      : Infinity;
-
+    let remainingQuota = getRemainingQuota(coupon);
     if (remainingQuota <= 0) {
       return res.status(400).json({ message: "Coupon usage limit reached" });
     }
@@ -143,7 +134,7 @@ const ApplyPartnerCoupon = async (req, res) => {
               "rooms.$.price": basePrice,
               "rooms.$.originalPrice": basePrice,
             },
-          }
+          },
         );
 
         if (updateResult.modifiedCount <= 0) {
@@ -167,20 +158,31 @@ const ApplyPartnerCoupon = async (req, res) => {
       return res.status(400).json({ message: "No eligible rooms found for discount" });
     }
 
-    const existingUserIds = normalizeIdList(coupon.userIds || []);
-    coupon.userIds = [...new Set([...existingUserIds, ...userIds])];
-    coupon.roomId = [...new Set([...(coupon.roomId || []), ...appliedRoomIds])];
-    coupon.hotelId = [...new Set([...(coupon.hotelId || []), ...appliedHotelIds])];
-    if (hasLimit && remainingQuota === 0) {
-      coupon.expired = true;
-    }
+    coupon.userIds = uniqueMerge(coupon.userIds, userIds);
+    coupon.roomId = uniqueMerge(coupon.roomId, appliedRoomIds);
+    coupon.hotelId = uniqueMerge(coupon.hotelId, appliedHotelIds);
+    remainingQuota = registerCouponUsage({
+      coupon,
+      usageCount: appliedRoomIds.length,
+      usageEntries: discountDetails.map((item) => ({
+        hotelId: item.hotelId,
+        roomId: item.roomId,
+        discountPrice: item.discountPrice,
+        finalPrice: item.finalPrice,
+      })),
+    });
 
     await coupon.save();
 
     return res.status(200).json({
       message: "Partner coupon applied successfully.",
+      couponType: coupon.type,
       data: discountDetails,
-      remainingQuota: hasLimit ? remainingQuota : null,
+      usage: {
+        usedCount: coupon.usedCount,
+        maxUsage: coupon.maxUsage || coupon.quantity,
+        remainingQuota,
+      },
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -191,59 +193,16 @@ const expirePartnerCouponsAutomatically = async () => {
   try {
     await PartnerCoupon.updateMany(
       {
+        type: COUPON_TYPE,
         expired: false,
         validity: { $lte: new Date() },
       },
       {
         $set: { expired: true },
-      }
+      },
     );
   } catch (error) {
     console.error("Error expiring partner coupons:", error);
-  }
-};
-
-const removeOffersAutomatically = async () => {
-  try {
-    const now = new Date();
-    const hotels = await hotelModel.find({ "rooms.isOffer": true });
-    const bulkRoomUpdates = [];
-
-    for (const hotel of hotels) {
-      for (const room of hotel.rooms || []) {
-        if (!room.isOffer || !room.offerExp) {
-          continue;
-        }
-
-        const offerExpDate = new Date(room.offerExp);
-        if (Number.isNaN(offerExpDate.getTime()) || offerExpDate > now) {
-          continue;
-        }
-
-        const restoredPrice = getRoomBasePrice(room);
-        bulkRoomUpdates.push({
-          updateOne: {
-            filter: { hotelId: hotel.hotelId, "rooms.roomId": room.roomId },
-            update: {
-              $set: {
-                "rooms.$.isOffer": false,
-                "rooms.$.offerPriceLess": 0,
-                "rooms.$.offerExp": null,
-                "rooms.$.offerName": "N/A",
-                "rooms.$.price": restoredPrice,
-                "rooms.$.originalPrice": restoredPrice,
-              },
-            },
-          },
-        });
-      }
-    }
-
-    if (bulkRoomUpdates.length > 0) {
-      await hotelModel.bulkWrite(bulkRoomUpdates);
-    }
-  } catch (error) {
-    console.error("Error in removeOffersAutomatically:", error);
   }
 };
 
@@ -251,13 +210,10 @@ cron.schedule("* * * * *", async () => {
   await expirePartnerCouponsAutomatically();
 });
 
-cron.schedule("* * * * *", async () => {
-  await removeOffersAutomatically();
-});
-
 const GetAllPartnerCoupons = async (req, res) => {
   try {
     const coupons = await PartnerCoupon.find({
+      type: COUPON_TYPE,
       expired: false,
       validity: { $gte: new Date() },
     }).sort({ validity: -1 });
@@ -272,5 +228,4 @@ module.exports = {
   newPartnerCoupon,
   ApplyPartnerCoupon,
   GetAllPartnerCoupons,
-  removeOffersAutomatically,
 };

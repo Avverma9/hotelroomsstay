@@ -5,6 +5,8 @@ const {
   createUserNotificationSafe,
 } = require("../notification/helpers");
 
+const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
+
 /* =========================================================
    CREATE BOOKING (TRANSACTION SAFE)
 ========================================================= */
@@ -347,7 +349,20 @@ exports.getByAgencyEmail = async (req, res) => {
 };
 
 exports.getBookingsByBookingId = async (req, res) => {
-  const booking = await TourBooking.findOne({ bookingCode: req.params.bookingCode });
+  const bookingIdentifier = String(
+    req.params.bookingId || req.params.bookingCode || "",
+  ).trim();
+  if (!bookingIdentifier) {
+    return res
+      .status(400)
+      .json({ success: false, message: "bookingId is required" });
+  }
+
+  const query = isValidObjectId(bookingIdentifier)
+    ? { $or: [{ _id: bookingIdentifier }, { bookingCode: bookingIdentifier }] }
+    : { bookingCode: bookingIdentifier };
+
+  const booking = await TourBooking.findOne(query);
   if (!booking)
     return res.status(404).json({ success: false, message: "Booking not found" });
 
@@ -460,9 +475,18 @@ exports.updateBooking = async (req, res) => {
    DELETE BOOKING
 ========================================================= */
 exports.deleteBooking = async (req, res) => {
-  const booking = await TourBooking.findOneAndDelete({
-    bookingId: req.params.bookingId
-  });
+  const bookingIdentifier = String(req.params.bookingId || "").trim();
+  if (!bookingIdentifier) {
+    return res
+      .status(400)
+      .json({ success: false, message: "bookingId is required" });
+  }
+
+  const query = isValidObjectId(bookingIdentifier)
+    ? { $or: [{ _id: bookingIdentifier }, { bookingCode: bookingIdentifier }] }
+    : { bookingCode: bookingIdentifier };
+
+  const booking = await TourBooking.findOneAndDelete(query);
 
   if (!booking)
     return res.status(404).json({ success: false, message: "Booking not found" });
