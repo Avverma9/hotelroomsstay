@@ -16,13 +16,6 @@ const dashboardUser = new mongoose.Schema(
       required: true,
       enum: ["Admin", "PMS", "Developer", "TMS", "CA", "Rider"], //TMS - Travel Management , CA - Company Agent, PMS - Partner management system
     },
-    menuItems: [
-      {
-        title: String,
-        path: String,
-        role: String,
-      },
-    ],
     address: String,
     pinCode: Number,
     city: String,
@@ -51,6 +44,21 @@ const dashboardUser = new mongoose.Schema(
         userId: String,
       },
     ],
+    sidebarPermissions: {
+      mode: {
+        type: String,
+        enum: ["role_based", "custom"],
+        default: "role_based",
+      },
+      allowedLinkIds: {
+        type: [String],
+        default: [],
+      },
+      blockedLinkIds: {
+        type: [String],
+        default: [],
+      },
+    },
   },
   { timestamps: true },
 );

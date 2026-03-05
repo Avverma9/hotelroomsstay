@@ -1,11 +1,17 @@
-const UserCoupon = require("../../models/coupons/userCoupon");
+const UserCoupon = require("../../models/coupons/coupon");
 const cron = require("node-cron");
-const moment = require("moment-timezone");
 const hotelModel = require("../../models/hotel/basicDetails");
 const userModel = require("../../models/user");
 const {
   createUserNotificationSafe,
 } = require("../notification/helpers");
+const {
+  isCouponExpired,
+  getRemainingQuota,
+  registerCouponUsage,
+} = require("./couponUtils");
+
+const COUPON_TYPE = "user";
 
 const formatDate = (value) => {
   const date = new Date(value);
@@ -20,7 +26,24 @@ const formatDate = (value) => {
   });
 };
 
+const toArray = (value) => {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value === undefined || value === null || value === "") {
+    return [];
+  }
+  return [String(value)];
+};
+
+const uniqueMerge = (existing, incoming) => {
+  return [...new Set([...toArray(existing), ...toArray(incoming)])];
+};
+
 const resolveCouponUserId = async (coupon) => {
+  if (coupon.targetUserId) {
+    return String(coupon.targetUserId);
+  }
   if (coupon.userId) {
     return String(coupon.userId);
   }
@@ -44,25 +67,32 @@ const newUserCoupon = async (req, res) => {
       discountPrice,
       validity,
       quantity,
+      maxUsage,
       assignedTo,
       userId,
     } = req.body;
+
+    const targetUserId = userId ? String(userId) : undefined;
+    const usageLimit = Number(maxUsage || quantity || 1);
+
     const createdCoupon = await UserCoupon.create({
+      type: COUPON_TYPE,
       couponName,
       discountPrice,
       validity,
-      quantity,
+      quantity: usageLimit,
+      maxUsage: usageLimit,
       assignedTo,
-      userId,
+      targetUserId,
+      userId: targetUserId, // keep backward compatibility
     });
 
-    const targetUserId = await resolveCouponUserId(createdCoupon);
-    if (targetUserId && !createdCoupon.userId) {
-      createdCoupon.userId = targetUserId;
+    const resolvedUserId = await resolveCouponUserId(createdCoupon);
+    if (resolvedUserId) {
+      createdCoupon.targetUserId = createdCoupon.targetUserId || resolvedUserId;
+      createdCoupon.userId = createdCoupon.userId || resolvedUserId;
       await createdCoupon.save();
-    }
 
-    if (targetUserId) {
       await createUserNotificationSafe({
         name: "Coupon Received",
         message: `A new coupon ${createdCoupon.couponCode} worth Rs ${createdCoupon.discountPrice} is added to your account. Valid till ${formatDate(createdCoupon.validity)}.`,
@@ -73,7 +103,7 @@ const newUserCoupon = async (req, res) => {
           discountPrice: createdCoupon.discountPrice,
           validity: createdCoupon.validity,
         },
-        userIds: [targetUserId],
+        userIds: [resolvedUserId],
       });
     }
 
@@ -93,33 +123,32 @@ const ApplyUserCoupon = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Fetch coupon by couponCode
-    const coupon = await UserCoupon.findOne({ couponCode });
+    const coupon = await UserCoupon.findOne({
+      couponCode,
+      type: COUPON_TYPE,
+    });
     if (!coupon) {
       return res.status(404).json({ message: "Coupon not found" });
     }
-
-    const currentIST = moment().tz("Asia/Kolkata");
-    const couponExpiry = moment(coupon.validity);
-
-    if (currentIST.isAfter(couponExpiry) || coupon.expired === true) {
-      return res.status(400).json({ message: "Coupon has expired or already used" });
+    if (isCouponExpired(coupon)) {
+      coupon.expired = true;
+      await coupon.save();
+      return res.status(400).json({ message: "Coupon has expired or usage limit reached" });
     }
 
-    // Ensure user hasn't used the coupon before
-    if (coupon.userId) {
-      return res.status(400).json({ message: "Coupon already used by this user" });
+    const currentUserId = String(userId);
+    const targetUserId = String(coupon.targetUserId || coupon.userId || "");
+    if (targetUserId && targetUserId !== currentUserId) {
+      return res.status(403).json({ message: "Coupon is assigned to another user" });
     }
 
-    // Find hotel by hotelId
     const hotel = await hotelModel.findOne({ hotelId: String(hotelId) });
     if (!hotel) {
       return res.status(404).json({ message: "Hotel not found" });
     }
 
-    // Find the specific room
     const selectedRoom = hotel.rooms.find(
-      room => String(room.roomId) === String(roomId)
+      (room) => String(room.roomId) === String(roomId),
     );
 
     if (!selectedRoom) {
@@ -132,47 +161,58 @@ const ApplyUserCoupon = async (req, res) => {
 
     const originalPrice = selectedRoom.price;
     const discountPrice = coupon.discountPrice;
-    const finalPrice = originalPrice - discountPrice;
+    const finalPrice = Math.max(0, originalPrice - discountPrice);
 
-    // Update coupon details
-    coupon.userId = (String(userId));
-    coupon.hotelId = String(hotelId);
-    coupon.roomId = String(roomId);
-    coupon.expired = true;
-
+    coupon.targetUserId = targetUserId || currentUserId;
+    coupon.userId = coupon.targetUserId;
+    coupon.hotelId = uniqueMerge(coupon.hotelId, [String(hotelId)]);
+    coupon.roomId = uniqueMerge(coupon.roomId, [String(roomId)]);
+    const remainingQuota = registerCouponUsage({
+      coupon,
+      usageCount: 1,
+      usageEntries: [
+        {
+          userId: currentUserId,
+          hotelId: String(hotelId),
+          roomId: String(roomId),
+          discountPrice,
+          finalPrice,
+        },
+      ],
+    });
     await coupon.save();
 
     return res.status(200).json({
       hotelId: String(hotelId),
       roomId: String(roomId),
-      userId: String(userId),
+      userId: currentUserId,
       originalPrice,
       discountPrice,
-      finalPrice
+      finalPrice,
+      usage: {
+        usedCount: coupon.usedCount,
+        maxUsage: coupon.maxUsage || coupon.quantity,
+        remainingQuota,
+      },
     });
-
   } catch (error) {
     console.error("Error applying coupon:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-
 const expireUserCouponAutomatically = async () => {
   try {
     const now = new Date();
     const couponsToExpire = await UserCoupon.find({
+      type: COUPON_TYPE,
       expired: false,
       validity: { $lte: now, $ne: null },
     });
 
     for (const coupon of couponsToExpire) {
       const targetUserId = await resolveCouponUserId(coupon);
-
       coupon.expired = true;
-      if (targetUserId && !coupon.userId) {
-        coupon.userId = targetUserId;
-      }
       await coupon.save();
 
       if (targetUserId) {
@@ -202,6 +242,7 @@ const GetAllUserCoupons = async (req, res) => {
   try {
     const currentDate = new Date();
     const coupons = await UserCoupon.find({
+      type: COUPON_TYPE,
       validity: { $gte: currentDate },
       expired: false,
     }).sort({ validity: -1 });
@@ -212,30 +253,30 @@ const GetAllUserCoupons = async (req, res) => {
   }
 };
 
-
 const getUserDefaultCoupon = async (req, res) => {
   try {
     const { email } = req.body;
 
     const findData = await UserCoupon.find({
+      type: COUPON_TYPE,
       $or: [
         { assignedTo: email },
-        { assignedTo: { $regex: `\\(${email}\\)$`, $options: "i" } }
-      ]
+        { assignedTo: { $regex: `\\(${email}\\)$`, $options: "i" } },
+      ],
+      expired: false,
+      validity: { $gte: new Date() },
     });
 
     if (findData.length > 0) {
       return res.status(200).json(findData);
-    } else {
-      return res.status(404).json({ message: "No coupon found" });
     }
+
+    return res.status(404).json({ message: "No coupon found" });
   } catch (error) {
     console.error("Error fetching user coupon:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
-
-
 
 module.exports = {
   GetAllUserCoupons,

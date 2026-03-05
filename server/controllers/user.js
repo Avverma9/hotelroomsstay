@@ -1,6 +1,6 @@
 const booking = require("../models/booking/booking");
 const userModel = require("../models/user");
-const UserCoupon = require("../models/coupons/userCoupon");
+const Coupon = require("../models/coupons/coupon");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const otpAuth = require("../authentication/otpLogin");
@@ -26,7 +26,8 @@ const ensureWelcomeCouponForUser = async ({ email, userId }) => {
     return null;
   }
 
-  const existingCoupon = await UserCoupon.findOne({
+  const existingCoupon = await Coupon.findOne({
+    type: "user",
     assignedTo: { $regex: `^${email}$`, $options: "i" },
   });
 
@@ -37,13 +38,16 @@ const ensureWelcomeCouponForUser = async ({ email, userId }) => {
   const validity = new Date();
   validity.setDate(validity.getDate() + 7);
 
-  const coupon = await UserCoupon.create({
+  const coupon = await Coupon.create({
+    type: "user",
     couponName: "Welcome50",
     discountPrice: 50,
     validity,
     quantity: 1,
+    maxUsage: 1,
     assignedTo: email,
     userId: String(userId),
+    targetUserId: String(userId),
   });
 
   await createUserNotificationSafe({
