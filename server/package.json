@@ -5,7 +5,8 @@
     "main": "index.js",
     "scripts": {
         "start": "node index.js",
-        "migrate:coupons": "node scripts/migrateCouponsToUnified.js"
+        "migrate:coupons": "node scripts/migrateCouponsToUnified.js",
+        "seed:hotels": "node scripts/seedFullHotels.js"
     },
     "keywords": [],
     "author": "",

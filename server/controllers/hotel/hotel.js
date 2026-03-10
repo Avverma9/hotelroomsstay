@@ -887,16 +887,32 @@ const getHotelsById = async (req, res) => {
       };
     });
 
+    const mappedFoods = Array.isArray(hotel.foods)
+      ? hotel.foods
+          .filter((food) => food && typeof food === "object")
+          .map((food) => ({
+            id: food.foodId || food._id || "",
+            name: food.name || food.title || "",
+            type: food.foodType || food.type || "",
+            description: food.about || food.description || "",
+            images: Array.isArray(food.images) ? food.images : [],
+            price: Number(food.price) || 0,
+            currency: "₹",
+            displayPrice: `₹ ${formatCurrency(Number(food.price) || 0)}`,
+          }))
+      : [];
+
     // Map amenities to array of strings
     let mappedAmenities = [];
     if (Array.isArray(hotel.amenities)) {
-      mappedAmenities = hotel.amenities.map(a => {
-        if (!a) return null;
-        if (typeof a === 'string') return a;
-        if (a.name) return a.name;
-        if (a.amenities) return a.amenities;
-        return Object.values(a).join(' ');
-      }).filter(Boolean);
+      mappedAmenities = hotel.amenities.flatMap((a) => {
+        if (!a) return [];
+        if (typeof a === "string") return [a];
+        if (a.name) return [a.name];
+        if (Array.isArray(a.amenities)) return a.amenities.filter(Boolean);
+        if (a.amenities) return [a.amenities];
+        return [Object.values(a).join(" ")].filter(Boolean);
+      });
     }
 
     // Map policies (supports legacy and detailed policy schema)
@@ -1083,6 +1099,7 @@ const getHotelsById = async (req, res) => {
         taxNote: gstData ? `GST ${gstData.gstPrice}% applicable (Included in final price)` : ''
       },
       rooms: mappedRooms,
+      foods: mappedFoods,
       policies: policiesObj,
       amenities: mappedAmenities,
       gstConfig: gstData ? {
