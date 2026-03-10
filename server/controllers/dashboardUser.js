@@ -343,7 +343,18 @@ const deletePartner = async function (req, res) {
 
 const updatePartner = async function (req, res) {
   const { id } = req.params;
-  const { name, email, mobile, password, status, role, address } = req.body;
+  const {
+    name,
+    email,
+    mobile,
+    password,
+    status,
+    role,
+    address,
+    city,
+    state,
+    pinCode,
+  } = req.body;
 
   let images = [];
 
@@ -367,6 +378,9 @@ const updatePartner = async function (req, res) {
       status,
       role,
       address,
+      city,
+      state,
+      pinCode,
       images,
     };
 

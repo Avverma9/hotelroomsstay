@@ -44,6 +44,7 @@ exports.updatePolicies = async (req, res) => {
     alcoholAllowed,
     unmarriedCouplesAllowed,
     internationalGuestAllowed,
+    refundPolicy,
     returnPolicy,
     onDoubleSharing,
     onQuadSharing,
@@ -77,6 +78,10 @@ exports.updatePolicies = async (req, res) => {
     offMoreThanFourMAp,
   } = req.body;
 
+  if (!hotelId) {
+    return res.status(400).json({ message: "hotelId is required" });
+  }
+
   // Create an object to store non-empty fields
   const updateFields = {};
 
@@ -104,6 +109,8 @@ exports.updatePolicies = async (req, res) => {
   if (internationalGuestAllowed !== "")
     updateFields["policies.$.internationalGuestAllowed"] =
       internationalGuestAllowed;
+  if (refundPolicy !== "")
+    updateFields["policies.$.refundPolicy"] = refundPolicy;
   if (returnPolicy !== "")
     updateFields["policies.$.returnPolicy"] = returnPolicy;
   if (onDoubleSharing !== "")
@@ -168,13 +175,47 @@ exports.updatePolicies = async (req, res) => {
     updateFields["policies.$.offMoreThanFourMAp"] = offMoreThanFourMAp;
 
   try {
-    const updateData = await hotelModel.findOneAndUpdate(
-      { "policies.hotelId": hotelId },
-      {
-        $set: updateFields,
-      },
-      { new: true } // This ensures that the updated document is returned
-    );
+    const hotel = await hotelModel.findOne({ hotelId });
+    if (!hotel) {
+      return res.status(404).json({ message: "Hotel not found" });
+    }
+
+    if (Object.keys(updateFields).length === 0) {
+      return res.status(400).json({ message: "No policy fields provided for update" });
+    }
+
+    const existingPolicy = Array.isArray(hotel.policies)
+      ? hotel.policies.find((policy) => String(policy?.hotelId) === String(hotelId))
+      : null;
+
+    let updateData;
+
+    if (existingPolicy) {
+      updateData = await hotelModel.findOneAndUpdate(
+        { hotelId, "policies.hotelId": hotelId },
+        {
+          $set: updateFields,
+        },
+        { new: true }
+      );
+    } else {
+      const createdPolicy = { hotelId };
+
+      Object.entries(req.body).forEach(([key, value]) => {
+        if (key === "hotelId") return;
+        if (value === "") return;
+        if (value === undefined || value === null) return;
+        createdPolicy[key] = value;
+      });
+
+      updateData = await hotelModel.findOneAndUpdate(
+        { hotelId },
+        {
+          $push: { policies: createdPolicy },
+        },
+        { new: true }
+      );
+    }
 
     res
       .status(200)
