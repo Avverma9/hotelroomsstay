@@ -113,7 +113,6 @@ const hotelsSchema = new mongoose.Schema(
 );
 
 // Add indexes for performance optimization
-hotelsSchema.index({ hotelId: 1 }); // Primary lookup
 hotelsSchema.index({ isAccepted: 1 }); // Filter by acceptance
 hotelsSchema.index({ onFront: 1 }); // Featured hotels
 hotelsSchema.index({ city: 1 }); // City search
