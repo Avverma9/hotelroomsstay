@@ -1,7 +1,7 @@
 # Dynamic Sidebar Links API + Admin Panel Guide
 
 ## Base URL
-`http://localhost:5000`
+`hotelroomsstay.com/api`
 
 ## Feature Goal
 Dynamic sidebar links are now managed from backend using:

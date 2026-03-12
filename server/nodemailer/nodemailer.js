@@ -3,6 +3,7 @@ const crypto = require("crypto");
 require("dotenv").config();
 const { format } = require("date-fns");
 const user = require("../models/user"); // Ensure this path is correct
+const dashboardUser = require("../models/dashboardUser");
 
 // Transporter Configuration
 const transporter = nodemailer.createTransport({
@@ -84,14 +85,19 @@ const generateOtp = () => {
   return crypto.randomInt(100000, 999999).toString();
 };
 
-const sendOtpEmail = async (email, otp) => {
-  // Check if user exists
-  const matchEmail = await user.findOne({
-    email: { $regex: new RegExp(email, "i") },
-  });
-  
-  if (!matchEmail) {
-    throw new Error("Email not registered. Please sign up first.");
+const sendOtpEmail = async (email, otp, options = {}) => {
+  const { skipRegisteredCheck = false } = options;
+
+  if (!skipRegisteredCheck) {
+    const emailRegex = { $regex: new RegExp(`^${email}$`, "i") };
+    const [matchUserEmail, matchDashboardEmail] = await Promise.all([
+      user.findOne({ email: emailRegex }),
+      dashboardUser.findOne({ email: emailRegex }),
+    ]);
+
+    if (!matchUserEmail && !matchDashboardEmail) {
+      throw new Error("Email not registered. Please sign up first.");
+    }
   }
 
   const otpContent = `
