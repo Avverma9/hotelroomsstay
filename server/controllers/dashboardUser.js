@@ -301,8 +301,31 @@ const getPartners = async function (req, res) {
       {
         $lookup: {
           from: "hotels",
-          localField: "email",
-          foreignField: "hotelEmail",
+          let: {
+            partnerEmailLower: {
+              $toLower: {
+                $trim: { input: { $ifNull: ["$email", ""] } },
+              },
+            },
+          },
+          pipeline: [
+            {
+              $addFields: {
+                hotelEmailLower: {
+                  $toLower: {
+                    $trim: { input: { $ifNull: ["$hotelEmail", ""] } },
+                  },
+                },
+              },
+            },
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$hotelEmailLower", "$$partnerEmailLower"],
+                },
+              },
+            },
+          ],
           as: "hotelInfo",
         },
       },
@@ -538,8 +561,31 @@ const filterPartner = async (req, res) => {
       {
         $lookup: {
           from: "hotels",
-          localField: "email",
-          foreignField: "hotelEmail",
+          let: {
+            partnerEmailLower: {
+              $toLower: {
+                $trim: { input: { $ifNull: ["$email", ""] } },
+              },
+            },
+          },
+          pipeline: [
+            {
+              $addFields: {
+                hotelEmailLower: {
+                  $toLower: {
+                    $trim: { input: { $ifNull: ["$hotelEmail", ""] } },
+                  },
+                },
+              },
+            },
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$hotelEmailLower", "$$partnerEmailLower"],
+                },
+              },
+            },
+          ],
           as: "hotelInfo",
         },
       },

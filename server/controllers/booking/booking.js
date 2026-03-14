@@ -309,11 +309,14 @@ const createBooking = async (req, res) => {
 
     const savedBooking = await booking.save();
 
-    if (savedBooking.bookingStatus === "Confirmed") {
+    if (savedBooking.bookingStatus === "Confirmed" || savedBooking.bookingStatus === "Pending") {
+      const emailSubject = savedBooking.bookingStatus === "Confirmed"
+        ? "Booking Confirmation"
+        : "Booking Pending";
       await sendBookingConfirmationMail({
-        email: booking?.user?.email,
-        subject: "Booking Confirmation",
-        bookingData: booking,
+        email: savedBooking?.user?.email,
+        subject: emailSubject,
+        bookingData: savedBooking,
         link: process.env.FRONTEND_URL,
       });
     }
@@ -868,11 +871,13 @@ const getAllFilterBookingsByQuery = async (req, res) => {
       filter.couponCode = couponCode
     }
     if (createdBy) {
-      filter["createdBy.email"] = createdBy;
+      const createdByEmail = String(createdBy).trim();
+      filter["createdBy.email"] = new RegExp(`^${escapeRegex(createdByEmail)}$`, "i");
     }
 
     if (hotelEmail) {
-      filter["hotelDetails.hotelEmail"] = { $regex: hotelEmail, $options: "i" };
+      const normalizedHotelEmail = String(hotelEmail).trim();
+      filter["hotelDetails.hotelEmail"] = new RegExp(escapeRegex(normalizedHotelEmail), "i");
 
     }
     if (bookingId) {
@@ -965,8 +970,11 @@ const getPartnerHotelBookings = async (req, res) => {
 
     const hotelEmails = [...new Set(linkedHotels.map((hotel) => hotel.hotelEmail).filter(Boolean))];
     const hotelIds = linkedHotels.map((hotel) => String(hotel.hotelId));
+    const hotelEmailRegexes = hotelEmails.map((email) =>
+      new RegExp(`^${escapeRegex(String(email).trim())}$`, "i")
+    );
     const filter = {
-      "hotelDetails.hotelEmail": { $in: hotelEmails },
+      "hotelDetails.hotelEmail": { $in: hotelEmailRegexes },
       "hotelDetails.hotelId": { $in: hotelIds },
     };
 
