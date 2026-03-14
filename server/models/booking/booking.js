@@ -97,6 +97,9 @@ const bookingSchema = new mongoose.Schema(
       default: "Confirmed",
     },
     cancellationReason: String,
+    failureReason: String,
+    cancellationOtp: String,
+    cancellationOtpExpiry: Date,
     cardDetails: {
       type: String,
       default: null,
@@ -112,6 +115,42 @@ const bookingSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    checkedInAt: {
+      type: Date,
+      default: null,
+    },
+    checkedOutAt: {
+      type: Date,
+      default: null,
+    },
+    noShowMarkedAt: {
+      type: Date,
+      default: null,
+    },
+    lastCheckoutReminderAt: {
+      type: Date,
+      default: null,
+    },
+    statusHistory: [
+      {
+        previousStatus: String,
+        newStatus: String,
+        changedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        changedBy: {
+          id: String,
+          name: String,
+          role: String,
+          type: {
+            type: String,
+            default: "user",
+          },
+        },
+        note: String,
+      },
+    ],
     // Review tracking
     hasReview: {
       type: Boolean,

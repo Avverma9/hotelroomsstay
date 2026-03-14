@@ -144,6 +144,84 @@ const sendOtpEmail = async (email, otp, options = {}) => {
   }
 };
 
+const sendCancellationOtpEmail = async ({ email, otp, booking }) => {
+  if (!email || !otp) {
+    throw new Error("Email and OTP are required");
+  }
+
+  const bookingId = booking?.bookingId || "N/A";
+  const hotelName = booking?.hotelDetails?.hotelName || booking?.destination || "Hotel";
+  const guestName = booking?.user?.name || "Guest";
+  const checkIn = booking?.checkInDate ? format(new Date(booking.checkInDate), "dd MMM yyyy") : "N/A";
+  const checkOut = booking?.checkOutDate ? format(new Date(booking.checkOutDate), "dd MMM yyyy") : "N/A";
+
+  const content = `
+    <p style="font-size: 15px; color: #333333; margin: 0 0 20px 0; line-height: 1.8;">
+      We received a request to cancel your booking. Please use the OTP below to authorize the cancellation.
+    </p>
+
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 30px; border-top: 1px solid #1a1a1a; border-bottom: 1a1a1a;">
+      <tr>
+        <td style="padding: 20px 10px;">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+              <td align="left" style="font-family: Georgia, 'Times New Roman', serif; color: #555555; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Cancellation OTP</td>
+              <td align="right" style="font-size: 28px; font-weight: bold; color: #1a1a1a; letter-spacing: 8px;">${otp}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <p style="font-size: 14px; color: #555555; margin: 0 0 18px 0; line-height: 1.7;">
+      This OTP is valid for 10 minutes. Do not share it with anyone.
+    </p>
+
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px; border: 1px solid #e5e5e5; border-collapse: collapse;">
+      <tr>
+        <td style="padding: 10px; font-size: 13px; color: #666; font-weight: bold; border: 1px solid #e5e5e5;">Booking ID</td>
+        <td style="padding: 10px; font-size: 13px; color: #333; border: 1px solid #e5e5e5;">${bookingId}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; font-size: 13px; color: #666; font-weight: bold; border: 1px solid #e5e5e5;">Guest</td>
+        <td style="padding: 10px; font-size: 13px; color: #333; border: 1px solid #e5e5e5;">${guestName}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; font-size: 13px; color: #666; font-weight: bold; border: 1px solid #e5e5e5;">Hotel</td>
+        <td style="padding: 10px; font-size: 13px; color: #333; border: 1px solid #e5e5e5;">${hotelName}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; font-size: 13px; color: #666; font-weight: bold; border: 1px solid #e5e5e5;">Check-in</td>
+        <td style="padding: 10px; font-size: 13px; color: #333; border: 1px solid #e5e5e5;">${checkIn}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; font-size: 13px; color: #666; font-weight: bold; border: 1px solid #e5e5e5;">Check-out</td>
+        <td style="padding: 10px; font-size: 13px; color: #333; border: 1px solid #e5e5e5;">${checkOut}</td>
+      </tr>
+    </table>
+  `;
+
+  const mailOptions = {
+    from: `"HRS (HotelRoomsStay)" <${process.env.NODEMAILER_EMAIL}>`,
+    to: email,
+    subject: `OTP to cancel your booking ${bookingId} - ${BRAND_NAME}`,
+    text: `OTP: ${otp}. Booking ${bookingId} at ${hotelName}, Check-in ${checkIn}, Check-out ${checkOut}. Valid 10 minutes.`,
+    html: buildLuxuryEmailTemplate({
+      title: "Booking Cancellation OTP",
+      content,
+      hotelName,
+    }),
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Cancellation OTP sent to ${email} for booking ${bookingId}`);
+  } catch (error) {
+    console.error("Error sending cancellation OTP email:", error);
+    throw new Error("Failed to send cancellation OTP email");
+  }
+};
+
 // --- 2. BOOKING CONFIRMATION ---
 
 const generateBookingHtml = (data) => {
@@ -415,6 +493,7 @@ const sendCustomEmail = async ({ email, subject, message, link }) => {
 
 module.exports = {
   sendOtpEmail,
+  sendCancellationOtpEmail,
   generateOtp,
   sendBookingConfirmationMail,
   sendThankYouForVisitMail,

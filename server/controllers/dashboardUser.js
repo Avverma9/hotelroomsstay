@@ -7,6 +7,52 @@ const {
 } = require("./addtionalSettings/sidebarPermissionService");
 require("dotenv").config(); // Load environment variables
 
+const buildDashboardLoginResponse = async (loggedUser) => {
+  const rsToken = jwt.sign(
+    { id: loggedUser._id, role: loggedUser.role },
+    process.env.JWT_SECRET,
+    { expiresIn: "24h" },
+  );
+
+  let sidebarLinks = {};
+  try {
+    sidebarLinks = await getEffectiveSidebarLinksForUser({
+      user: loggedUser,
+      grouped: true,
+    });
+  } catch (sidebarError) {
+    console.error("Failed to fetch sidebar links:", sidebarError.message);
+  }
+
+  const userSession = {
+    token: rsToken,
+    tokenType: "Bearer",
+    expiresIn: "24h",
+    user: {
+      id: loggedUser._id,
+      role: loggedUser.role,
+      status: loggedUser.status,
+      name: loggedUser.name,
+      email: loggedUser.email,
+      image: loggedUser.images,
+    },
+    sidebarLinks,
+  };
+
+  return {
+    message: "Logged in as",
+    loggedUserRole: loggedUser.role,
+    loggedUserStatus: loggedUser.status,
+    loggedUserImage: loggedUser.images,
+    loggedUserId: loggedUser._id,
+    loggedUserName: loggedUser.name,
+    loggedUserEmail: loggedUser.email,
+    rsToken,
+    sidebarLinks,
+    sessionData: userSession,
+  };
+};
+
 // Register ===========================
 const registerUser = async (req, res) => {
   try {
@@ -136,53 +182,85 @@ const loginUser = async function (req, res) {
       return res.status(400).json({ message: "User account is not active" });
     }
 
-    // User is authenticated and active, create a JWT token
-    const rsToken = jwt.sign(
-      { id: loggedUser._id, role: loggedUser.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" },
-    );
-
-    let sidebarLinks = {};
-    try {
-      sidebarLinks = await getEffectiveSidebarLinksForUser({
-        user: loggedUser,
-        grouped: true,
-      });
-    } catch (sidebarError) {
-      console.error("Failed to fetch sidebar links:", sidebarError.message);
-    }
-
-    const userSession = {
-      token: rsToken,
-      tokenType: "Bearer",
-      expiresIn: "24h",
-      user: {
-        id: loggedUser._id,
-        role: loggedUser.role,
-        status: loggedUser.status,
-        name: loggedUser.name,
-        email: loggedUser.email,
-        image: loggedUser.images,
-      },
-      sidebarLinks,
-    };
-
-    res.status(200).json({
-      message: "Logged in as",
-      loggedUserRole: loggedUser.role,
-      loggedUserStatus: loggedUser.status,
-      loggedUserImage: loggedUser.images,
-      loggedUserId: loggedUser._id,
-      loggedUserName: loggedUser.name,
-      loggedUserEmail: loggedUser.email,
-      rsToken, // Include the token in the response
-      sidebarLinks,
-      sessionData: userSession,
-    });
+    const loginResponse = await buildDashboardLoginResponse(loggedUser);
+    res.status(200).json(loginResponse);
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const sendLoginOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const emailRegex = new RegExp("^" + email + "$", "i");
+    const user = await Dashboard.findOne({ email: emailRegex });
+
+    if (!user) {
+      return res.status(404).json({ message: "Account not found." });
+    }
+
+    if (user.status !== true) {
+      return res.status(400).json({ message: "User account is not active" });
+    }
+
+    const otp = generateOtp();
+    user.resetOtp = otp;
+    user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    await user.save();
+
+    await sendOtpEmail(user.email, otp, { skipRegisteredCheck: true });
+
+    return res.status(200).json({
+      message: "OTP sent successfully.",
+    });
+  } catch (error) {
+    console.error("Send Login OTP Error:", error);
+    return res.status(500).json({ message: "Something went wrong. Please try again later." });
+  }
+};
+
+const verifyLoginOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ message: "Email and OTP are required." });
+    }
+
+    const emailRegex = new RegExp("^" + email + "$", "i");
+    const user = await Dashboard.findOne({ email: emailRegex });
+
+    if (!user) {
+      return res.status(404).json({ message: "Account not found." });
+    }
+
+    if (user.status !== true) {
+      return res.status(400).json({ message: "User account is not active" });
+    }
+
+    if (
+      user.resetOtp !== otp ||
+      !user.otpExpiry ||
+      new Date() > new Date(user.otpExpiry)
+    ) {
+      return res.status(400).json({ message: "Invalid or expired OTP." });
+    }
+
+    user.resetOtp = undefined;
+    user.otpExpiry = undefined;
+    await user.save();
+
+    const loginResponse = await buildDashboardLoginResponse(user);
+    return res.status(200).json(loginResponse);
+  } catch (error) {
+    console.error("Verify Login OTP Error:", error);
+    return res.status(500).json({ message: "Something went wrong. Please try again later." });
   }
 };
 //update status
@@ -538,6 +616,9 @@ const filterPartner = async (req, res) => {
 module.exports = {
   registerUser,
   loginUser,
+  sendLoginOtp,
+  verifyLoginOtp,
+  buildDashboardLoginResponse,
   getPartners,
   deletePartner,
   updatePartner,
