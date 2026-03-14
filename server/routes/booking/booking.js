@@ -6,10 +6,14 @@ const auth = require('../../authentication/auth');
 const Razorpay = require("razorpay");
 router.post('/booking/:userId/:hotelId', upload, bookingController.createBooking); // on site
 
-router.put('/updatebooking/:bookingId', auth, bookingController.updateBooking); //on panel
+router.get('/booking/:bookingId',  bookingController.getBookingById);
+router.put('/updatebooking/:bookingId',  bookingController.updateBooking); //on panel
+router.post('/booking/:bookingId/cancel/send-otp',  bookingController.sendCancellationOtp);
+router.post('/booking/:bookingId/cancel/verify',  bookingController.verifyCancellationOtpAndCancel);
 
 router.get('/get/all/users-filtered/booking/by', bookingController.getAllFilterBookings); // using on main site
 router.get('/get/all/filtered/booking/by/query', bookingController.getAllFilterBookingsByQuery); //using on dashboard
+router.get('/partner/:partnerId/hotel-bookings', bookingController.getPartnerHotelBookings);
 router.get('/get-all/bookings-count', bookingController.getBookingCounts);
 router.get('/get-all/sell-count', bookingController.getTotalSell);
 const razorpay = new Razorpay({

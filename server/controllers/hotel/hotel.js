@@ -6,12 +6,18 @@ const { DateTime } = require("luxon"); // Add this line at the top
 const bookingsModel = require("../../models/booking/booking");
 const monthly = require("../../models/booking/monthly");
 const gstModel = require("../../models/GST/gst");
+const dashboardUserModel = require("../../models/dashboardUser");
 const { sendCustomEmail } = require("../../nodemailer/nodemailer");
+const {
+  createUserNotificationSafe,
+} = require("../notification/helpers");
 const {
   getRoomBasePrice,
   getOfferAdjustedPrice,
   isOfferActive,
 } = require("./offerUtils");
+
+const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const createHotel = async (req, res) => {
   try {
     const {
@@ -1548,83 +1554,176 @@ cron.schedule("0 0 1 * *", async () => {
 // The 1 in the third position represents the day of the month (1st).
 // The * in the fourth and fifth positions represents any month and any day of the week.
 
-//============================Auto-cancel pending bookings after 2 hours=======================
+const getCurrentISTDateTime = () => DateTime.now().setZone("Asia/Kolkata");
+
+const releaseBookedRoomsForAutomation = async (booking) => {
+  const roomDetails = Array.isArray(booking?.roomDetails) ? booking.roomDetails : [];
+
+  for (const room of roomDetails) {
+    const roomId = room?.roomId;
+    if (!roomId) {
+      continue;
+    }
+
+    await hotelModel.updateOne(
+      { hotelId: booking?.hotelDetails?.hotelId, "rooms.roomId": roomId },
+      { $inc: { "rooms.$.countRooms": 1 } }
+    );
+  }
+};
+
+const buildSystemStatusHistoryEntry = ({
+  previousStatus,
+  newStatus,
+  note = "",
+}) => ({
+  previousStatus,
+  newStatus,
+  changedAt: new Date(),
+  changedBy: {
+    id: "system",
+    name: "System",
+    role: "System",
+    type: "system",
+  },
+  note,
+});
+
+const getHotelStakeholderIds = async (booking) => {
+  const hotelEmail = String(booking?.hotelDetails?.hotelEmail || "").trim();
+  const stakeholders = await dashboardUserModel.find({
+    $or: [
+      ...(hotelEmail ? [{ email: { $regex: `^${escapeRegex(hotelEmail)}$`, $options: "i" } }] : []),
+      { role: { $in: ["Admin", "Developer"] } },
+    ],
+  })
+    .select("_id")
+    .lean();
+
+  return [...new Set(stakeholders.map((user) => String(user._id)))];
+};
+
+//============================Auto-fail pending bookings after 15 minutes=======================
 const autoCancelPendingBookings = async () => {
   try {
-    const currentDate = new Date();
-    const IST_OFFSET = 5.5 * 60 * 60 * 1000; // UTC+5:30
-    const currentDateIST = new Date(currentDate.getTime() + IST_OFFSET);
-    
-    // Calculate 12 hours ago
-    const twelveHoursAgo = new Date(currentDateIST.getTime() - 12 * 60 * 60 * 1000);
-    
-    // First, just count to avoid unnecessary work
-    const pendingCount = await bookingsModel.countDocuments({
+    const currentDateIST = getCurrentISTDateTime().toJSDate();
+    const fifteenMinutesAgo = getCurrentISTDateTime().minus({ minutes: 15 }).toJSDate();
+
+    const pendingBookings = await bookingsModel.find({
       bookingStatus: "Pending",
-      createdAt: { $lte: twelveHoursAgo }
+      createdAt: { $lte: fifteenMinutesAgo }
     });
-    
-    if (pendingCount === 0) {
-      return { success: true, cancelledCount: 0 };
+
+    if (pendingBookings.length === 0) {
+      return { success: true, failedCount: 0 };
     }
-    
-    console.log(`Found ${pendingCount} pending bookings to cancel`);
-    
-    // Update all pending bookings to cancelled (bulk operation is faster)
+
+    await Promise.all(pendingBookings.map((booking) => releaseBookedRoomsForAutomation(booking)));
+
     const result = await bookingsModel.updateMany(
       {
         bookingStatus: "Pending",
-        createdAt: { $lte: twoHoursAgo }
+        createdAt: { $lte: fifteenMinutesAgo }
       },
       {
         $set: {
-          bookingStatus: "Cancelled",
-          cancellationReason: "Auto-cancelled: Booking not confirmed within 2 hours",
-          cancelledAt: currentDateIST
-        }
+          bookingStatus: "Failed",
+          failureReason: "Auto-failed: Payment not completed within 15 minutes",
+        },
+        $push: {
+          statusHistory: buildSystemStatusHistoryEntry({
+            previousStatus: "Pending",
+            newStatus: "Failed",
+            note: "Auto-failed: Payment not completed within 15 minutes",
+          }),
+        },
       }
     );
-    
-    console.log(`Auto-cancelled ${result.modifiedCount} pending bookings`);
-    
-    // Send emails asynchronously without blocking (optional - can be disabled for better performance)
-    // Uncomment below if you want to send emails
-    /*
-    const pendingBookings = await bookingsModel.find({
-      bookingStatus: "Cancelled",
-      cancellationReason: "Auto-cancelled: Booking not confirmed within 2 hours",
-      cancelledAt: currentDateIST
-    }).limit(pendingCount);
-    
-    // Send emails in background without waiting
-    setImmediate(async () => {
-      for (const booking of pendingBookings) {
-        if (booking.user && booking.user.email) {
-          try {
-            await sendCustomEmail({
-              email: booking.user.email,
-              subject: "Booking Cancelled - Payment Not Completed",
-              message: `Dear ${booking.user.name || 'Customer'},\n\nYour booking (ID: ${booking.bookingId}) has been automatically cancelled as payment was not completed within 2 hours.\n\nBooking Details:\n- Hotel: ${booking.hotelDetails?.hotelName || 'N/A'}\n- Check-in: ${booking.checkInDate}\n- Check-out: ${booking.checkOutDate}\n\nPlease make a new booking if you still wish to proceed.`,
-              link: process.env.FRONTEND_URL,
-            });
-          } catch (emailError) {
-            console.error(`Failed to send cancellation email for booking ${booking.bookingId}:`, emailError);
-          }
-        }
-      }
-    });
-    */
-    
-    return { success: true, cancelledCount: result.modifiedCount };
+
+    return { success: true, failedCount: result.modifiedCount, processedAt: currentDateIST };
   } catch (error) {
     console.error("Error in autoCancelPendingBookings:", error);
     return { success: false, error: error.message };
   }
 };
 
-// Run every 30 minutes to check for pending bookings (reduced frequency)
-cron.schedule("*/30 * * * *", async () => {
-  // Run in background without blocking
+const autoMarkNoShowBookings = async () => {
+  try {
+    const todayIST = getCurrentISTDateTime().toFormat("yyyy-MM-dd");
+    const result = await bookingsModel.updateMany(
+      {
+        bookingStatus: "Confirmed",
+        checkInDate: { $lte: todayIST },
+      },
+      {
+        $set: {
+          bookingStatus: "No-Show",
+          noShowMarkedAt: getCurrentISTDateTime().toJSDate(),
+        },
+        $push: {
+          statusHistory: buildSystemStatusHistoryEntry({
+            previousStatus: "Confirmed",
+            newStatus: "No-Show",
+            note: "Auto-marked as no-show after check-in date ended without check-in",
+          }),
+        },
+      }
+    );
+
+    return { success: true, updatedCount: result.modifiedCount };
+  } catch (error) {
+    console.error("Error in autoMarkNoShowBookings:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+const autoSendCheckoutReminders = async () => {
+  try {
+    const nowIST = getCurrentISTDateTime();
+    if (nowIST.hour < 14) {
+      return { success: true, remindedCount: 0, skipped: true };
+    }
+
+    const startOfToday = nowIST.startOf("day").toJSDate();
+    const checkoutToday = nowIST.toFormat("yyyy-MM-dd");
+    const dueBookings = await bookingsModel.find({
+      bookingStatus: "Checked-in",
+      checkOutDate: checkoutToday,
+      $or: [
+        { lastCheckoutReminderAt: null },
+        { lastCheckoutReminderAt: { $lt: startOfToday } },
+      ],
+    });
+
+    for (const booking of dueBookings) {
+      const stakeholderIds = await getHotelStakeholderIds(booking);
+      if (stakeholderIds.length > 0) {
+        await createUserNotificationSafe({
+          name: "Checkout Reminder",
+          message: `Booking ${booking.bookingId} for ${booking.hotelDetails?.hotelName || "hotel"} is still checked-in. Please mark checked-out if the guest has left.`,
+          path: "/app/bookings/hotel",
+          eventType: "hotel_checkout_reminder",
+          metadata: {
+            bookingId: booking.bookingId,
+            hotelId: booking.hotelDetails?.hotelId,
+            checkOutDate: booking.checkOutDate,
+          },
+          userIds: stakeholderIds,
+        });
+      }
+
+      booking.lastCheckoutReminderAt = nowIST.toJSDate();
+      await booking.save();
+    }
+
+    return { success: true, remindedCount: dueBookings.length };
+  } catch (error) {
+    console.error("Error in autoSendCheckoutReminders:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+cron.schedule("*/5 * * * *", async () => {
   setImmediate(async () => {
     try {
       await autoCancelPendingBookings();
@@ -1633,8 +1732,26 @@ cron.schedule("*/30 * * * *", async () => {
     }
   });
 });
-// */30 means every 30 minutes (reduced from 15 minutes)
-// setImmediate ensures it runs in background without blocking other APIs
+
+cron.schedule("59 23 * * *", async () => {
+  setImmediate(async () => {
+    try {
+      await autoMarkNoShowBookings();
+    } catch (error) {
+      console.error("Auto no-show cron error:", error);
+    }
+  });
+});
+
+cron.schedule("*/15 * * * *", async () => {
+  setImmediate(async () => {
+    try {
+      await autoSendCheckoutReminders();
+    } catch (error) {
+      console.error("Auto checkout reminder cron error:", error);
+    }
+  });
+});
 
 //=========================================list of applied coupons hotel==========================
 const getCouponsAppliedHotels = async (req, res) => {

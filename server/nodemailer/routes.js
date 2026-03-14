@@ -4,24 +4,42 @@ require('dotenv').config(); // Load environment variables
 const { generateOtp, sendOtpEmail, sendBookingMail, sendCustomEmail } = require('./nodemailer');
 const dashboardUser = require('../models/dashboardUser');
 const user = require('../models/user');
+const { buildDashboardLoginResponse } = require('../controllers/dashboardUser');
 const router = express.Router();
 
 const otpStore = new Map();
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
+const VALID_LOGIN_TYPES = new Set(['user', 'dashboard']);
 
 router.post('/send-otp', async (req, res) => {
-    const { email } = req.body;
+    const { email, loginType } = req.body;
     if (!email) {
         return res.status(400).json({ message: 'Email is required' });
+    }
+    if (!VALID_LOGIN_TYPES.has(loginType)) {
+        return res.status(400).json({ message: 'loginType must be either user or dashboard' });
     }
 
     const otp = generateOtp();
     const expiresAt = Date.now() + OTP_EXPIRY_MS;
+    const emailRegex = new RegExp('^' + email + '$', 'i');
 
     try {
+        const account = loginType === 'dashboard'
+            ? await dashboardUser.findOne({ email: emailRegex })
+            : await user.findOne({ email: emailRegex });
+
+        if (!account) {
+            return res.status(400).json({ message: 'No user account found with this email' });
+        }
+
+        if (loginType === 'dashboard' && account.status !== true) {
+            return res.status(400).json({ message: 'Your account is not active. Please contact support.' });
+        }
+
         await sendOtpEmail(email, otp);
-        otpStore.set(email, { otp, expiresAt });
+        otpStore.set(`${loginType}:${email.toLowerCase()}`, { otp, expiresAt, loginType });
         res.status(200).json({ message: 'OTP sent successfully' });
     } catch (error) {
         res.status(500).json({ message: 'Invalid Email' });
@@ -29,20 +47,24 @@ router.post('/send-otp', async (req, res) => {
 });
 
 router.post('/verify-otp', async (req, res) => {
-    const { email, otp } = req.body;
+    const { email, otp, loginType } = req.body;
 
     if (!email || !otp) {
         return res.status(400).json({ message: 'Email and OTP are required' });
     }
+    if (!VALID_LOGIN_TYPES.has(loginType)) {
+        return res.status(400).json({ message: 'loginType must be either user or dashboard' });
+    }
 
-    const stored = otpStore.get(email);
+    const otpKey = `${loginType}:${email.toLowerCase()}`;
+    const stored = otpStore.get(otpKey);
 
     if (!stored) {
         return res.status(400).json({ message: 'OTP not found for this email. Please request a new one.' });
     }
 
     if (Date.now() > stored.expiresAt) {
-        otpStore.delete(email);
+        otpStore.delete(otpKey);
         return res.status(400).json({ message: 'OTP has expired' });
     }
 
@@ -50,32 +72,45 @@ router.post('/verify-otp', async (req, res) => {
         return res.status(400).json({ message: 'Invalid OTP' });
     }
 
-    otpStore.delete(email);
+    otpStore.delete(otpKey);
     const emailRegex = new RegExp('^' + email + '$', 'i');
     try {
-        const loggedUser = await dashboardUser.findOne({ email: emailRegex });
+        if (loginType === 'dashboard') {
+            const loggedDashboardUser = await dashboardUser.findOne({ email: emailRegex });
+            if (!loggedDashboardUser) {
+                return res.status(400).json({ message: 'No user account found with this email' });
+            }
+            if (loggedDashboardUser.status !== true) {
+                return res.status(400).json({ message: 'Your account is not active. Please contact support.' });
+            }
 
-        if (!loggedUser) {
+            const dashboardResponse = await buildDashboardLoginResponse(loggedDashboardUser);
+            return res.status(200).json({
+                role: loggedDashboardUser.role,
+                ...dashboardResponse,
+            });
+        }
+
+        const foundUser = await user.findOne({ email: emailRegex });
+
+        if (!foundUser) {
             return res.status(400).json({ message: 'No user account found with this email' });
         }
 
-        if (loggedUser.status !== true) {
-            return res.status(400).json({ message: 'Your account is not active. Please contact support.' });
-        }
-
-        const rsToken = jwt.sign({ id: loggedUser._id, role: loggedUser.role }, process.env.JWT_SECRET, { expiresIn: '24h' });
+        const rsToken = jwt.sign(
+            { id: foundUser._id },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
 
         return res.status(200).json({
+            role: 'user',
             message: 'Logged in successfully',
-            loggedUserRole: loggedUser.role,
-            loggedUserStatus: loggedUser.status,
-            loggedUserImage: loggedUser.images,
-            loggedUserId: loggedUser._id,
-            loggedUserName: loggedUser.name,
-            loggedUserEmail: loggedUser.email,
+            userId: foundUser.userId,
             rsToken,
+            email: foundUser.email,
+            mobile: foundUser.mobile,
         });
-
     } catch (error) {
         console.error('Error during login after OTP verification:', error);
         return res.status(500).json({ message: 'Internal server error' });

@@ -1,11 +1,190 @@
 const bookingModel = require("../../models/booking/booking");
 const hotelModel = require("../../models/hotel/basicDetails");
 const userModel = require("../../models/user");
-const { sendBookingConfirmationMail, sendThankYouForVisitMail, sendBookingCancellationMail } = require("../../nodemailer/nodemailer");
+const dashboardUserModel = require("../../models/dashboardUser");
+const {
+  sendBookingConfirmationMail,
+  sendThankYouForVisitMail,
+  sendBookingCancellationMail,
+  generateOtp,
+  sendOtpEmail,
+  sendCancellationOtpEmail,
+} = require("../../nodemailer/nodemailer");
 const { getGSTData } = require("../GST/gst");
 const {
   createUserNotificationSafe,
 } = require("../notification/helpers");
+
+const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const releaseBookedRooms = async (booking) => {
+  const roomDetails = Array.isArray(booking?.roomDetails) ? booking.roomDetails : [];
+
+  for (const bookedRoom of roomDetails) {
+    const roomId = bookedRoom?.roomId;
+    if (!roomId) {
+      continue;
+    }
+
+    await hotelModel.updateOne(
+      { hotelId: booking?.hotelDetails?.hotelId, "rooms.roomId": roomId },
+      { $inc: { "rooms.$.countRooms": 1 } }
+    );
+  }
+};
+
+const buildStatusHistoryEntry = ({
+  previousStatus,
+  newStatus,
+  changedBy,
+  note = "",
+}) => ({
+  previousStatus,
+  newStatus,
+  changedAt: new Date(),
+  changedBy: {
+    id: String(changedBy?.id || ""),
+    name: String(changedBy?.name || "Unknown"),
+    role: String(changedBy?.role || ""),
+    type: String(changedBy?.type || "user"),
+  },
+  note,
+});
+
+const resolveBookingActor = async (req) => {
+  if (!req?.user) {
+    return {
+      id: "",
+      name: "Unknown",
+      role: "",
+      type: "user",
+    };
+  }
+
+  const actorRole = String(req.user.role || "").trim();
+  if (actorRole) {
+    const dashboardUser = await dashboardUserModel.findById(req.user.id)
+      .select("name role")
+      .lean();
+
+    return {
+      id: String(req.user.id || ""),
+      name: dashboardUser?.name || "Dashboard User",
+      role: dashboardUser?.role || actorRole,
+      type: "dashboard_user",
+    };
+  }
+
+  const appUser = await userModel.findOne({ userId: req.user.id })
+    .select("userName")
+    .lean();
+
+  return {
+    id: String(req.user.id || ""),
+    name: appUser?.userName || "App User",
+    role: "User",
+    type: "app_user",
+  };
+};
+
+const sendCancellationOtp = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const booking = await bookingModel.findOne({ bookingId });
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    const targetEmail = String(booking?.user?.email || "").trim();
+    if (!targetEmail) {
+      return res.status(400).json({ message: "Customer email not available" });
+    }
+
+    const otp = generateOtp();
+    booking.cancellationOtp = otp;
+    booking.cancellationOtpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    await booking.save();
+
+    await sendOtpEmail(targetEmail, otp, { skipRegisteredCheck: true });
+    await sendCancellationOtpEmail({ email: targetEmail, otp, booking });
+
+    return res.status(200).json({ message: "Cancellation OTP sent to customer email" });
+  } catch (error) {
+    console.error("Error sending cancellation OTP:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+const verifyCancellationOtpAndCancel = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { otp, cancellationReason = "" } = req.body;
+
+    if (!otp) {
+      return res.status(400).json({ message: "OTP is required" });
+    }
+
+    const booking = await bookingModel.findOne({ bookingId });
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    if (!booking.cancellationOtp || !booking.cancellationOtpExpiry) {
+      return res.status(400).json({ message: "No OTP issued for this booking" });
+    }
+
+    if (new Date() > new Date(booking.cancellationOtpExpiry)) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    if (String(otp).trim() !== String(booking.cancellationOtp).trim()) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    const previousStatus = booking.bookingStatus;
+    const nextStatus = "Cancelled";
+
+    const changedBy = await resolveBookingActor(req);
+    const statusHistoryEntry = buildStatusHistoryEntry({
+      previousStatus,
+      newStatus: nextStatus,
+      changedBy,
+      note: String(cancellationReason || "Cancelled via OTP verification").trim(),
+    });
+
+    booking.bookingStatus = nextStatus;
+    booking.cancellationReason = cancellationReason || "Cancelled via OTP verification";
+    booking.cancelledAt = new Date();
+    booking.cancellationOtp = undefined;
+    booking.cancellationOtpExpiry = undefined;
+    booking.statusHistory = booking.statusHistory || [];
+    booking.statusHistory.push(statusHistoryEntry);
+
+    await booking.save();
+    await releaseBookedRooms(booking);
+
+    await sendBookingCancellationMail({
+      email: booking?.user?.email,
+      subject: "Booking Cancelled !",
+      bookingData: booking,
+      link: process.env.FRONTEND_URL,
+    });
+
+    return res.status(200).json({ message: "Booking cancelled after OTP verification", data: booking });
+  } catch (error) {
+    console.error("Error verifying cancellation OTP:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+const getFormattedISTTime = (date = new Date()) => {
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+};
 //==========================================creating booking========================================================================================================
 const createBooking = async (req, res) => {
   try {
@@ -75,6 +254,13 @@ const createBooking = async (req, res) => {
     // Calculate final price
     const finalPrice = discountedRoomTotal + gstAmount + foodPrice;
 
+    const normalizedBookingStatus = String(bookingStatus || "").trim();
+    const isPanelOrOfflineBooking =
+      String(bookingSource || "").trim().toLowerCase() === "panel"
+      || String(pm || "").trim().toLowerCase() === "offline";
+    const resolvedBookingStatus = normalizedBookingStatus
+      || (isPanelOrOfflineBooking ? "Confirmed" : "Pending");
+
     const booking = new bookingModel({
       bookingId,
       user: {
@@ -115,7 +301,7 @@ const createBooking = async (req, res) => {
       pm,
       isPartialBooking,
       partialAmount,
-      bookingStatus,
+      bookingStatus: resolvedBookingStatus,
       bookingSource,
       destination,
       roomDetails,
@@ -123,12 +309,14 @@ const createBooking = async (req, res) => {
 
     const savedBooking = await booking.save();
 
-    await sendBookingConfirmationMail({
-      email: booking?.user?.email,
-      subject: "Booking Confirmation",
-      bookingData: booking,
-      link: process.env.FRONTEND_URL,
-    });
+    if (savedBooking.bookingStatus === "Confirmed") {
+      await sendBookingConfirmationMail({
+        email: booking?.user?.email,
+        subject: "Booking Confirmation",
+        bookingData: booking,
+        link: process.env.FRONTEND_URL,
+      });
+    }
 
     // Update room availability
     for (const bookedRoom of roomDetails) {
@@ -154,10 +342,16 @@ const createBooking = async (req, res) => {
     }
 
     await createUserNotificationSafe({
-      name: "Hotel Booking Successful",
-      message: `Your hotel booking ${savedBooking.bookingId} is created successfully for ${savedBooking.hotelDetails?.hotelName || "your selected hotel"}.`,
+      name: savedBooking.bookingStatus === "Pending"
+        ? "Hotel Booking Pending Payment"
+        : "Hotel Booking Successful",
+      message: savedBooking.bookingStatus === "Pending"
+        ? `Your hotel booking ${savedBooking.bookingId} is created and waiting for payment confirmation.`
+        : `Your hotel booking ${savedBooking.bookingId} is created successfully for ${savedBooking.hotelDetails?.hotelName || "your selected hotel"}.`,
       path: "/app/bookings/hotel",
-      eventType: "hotel_booking_success",
+      eventType: savedBooking.bookingStatus === "Pending"
+        ? "hotel_booking_pending"
+        : "hotel_booking_success",
       metadata: {
         bookingId: savedBooking.bookingId,
         hotelId: savedBooking.hotelDetails?.hotelId,
@@ -199,39 +393,103 @@ const getTotalSell = async function (req, res) {
 };
 
 //========================================================================
+const getBookingById = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const booking = await bookingModel.findOne({ bookingId }).lean();
+
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    return res.status(200).json({
+      message: "Booking fetched successfully",
+      data: booking,
+    });
+  } catch (error) {
+    console.error("Error fetching booking by id:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
 const updateBooking = async (req, res) => {
   const { bookingId } = req.params;
   const data = req.body;
 
   try {
-    const updatedData = await bookingModel.findOneAndUpdate(
-      { bookingId },
-      { $set: data },
-      { new: true }
-    );
-
-    if (!updatedData) {
+    const existingBooking = await bookingModel.findOne({ bookingId });
+    if (!existingBooking) {
       return res.status(404).json({ message: "Booking not found" });
     }
 
-    if (updatedData.bookingStatus === "Cancelled") {
-      const roomId = updatedData?.roomDetails[0]?.roomId;
+    const requesterRole = String(req.user?.role || "").trim();
+    const canManageCancelledBooking = ["Admin", "Developer"].includes(requesterRole);
 
-      const findHotel = await hotelModel.findOne({
-        hotelId: updatedData.hotelDetails.hotelId,
+    if (existingBooking.bookingStatus === "Cancelled" && !canManageCancelledBooking) {
+      return res.status(403).json({
+        message: "Only Admin or Developer can update a cancelled booking",
       });
+    }
 
-      if (findHotel) {
-        const roomIndex = findHotel.rooms.findIndex(
-          (room) => room.roomId === roomId
-        );
+    const previousStatus = existingBooking.bookingStatus;
+    const nextStatus = String(data.bookingStatus || previousStatus).trim() || previousStatus;
+    const resolvedCheckInTime = String(data.checkInTime || "").trim();
+    const resolvedCheckOutTime = String(data.checkOutTime || "").trim();
+    const statusMetadataUpdate = {};
 
-        if (roomIndex !== -1) {
-          findHotel.rooms[roomIndex].countRooms += 1;
-          findHotel.markModified(`rooms.${roomIndex}.countRooms`);
-          await findHotel.save();
-        }
-      }
+    if (nextStatus === "Cancelled" && previousStatus !== "Cancelled") {
+      statusMetadataUpdate.cancelledAt = new Date();
+    }
+    if (nextStatus === "Checked-in" && previousStatus !== "Checked-in") {
+      const checkedInAt = new Date();
+      statusMetadataUpdate.checkedInAt = checkedInAt;
+      statusMetadataUpdate.checkInTime = resolvedCheckInTime || getFormattedISTTime(checkedInAt);
+    }
+    if (nextStatus === "Checked-out" && previousStatus !== "Checked-out") {
+      const checkedOutAt = new Date();
+      statusMetadataUpdate.checkedOutAt = checkedOutAt;
+      statusMetadataUpdate.checkOutTime = resolvedCheckOutTime || getFormattedISTTime(checkedOutAt);
+    }
+    if (nextStatus === "No-Show" && previousStatus !== "No-Show") {
+      statusMetadataUpdate.noShowMarkedAt = new Date();
+    }
+    if (nextStatus === "Failed" && previousStatus !== "Failed" && !data.failureReason) {
+      statusMetadataUpdate.failureReason = "Payment failed or timed out";
+    }
+    if (resolvedCheckInTime) {
+      statusMetadataUpdate.checkInTime = resolvedCheckInTime;
+    }
+    if (resolvedCheckOutTime) {
+      statusMetadataUpdate.checkOutTime = resolvedCheckOutTime;
+    }
+
+    let statusHistoryUpdate = null;
+    if (nextStatus !== previousStatus) {
+      const changedBy = await resolveBookingActor(req);
+      statusHistoryUpdate = buildStatusHistoryEntry({
+        previousStatus,
+        newStatus: nextStatus,
+        changedBy,
+        note: String(data.cancellationReason || data.failureReason || "").trim(),
+      });
+    }
+
+    const updatedData = await bookingModel.findOneAndUpdate(
+      { bookingId },
+      {
+        $set: { ...data, ...statusMetadataUpdate },
+        ...(statusHistoryUpdate
+          ? { $push: { statusHistory: statusHistoryUpdate } }
+          : {}),
+      },
+      { new: true }
+    );
+
+    if (
+      ["Cancelled", "Failed"].includes(updatedData.bookingStatus)
+      && !["Cancelled", "Failed"].includes(previousStatus)
+    ) {
+      await releaseBookedRooms(updatedData);
     }
 
     if (updatedData.bookingStatus === "Checked-out") {
@@ -579,7 +837,19 @@ const getAllFilterBookings = async (req, res) => {
 
 const getAllFilterBookingsByQuery = async (req, res) => {
   try {
-    const { bookingStatus, userId, bookingId, hotelEmail, date, hotelCity, couponCode, createdBy } = req.query;
+    const {
+      bookingStatus,
+      bookingSource,
+      userId,
+      bookingId,
+      hotelId,
+      hotelEmail,
+      date,
+      hotelCity,
+      couponCode,
+      createdBy,
+      userMobile,
+    } = req.query;
     const filter = {};
 
     if (userId) {
@@ -587,6 +857,12 @@ const getAllFilterBookingsByQuery = async (req, res) => {
     }
     if (bookingStatus) {
       filter.bookingStatus = bookingStatus;
+    }
+    if (bookingSource) {
+      filter.bookingSource = {
+        $regex: `^${escapeRegex(String(bookingSource).trim())}$`,
+        $options: "i",
+      };
     }
     if (couponCode) {
       filter.couponCode = couponCode
@@ -602,8 +878,15 @@ const getAllFilterBookingsByQuery = async (req, res) => {
     if (bookingId) {
       filter.bookingId = bookingId;
     }
+    if (hotelId) {
+      filter["hotelDetails.hotelId"] = String(hotelId).trim();
+    }
     if (hotelCity) {
       filter["hotelDetails.hotelCity"] = { $regex: new RegExp(hotelCity.trim(), "i") };
+    }
+    if (userMobile) {
+      const mobileRegex = new RegExp(`^${escapeRegex(String(userMobile).trim())}$`, "i");
+      filter["user.mobile"] = mobileRegex;
     }
 
     if (date) {
@@ -631,11 +914,136 @@ const getAllFilterBookingsByQuery = async (req, res) => {
   }
 };
 
+const getPartnerHotelBookings = async (req, res) => {
+  try {
+    const { partnerId } = req.params;
+    const { hotelId, bookingStatus, bookingSource, date } = req.query;
+
+    const partner = await dashboardUserModel.findById(partnerId).lean();
+    if (!partner) {
+      return res.status(404).json({ message: "Partner not found" });
+    }
+
+    const normalizedPartnerEmail = String(partner.email || "").trim();
+    const linkedHotels = await hotelModel.find(
+      {
+        hotelEmail: {
+          $regex: `^${escapeRegex(normalizedPartnerEmail)}$`,
+          $options: "i",
+        },
+      },
+      {
+        _id: 1,
+        hotelId: 1,
+        hotelName: 1,
+        hotelEmail: 1,
+        city: 1,
+        state: 1,
+        destination: 1,
+      },
+    ).lean();
+
+    if (linkedHotels.length === 0) {
+      return res.status(200).json({
+        message: "No hotels linked to this partner",
+        partner: {
+          id: partner._id,
+          name: partner.name,
+          email: partner.email,
+          role: partner.role,
+        },
+        summary: {
+          totalHotels: 0,
+          totalBookings: 0,
+          sourceCounts: {},
+          statusCounts: {},
+        },
+        hotels: [],
+        bookings: [],
+      });
+    }
+
+    const hotelEmails = [...new Set(linkedHotels.map((hotel) => hotel.hotelEmail).filter(Boolean))];
+    const hotelIds = linkedHotels.map((hotel) => String(hotel.hotelId));
+    const filter = {
+      "hotelDetails.hotelEmail": { $in: hotelEmails },
+      "hotelDetails.hotelId": { $in: hotelIds },
+    };
+
+    if (hotelId) {
+      filter["hotelDetails.hotelId"] = String(hotelId);
+    }
+
+    if (bookingStatus) {
+      filter.bookingStatus = bookingStatus;
+    }
+
+    if (bookingSource) {
+      filter.bookingSource = bookingSource;
+    }
+
+    if (date) {
+      const queryDate = new Date(date);
+      const startOfDay = new Date(queryDate.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(queryDate.setHours(23, 59, 59, 999));
+
+      filter.$or = [
+        { checkInDate: date },
+        { checkOutDate: date },
+        { createdAt: { $gte: startOfDay, $lte: endOfDay } },
+      ];
+    }
+
+    const bookings = await bookingModel.find(filter).sort({ createdAt: -1 }).lean();
+
+    const sourceCounts = {};
+    const statusCounts = {};
+
+    const normalizedBookings = bookings.map((booking) => {
+      const normalizedSource = booking.bookingSource
+        || (booking.createdBy?.email ? "panel" : "unknown");
+
+      sourceCounts[normalizedSource] = (sourceCounts[normalizedSource] || 0) + 1;
+      statusCounts[booking.bookingStatus] = (statusCounts[booking.bookingStatus] || 0) + 1;
+
+      return {
+        ...booking,
+        normalizedSource,
+      };
+    });
+
+    return res.status(200).json({
+      message: "Partner hotel bookings fetched successfully",
+      partner: {
+        id: partner._id,
+        name: partner.name,
+        email: partner.email,
+        role: partner.role,
+      },
+      summary: {
+        totalHotels: linkedHotels.length,
+        totalBookings: normalizedBookings.length,
+        sourceCounts,
+        statusCounts,
+      },
+      hotels: linkedHotels,
+      bookings: normalizedBookings,
+    });
+  } catch (error) {
+    console.error("Error fetching partner hotel bookings:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
 module.exports = {
   createBooking,
+  getBookingById,
+  sendCancellationOtp,
+  verifyCancellationOtpAndCancel,
   updateBooking,
   getAllFilterBookings,
   getBookingCounts,
   getTotalSell,
   getAllFilterBookingsByQuery,
+  getPartnerHotelBookings,
 };
