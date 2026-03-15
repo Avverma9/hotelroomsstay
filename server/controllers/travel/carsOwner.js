@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Owner = require("../../models/travel/carOwner");
 
 exports.addOwner = async (req, res) => {
@@ -43,9 +44,17 @@ exports.getOwner = async (_, res) => {
 exports.getOwnerById = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid owner ID" });
+    }
+
     const findData = await Owner.findById(id);
+    if (!findData) {
+      return res.status(404).json({ error: "Owner not found" });
+    }
     return res.status(200).json(findData);
   } catch (error) {
+    console.error("Error in getOwnerById:", error);
     return res.status(500).json("We are working hard to fix this");
   }
 };
@@ -68,6 +77,42 @@ exports.getOwnerByEmail = async (req, res) => {
   }
 };
 
+exports.filterOwners = async (req, res) => {
+  try {
+    const { mobile, email } = req.query;
+    const { mobile: mobileBody, email: emailBody, ownerId } = req.body || {};
+    const finalMobile = mobile || mobileBody;
+    const finalEmail = email || emailBody;
+    const filter = {};
+
+    if (ownerId) {
+      if (!mongoose.isValidObjectId(ownerId)) {
+        return res.status(400).json({ error: "Invalid ownerId" });
+      }
+      filter._id = ownerId;
+    }
+
+    if (finalMobile) {
+      const escapedMobile = finalMobile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.mobile = { $regex: escapedMobile, $options: "i" };
+    }
+
+    if (finalEmail) {
+      const escapedEmail = finalEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.email = { $regex: `^${escapedEmail}$`, $options: "i" };
+    }
+
+    if (Object.keys(filter).length === 0) {
+      return res.status(400).json({ error: "Provide at least one filter: mobile, email, or ownerId" });
+    }
+
+    const owners = await Owner.find(filter);
+    return res.status(200).json(owners);
+  } catch (error) {
+    console.error("Error in filterOwners:", error);
+    return res.status(500).json({ error: "Internal server error. We're working to fix this." });
+  }
+};
 
 exports.updateOwner = async (req, res) => {
   const { id } = req.params;

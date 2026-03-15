@@ -12,6 +12,11 @@ const sidebarLinkSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    label: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     isParentOnly: {
       type: Boolean,
       default: false,
