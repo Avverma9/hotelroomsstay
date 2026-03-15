@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 const Car = require('../../models/travel/cars');
+const CarOwner = require('../../models/travel/carOwner');
+const User = require('../../models/user');
 
 const toDate = (value) => {
   if (!value) {
@@ -57,8 +59,23 @@ const normalizeSeatConfig = (seatConfig = []) => {
 };
 
 exports.addCar = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
-    const { seatConfig, ...data } = req.body;
+    const {
+      seatConfig,
+      ownerName,
+      ownerEmail,
+      ownerMobile,
+      ownerAadhar,
+      ownerPAN,
+      ownerDrivingLicence,
+      ownerAddress,
+      ownerCity,
+      ownerState,
+      ownerPinCode,
+      ...data
+    } = req.body;
     const images = req.files?.map((file) => file.location) || [];
 
     let parsedSeatConfig = [];
@@ -66,6 +83,8 @@ exports.addCar = async (req, res) => {
       try {
         parsedSeatConfig = normalizeSeatConfig(parseSeatConfig(seatConfig) || []);
       } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({ message: 'Invalid seatConfig format' });
       }
     }
@@ -73,12 +92,93 @@ exports.addCar = async (req, res) => {
     const pickupDate = toDate(data.pickupD);
     const dropDate = toDate(data.dropD);
     if ((data.pickupD && !pickupDate) || (data.dropD && !dropDate)) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ message: 'Invalid pickupD or dropD date format' });
     }
     if (pickupDate && dropDate && pickupDate >= dropDate) {
-      return res
-        .status(400)
-        .json({ message: 'dropD must be greater than pickupD' });
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ message: 'dropD must be greater than pickupD' });
+    }
+
+    let owner;
+
+    if (data.ownerId) {
+      if (!mongoose.Types.ObjectId.isValid(data.ownerId)) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({ message: 'Invalid ownerId' });
+      }
+      owner = await CarOwner.findById(data.ownerId).session(session);
+      if (!owner) {
+        if (!ownerName && !ownerEmail && !ownerMobile) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({ message: 'Owner details required to create owner for ownerId' });
+        }
+        owner = await CarOwner.create(
+          [
+            {
+              _id: data.ownerId,
+              name: ownerName || 'Unknown',
+              email: ownerEmail || '',
+              mobile: ownerMobile || '',
+              dl: ownerDrivingLicence || '',
+              address: ownerAddress || '',
+              city: ownerCity || '',
+              state: ownerState || '',
+              pinCode: ownerPinCode || undefined,
+            },
+          ],
+          { session }
+        );
+        owner = owner[0];
+      } else {
+        const ownerUpdates = {};
+        if (ownerName) ownerUpdates.name = ownerName;
+        if (ownerEmail) ownerUpdates.email = ownerEmail;
+        if (ownerMobile) ownerUpdates.mobile = ownerMobile;
+        if (ownerDrivingLicence) ownerUpdates.dl = ownerDrivingLicence;
+        if (ownerAddress) ownerUpdates.address = ownerAddress;
+        if (ownerCity) ownerUpdates.city = ownerCity;
+        if (ownerState) ownerUpdates.state = ownerState;
+        if (ownerPinCode) ownerUpdates.pinCode = ownerPinCode;
+        if (Object.keys(ownerUpdates).length) {
+          owner = await CarOwner.findByIdAndUpdate(data.ownerId, ownerUpdates, {
+            new: true,
+            session,
+          });
+        }
+      }
+    }
+
+    if (!owner && (ownerEmail || ownerMobile)) {
+      const ownerQuery = { $or: [] };
+      if (ownerEmail) ownerQuery.$or.push({ email: ownerEmail });
+      if (ownerMobile) ownerQuery.$or.push({ mobile: ownerMobile });
+      owner = await CarOwner.findOneAndUpdate(
+        ownerQuery,
+        {
+          $set: {
+            name: ownerName,
+            email: ownerEmail,
+            mobile: ownerMobile,
+            dl: ownerDrivingLicence || '',
+            address: ownerAddress || '',
+            city: ownerCity || '',
+            state: ownerState || '',
+            pinCode: ownerPinCode || undefined,
+          },
+        },
+        { upsert: true, new: true, session }
+      );
+    }
+
+    if (!owner) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ message: 'Owner email or mobile is required' });
     }
 
     const carData = {
@@ -86,20 +186,24 @@ exports.addCar = async (req, res) => {
       images,
       seatConfig: parsedSeatConfig,
       seater: parsedSeatConfig.length > 0 ? parsedSeatConfig.length : data.seater,
+      ownerId: owner._id,
     };
 
-    const newCar = await Car.create(carData);
+    const newCar = await Car.create([carData], { session });
+
+    await session.commitTransaction();
+    session.endSession();
 
     return res.status(201).json({
       message: 'Successfully Created',
-      car: newCar,
+      car: newCar[0],
+      owner,
     });
   } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
     console.error('addCar error:', error);
-    return res.status(500).json({
-      message: 'Something went wrong',
-      error: error.message,
-    });
+    return res.status(500).json({ message: 'Something went wrong', error: error.message });
   }
 };
 
@@ -241,6 +345,28 @@ exports.filterCar = async (req, res) => {
   }
 };
 
+exports.getMyCars = async (req, res) => {
+  try {
+    const loggedInUserId = req.user.id;
+    const user = await User.findOne({ userId: loggedInUserId });
+    if (!user || !user.email) {
+      return res.status(403).json({ message: 'Access denied: User not found or email is missing.' });
+    }
+
+    const carOwner = await CarOwner.findOne({ email: user.email });
+    if (!carOwner) {
+      // If the user is not a car owner, they have no cars. Return an empty array.
+      return res.status(200).json([]);
+    }
+
+    const cars = await Car.find({ ownerId: carOwner._id });
+    return res.status(200).json(cars);
+  } catch (error) {
+    console.error('getMyCars error:', error);
+    return res.status(500).json({ message: 'We are working hard to fix this' });
+  }
+};
+
 exports.updateCar = async (req, res) => {
   try {
     const { id } = req.params;
@@ -248,12 +374,30 @@ exports.updateCar = async (req, res) => {
       return res.status(400).json({ message: 'Invalid car id' });
     }
 
-    const data = { ...req.body };
-    const images = req.files?.map((file) => file.location) || [];
+    // Ownership check
+    const loggedInUserId = req.user.id;
+    const user = await User.findOne({ userId: loggedInUserId });
+    if (!user || !user.email) {
+      return res.status(403).json({ message: 'Access denied: User not found or email is missing.' });
+    }
+
+    const carOwner = await CarOwner.findOne({ email: user.email });
+    if (!carOwner) {
+      return res.status(403).json({ message: 'Access denied: You are not registered as a car owner.' });
+    }
+
     const existingCar = await Car.findById(id);
     if (!existingCar) {
       return res.status(404).json({ message: 'Car not found' });
     }
+
+    if (existingCar.ownerId.toString() !== carOwner._id.toString()) {
+      return res.status(403).json({ message: 'Access denied: You do not own this car.' });
+    }
+    // End ownership check
+
+    const data = { ...req.body };
+    const images = req.files?.map((file) => file.location) || [];
 
     data.images = images.length > 0 ? images : existingCar.images;
 
@@ -292,6 +436,22 @@ exports.updateCar = async (req, res) => {
       return res.status(400).json({ message: 'dropD must be greater than pickupD' });
     }
 
+    const ownerUpdates = {};
+    if (data.ownerName) ownerUpdates.name = data.ownerName;
+    if (data.ownerEmail) ownerUpdates.email = data.ownerEmail;
+    if (data.ownerMobile) ownerUpdates.mobile = data.ownerMobile;
+    if (data.ownerDrivingLicence) ownerUpdates.dl = data.ownerDrivingLicence;
+    if (data.ownerAddress) ownerUpdates.address = data.ownerAddress;
+    if (data.ownerCity) ownerUpdates.city = data.ownerCity;
+    if (data.ownerState) ownerUpdates.state = data.ownerState;
+    if (data.ownerPinCode) ownerUpdates.pinCode = data.ownerPinCode;
+
+    if (Object.keys(ownerUpdates).length) {
+      await CarOwner.findByIdAndUpdate(existingCar.ownerId, ownerUpdates, {
+        new: true,
+      });
+    }
+
     const updatedCar = await Car.findByIdAndUpdate(id, data, {
       new: true,
       runValidators: true,
@@ -310,10 +470,28 @@ exports.deleteCarById = async (req, res) => {
       return res.status(400).json({ message: 'Invalid car id' });
     }
 
+    // Ownership check
+    const loggedInUserId = req.user.id;
+    const user = await User.findOne({ userId: loggedInUserId });
+    if (!user || !user.email) {
+      return res.status(403).json({ message: 'Access denied: User not found or email is missing.' });
+    }
+
+    const carOwner = await CarOwner.findOne({ email: user.email });
+    if (!carOwner) {
+      return res.status(403).json({ message: 'Access denied: You are not registered as a car owner.' });
+    }
+
     const findCar = await Car.findById(id);
     if (!findCar) {
       return res.status(404).json({ message: 'Car not found' });
     }
+
+    if (findCar.ownerId.toString() !== carOwner._id.toString()) {
+      return res.status(403).json({ message: 'Access denied: You do not own this car.' });
+    }
+    // End ownership check
+
     await Car.findByIdAndDelete(id);
     return res.status(200).json({ message: 'Successfully deleted' });
   } catch (error) {

@@ -35,11 +35,37 @@ const normalizeBoolean = (value) => {
   return false;
 };
 
+const deriveLabelFromRoute = (value) => {
+  const normalized = String(value || "").trim();
+  if (!normalized || normalized === "#") {
+    return "";
+  }
+
+  const lastSegment = normalized.split("/").filter(Boolean).pop() || normalized;
+  return lastSegment
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const normalizeLabel = ({ label, childLink, route, parentLink, isParentOnly }) => {
+  const explicitLabel = String(label || "").trim();
+  if (explicitLabel) {
+    return explicitLabel;
+  }
+
+  if (isParentOnly) {
+    return String(parentLink || "").trim();
+  }
+
+  return deriveLabelFromRoute(childLink || route);
+};
+
 exports.createSidebarLink = async (req, res) => {
   try {
     const {
       parentLink,
       childLink,
+      label,
       route,
       isParentOnly,
       icon,
@@ -50,6 +76,13 @@ exports.createSidebarLink = async (req, res) => {
     const roles = normalizeRoles(role);
     const resolvedIsParentOnly = normalizeBoolean(isParentOnly);
     const resolvedChildLink = String(childLink || route || "").trim();
+    const resolvedLabel = normalizeLabel({
+      label,
+      childLink: resolvedChildLink,
+      route,
+      parentLink,
+      isParentOnly: resolvedIsParentOnly,
+    });
 
     if (!parentLink || roles.length === 0) {
       return res.status(400).json({
@@ -66,6 +99,7 @@ exports.createSidebarLink = async (req, res) => {
     const created = await SidebarLink.create({
       parentLink,
       childLink: resolvedChildLink || "#",
+      label: resolvedLabel,
       isParentOnly: resolvedIsParentOnly,
       icon,
       status,
@@ -94,6 +128,13 @@ exports.createSidebarLinksBulk = async (req, res) => {
       return {
         ...item,
         childLink: resolvedChildLink || "#",
+        label: normalizeLabel({
+          label: item.label,
+          childLink: resolvedChildLink,
+          route: item.route,
+          parentLink: item.parentLink,
+          isParentOnly: resolvedIsParentOnly,
+        }),
         isParentOnly: resolvedIsParentOnly,
         role: normalizeRoles(item.role),
       };
@@ -143,7 +184,15 @@ exports.getSidebarLinks = async (req, res) => {
 
     return res.status(200).json({
       message: "Sidebar links fetched successfully",
-      data: sidebarLinks,
+      data: sidebarLinks.map((link) => ({
+        ...link.toObject(),
+        label: normalizeLabel({
+          label: link.label,
+          childLink: link.childLink,
+          parentLink: link.parentLink,
+          isParentOnly: link.isParentOnly,
+        }),
+      })),
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -172,6 +221,12 @@ exports.getSidebarLinksGrouped = async (req, res) => {
 
       acc[link.parentLink].push({
         id: link._id,
+        label: normalizeLabel({
+          label: link.label,
+          childLink: link.childLink,
+          parentLink: link.parentLink,
+          isParentOnly: link.isParentOnly,
+        }),
         childLink: link.childLink,
         route: link.childLink,
         isParentOnly: Boolean(link.isParentOnly),
@@ -232,6 +287,20 @@ exports.updateSidebarLink = async (req, res) => {
       if (!payload.childLink && requestedParentOnly === true) {
         payload.childLink = "#";
       }
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(payload, "label")
+      || Object.prototype.hasOwnProperty.call(payload, "childLink")
+      || Object.prototype.hasOwnProperty.call(payload, "isParentOnly")
+      || Object.prototype.hasOwnProperty.call(payload, "parentLink")
+    ) {
+      payload.label = normalizeLabel({
+        label: payload.label,
+        childLink: payload.childLink,
+        parentLink: payload.parentLink,
+        isParentOnly: payload.isParentOnly,
+      });
     }
 
     const updated = await SidebarLink.findByIdAndUpdate(id, payload, {

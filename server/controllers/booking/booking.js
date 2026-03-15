@@ -254,12 +254,20 @@ const createBooking = async (req, res) => {
     // Calculate final price
     const finalPrice = discountedRoomTotal + gstAmount + foodPrice;
 
+    const existingSameHotelBooking = await bookingModel.exists({
+      "user.userId": user.userId,
+      "hotelDetails.hotelId": hotelId,
+      bookingStatus: { $nin: ["Cancelled", "Failed"] },
+    });
+
     const normalizedBookingStatus = String(bookingStatus || "").trim();
     const isPanelOrOfflineBooking =
       String(bookingSource || "").trim().toLowerCase() === "panel"
       || String(pm || "").trim().toLowerCase() === "offline";
-    const resolvedBookingStatus = normalizedBookingStatus
-      || (isPanelOrOfflineBooking ? "Confirmed" : "Pending");
+    const shouldForcePending = Boolean(existingSameHotelBooking) || nights > 3;
+    const resolvedBookingStatus = shouldForcePending
+      ? "Pending"
+      : normalizedBookingStatus || (isPanelOrOfflineBooking ? "Confirmed" : "Pending");
 
     const booking = new bookingModel({
       bookingId,

@@ -16,6 +16,31 @@ const normalizeMode = (mode) => {
   return mode === "custom" ? "custom" : "role_based";
 };
 
+const deriveLabelFromRoute = (value) => {
+  const normalized = String(value || "").trim();
+  if (!normalized || normalized === "#") {
+    return "";
+  }
+
+  const lastSegment = normalized.split("/").filter(Boolean).pop() || normalized;
+  return lastSegment
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const resolveLabel = (link) => {
+  const explicitLabel = String(link?.label || "").trim();
+  if (explicitLabel) {
+    return explicitLabel;
+  }
+
+  if (link?.isParentOnly) {
+    return String(link?.parentLink || "").trim();
+  }
+
+  return deriveLabelFromRoute(link?.childLink);
+};
+
 const groupSidebarLinks = (sidebarLinks) => {
   return sidebarLinks.reduce((acc, link) => {
     if (!acc[link.parentLink]) {
@@ -24,6 +49,7 @@ const groupSidebarLinks = (sidebarLinks) => {
 
     acc[link.parentLink].push({
       id: link._id,
+      label: resolveLabel(link),
       childLink: link.childLink,
       route: link.childLink,
       isParentOnly: Boolean(link.isParentOnly),
@@ -62,7 +88,12 @@ const getEffectiveSidebarLinksForUser = async ({ user, grouped = true }) => {
     (item) => !blockedSet.has(String(item._id)),
   );
 
-  return grouped ? groupSidebarLinks(filteredLinks) : filteredLinks;
+  const normalizedLinks = filteredLinks.map((link) => ({
+    ...link,
+    label: resolveLabel(link),
+  }));
+
+  return grouped ? groupSidebarLinks(normalizedLinks) : normalizedLinks;
 };
 
 module.exports = {
