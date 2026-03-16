@@ -77,6 +77,9 @@ exports.bookCar = async (req, res) => {
       bookedBy,
       customerMobile,
       customerEmail,
+      passengerName,
+      paymentMethod,
+      paymentId,
     } = req.body;
 
     const normalizedUserId = String(userId || "").trim();
@@ -233,19 +236,33 @@ exports.bookCar = async (req, res) => {
         carId: reservedCar._id,
         userId: normalizedUserId,
         seats: bookedSeatIds,
+        totalSeatsBooked: bookedSeatIds.length,
         bookedBy: effectiveBookedBy,
-        price: finalPrice,
-        gstPrice: gstRate,
-        gstAmount,
-        sharingType: reservedCar.sharingType,
-        vehicleType: reservedCar.vehicleType,
+        passengerName: String(passengerName || bookedBy || "").trim(),
         customerMobile,
         customerEmail,
+        // Pricing
+        basePrice: totalSeatPrice,
+        gstRate,
+        gstPrice: gstRate,
+        gstAmount,
+        price: finalPrice,
+        // Payment
+        paymentMethod: paymentMethod || "Online",
+        paymentId: String(paymentId || "").trim(),
+        isPaid: false,
+        // Vehicle
+        sharingType: reservedCar.sharingType,
+        vehicleType: reservedCar.vehicleType,
+        vehicleNumber: reservedCar.vehicleNumber,
+        make: reservedCar.make || "",
+        model: reservedCar.model || "",
+        color: reservedCar.color || "",
+        // Trip
         pickupP: reservedCar.pickupP,
         dropP: reservedCar.dropP,
         pickupD: reservedCar.pickupD,
         dropD: reservedCar.dropD,
-        vehicleNumber: reservedCar.vehicleNumber,
       });
     } catch (bookingError) {
       await releaseSeatsByIds({
