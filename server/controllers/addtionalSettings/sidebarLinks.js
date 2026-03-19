@@ -5,6 +5,11 @@ const {
   normalizeMode,
   getEffectiveSidebarLinksForUser,
 } = require("./sidebarPermissionService");
+const {
+  normalizeRouteList,
+  normalizeRouteMode,
+  getUserRouteAccess,
+} = require("./routePermissionService");
 
 const normalizeRoles = (roleInput) => {
   if (Array.isArray(roleInput)) {
@@ -457,6 +462,123 @@ exports.updateUserSidebarPermissions = async (req, res) => {
         userId: updatedUser._id,
         role: updatedUser.role,
         sidebarPermissions: updatedUser.sidebarPermissions,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getUserRoutePermissions = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await DashboardUser.findById(userId)
+      .select("role routePermissions name email")
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({
+      message: "User route permissions fetched",
+      data: {
+        userId: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        routePermissions: {
+          mode: normalizeRouteMode(user.routePermissions?.mode),
+          allowedRoutes: normalizeRouteList(user.routePermissions?.allowedRoutes),
+          blockedRoutes: normalizeRouteList(user.routePermissions?.blockedRoutes),
+        },
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.updateUserRoutePermissions = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const mode = normalizeRouteMode(req.body.mode);
+    const allowedRoutes = normalizeRouteList(req.body.allowedRoutes || []);
+    const blockedRoutes = normalizeRouteList(req.body.blockedRoutes || []);
+
+    const updatedUser = await DashboardUser.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          "routePermissions.mode": mode,
+          "routePermissions.allowedRoutes": allowedRoutes,
+          "routePermissions.blockedRoutes": blockedRoutes,
+        },
+      },
+      { new: true },
+    )
+      .select("role routePermissions name email")
+      .lean();
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({
+      message: "User route permissions updated",
+      data: {
+        userId: updatedUser._id,
+        role: updatedUser.role,
+        routePermissions: {
+          mode: normalizeRouteMode(updatedUser.routePermissions?.mode),
+          allowedRoutes: normalizeRouteList(updatedUser.routePermissions?.allowedRoutes),
+          blockedRoutes: normalizeRouteList(updatedUser.routePermissions?.blockedRoutes),
+        },
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.checkUserRouteAccess = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const routePath = String(req.body.routePath || req.body.route || "").trim();
+
+    if (!routePath) {
+      return res.status(400).json({
+        message: "routePath is required",
+      });
+    }
+
+    const user = await DashboardUser.findById(userId)
+      .select("role routePermissions name email")
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const access = getUserRouteAccess({
+      user,
+      routePath,
+    });
+
+    return res.status(200).json({
+      message: "Route access evaluated",
+      data: {
+        userId: user._id,
+        role: user.role,
+        routePath,
+        hasAccess: access.hasAccess,
+        matchedRuleType: access.matchedRuleType,
+        matchedPattern: access.matchedPattern,
+        routePermissions: {
+          mode: access.mode,
+          allowedRoutes: access.allowedRoutes,
+          blockedRoutes: access.blockedRoutes,
+        },
       },
     });
   } catch (error) {

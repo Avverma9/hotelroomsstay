@@ -33,11 +33,11 @@ const normalizeVehicles = (vehicles) => {
     seaterType: v.seaterType || "",
     seatConfig: v.seatConfig
       ? {
-          rows: Number(v.seatConfig.rows),
-          left: Number(v.seatConfig.left),
-          right: Number(v.seatConfig.right),
-          aisle: v.seatConfig.aisle !== false,
-        }
+        rows: Number(v.seatConfig.rows),
+        left: Number(v.seatConfig.left),
+        right: Number(v.seatConfig.right),
+        aisle: v.seatConfig.aisle !== false,
+      }
       : undefined,
     seatLayout: Array.isArray(v.seatLayout) ? v.seatLayout : [],
     bookedSeats: Array.isArray(v.bookedSeats) ? v.bookedSeats : [],
@@ -342,6 +342,7 @@ exports.filterTours = async (req, res) => {
       nights, price, starRating,
       fromDate, toDate: toDateQuery,
       startDate, endDate,
+      agencyEmail,
       isCustomizable, hasImages, hasVehicles,
       page = 1,
       limit = 10,
@@ -352,12 +353,12 @@ exports.filterTours = async (req, res) => {
     // ── Sort setup (needed for both paths) ──────────────────
     const allowedSort = new Set(["createdAt", "price", "starRating", "nights", "tourStartDate"]);
     const sortField = allowedSort.has(sortBy) ? sortBy : "createdAt";
-    const sortDir   = String(sortOrder).toLowerCase() === "asc" ? 1 : -1;
-    const sort      = { [sortField]: sortDir };
+    const sortDir = String(sortOrder).toLowerCase() === "asc" ? 1 : -1;
+    const sort = { [sortField]: sortDir };
 
-    const pageNum  = Math.max(1, Number(page) || 1);
+    const pageNum = Math.max(1, Number(page) || 1);
     const limitNum = Math.min(50, Math.max(1, Number(limit) || 10));
-    const skip     = (pageNum - 1) * limitNum;
+    const skip = (pageNum - 1) * limitNum;
 
     /* =========================================================
        SHORT-CIRCUIT: no filters at all → return everything
@@ -367,7 +368,7 @@ exports.filterTours = async (req, res) => {
       themes || amenities ||
       fromWhere || to || visitingPlace || visitingPlaces ||
       minPrice || maxPrice || minNights || maxNights || minRating ||
-      nights || price || starRating ||
+      nights || price || agencyEmail || starRating ||
       fromDate || toDate || startDate || endDate ||
       isCustomizable || hasImages || hasVehicles;
 
@@ -407,8 +408,8 @@ exports.filterTours = async (req, res) => {
     const cityValue = sanitizeKeyword(city || fromCity);
 
     if (country) filter.country = new RegExp(`^${escapeRegexExact(country)}$`, "i");
-    if (state)   filter.state   = new RegExp(`^${escapeRegexExact(state)}$`,   "i");
-    if (cityValue) filter.city  = new RegExp(`^${escapeRegexExact(cityValue)}$`, "i");
+    if (state) filter.state = new RegExp(`^${escapeRegexExact(state)}$`, "i");
+    if (cityValue) filter.city = new RegExp(`^${escapeRegexExact(cityValue)}$`, "i");
 
     if (themes) {
       const list = splitList(themes);
@@ -425,13 +426,13 @@ exports.filterTours = async (req, res) => {
     }
 
     const routeAnd = [];
-    const fromWhereValue   = sanitizeKeyword(fromWhere);
-    const toValue          = sanitizeKeyword(to);
+    const fromWhereValue = sanitizeKeyword(fromWhere);
+    const toValue = sanitizeKeyword(to);
     const singlePlaceValue = sanitizeKeyword(visitingPlace || visitingPlaces);
 
     const pushFromWhereClause = (placeValue) => {
-      const fromCityRegex   = buildLooseContainsRegex(placeValue);
-      const placeRegex      = buildPlaceTokenRegex(placeValue);
+      const fromCityRegex = buildLooseContainsRegex(placeValue);
+      const placeRegex = buildPlaceTokenRegex(placeValue);
       const placeLooseRegex = buildLooseContainsRegex(placeValue);
       const fromWhereOr = [{ city: fromCityRegex }];
       if (placeRegex)
@@ -442,7 +443,7 @@ exports.filterTours = async (req, res) => {
     };
 
     const pushPlaceClause = (placeValue) => {
-      const placeRegex      = buildPlaceTokenRegex(placeValue);
+      const placeRegex = buildPlaceTokenRegex(placeValue);
       const placeLooseRegex = buildLooseContainsRegex(placeValue);
       const placeOr = [];
       if (placeRegex)
@@ -454,7 +455,7 @@ exports.filterTours = async (req, res) => {
     };
 
     if (fromWhereValue) pushFromWhereClause(fromWhereValue);
-    if (toValue)        pushPlaceClause(toValue);
+    if (toValue) pushPlaceClause(toValue);
     if (!fromWhereValue && !toValue && singlePlaceValue) pushPlaceClause(singlePlaceValue);
 
     if (routeAnd.length > 0) {
@@ -484,6 +485,12 @@ exports.filterTours = async (req, res) => {
     if (minR !== null) filter.starRating = { $gte: minR };
     const exactRating = toNum(starRating);
     if (exactRating !== null) filter.starRating = exactRating;
+    if (agencyEmail && String(agencyEmail).trim()) {
+      filter.agencyEmail = new RegExp(
+        `^${escapeRegexExact(String(agencyEmail).trim())}$`,
+        "i"
+      );
+    }
 
     const customizable = toBool(isCustomizable);
     if (customizable !== null) filter.isCustomizable = customizable;
@@ -549,19 +556,19 @@ exports.filterTours = async (req, res) => {
       const routeMatched = candidates.filter((doc) => {
         const fromMatch = fromWhereValue
           ? matchesCityLoose(doc.city, fromWhereValue) ||
-            matchesPlaceLoose(doc.visitngPlaces, fromWhereValue) ||
-            matchesPlaceLoose(doc.visitingPlaces, fromWhereValue)
+          matchesPlaceLoose(doc.visitngPlaces, fromWhereValue) ||
+          matchesPlaceLoose(doc.visitingPlaces, fromWhereValue)
           : true;
         const toMatch = toValue
           ? matchesPlaceLoose(doc.visitngPlaces, toValue) ||
-            matchesPlaceLoose(doc.visitingPlaces, toValue) ||
-            matchesCityLoose(doc.city, toValue)
+          matchesPlaceLoose(doc.visitingPlaces, toValue) ||
+          matchesCityLoose(doc.city, toValue)
           : true;
         const singlePlaceMatch =
           !fromWhereValue && !toValue && singlePlaceValue
             ? matchesPlaceLoose(doc.visitngPlaces, singlePlaceValue) ||
-              matchesPlaceLoose(doc.visitingPlaces, singlePlaceValue) ||
-              matchesCityLoose(doc.city, singlePlaceValue)
+            matchesPlaceLoose(doc.visitingPlaces, singlePlaceValue) ||
+            matchesCityLoose(doc.city, singlePlaceValue)
             : true;
         return fromMatch && toMatch && singlePlaceMatch;
       });
@@ -588,7 +595,7 @@ exports.filterTours = async (req, res) => {
         minPrice: minP, maxPrice: maxP, minNights: minN, maxNights: maxN,
         minRating: minR,
         fromDate: d1 ? d1.toISOString() : null,
-        toDate:   d2 ? d2.toISOString() : null,
+        toDate: d2 ? d2.toISOString() : null,
         sortBy: sortField, sortOrder: sortDir === 1 ? "asc" : "desc",
         usedCityFallback, usedRouteLooseFallback,
       },

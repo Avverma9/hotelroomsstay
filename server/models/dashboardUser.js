@@ -59,6 +59,21 @@ const dashboardUser = new mongoose.Schema(
         default: [],
       },
     },
+    routePermissions: {
+      mode: {
+        type: String,
+        enum: ["allow_all", "custom"],
+        default: "allow_all",
+      },
+      allowedRoutes: {
+        type: [String],
+        default: [],
+      },
+      blockedRoutes: {
+        type: [String],
+        default: [],
+      },
+    },
   },
   { timestamps: true },
 );
