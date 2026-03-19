@@ -5,6 +5,10 @@ const { sendCustomEmail, generateOtp, sendOtpEmail } = require("../nodemailer/no
 const {
   getEffectiveSidebarLinksForUser,
 } = require("./addtionalSettings/sidebarPermissionService");
+const {
+  normalizeRouteList,
+  normalizeRouteMode,
+} = require("./addtionalSettings/routePermissionService");
 require("dotenv").config(); // Load environment variables
 
 const buildDashboardLoginResponse = async (loggedUser) => {
@@ -37,6 +41,11 @@ const buildDashboardLoginResponse = async (loggedUser) => {
       image: loggedUser.images,
     },
     sidebarLinks,
+    routePermissions: {
+      mode: normalizeRouteMode(loggedUser.routePermissions?.mode),
+      allowedRoutes: normalizeRouteList(loggedUser.routePermissions?.allowedRoutes),
+      blockedRoutes: normalizeRouteList(loggedUser.routePermissions?.blockedRoutes),
+    },
   };
 
   return {
@@ -49,6 +58,7 @@ const buildDashboardLoginResponse = async (loggedUser) => {
     loggedUserEmail: loggedUser.email,
     rsToken,
     sidebarLinks,
+    routePermissions: userSession.routePermissions,
     sessionData: userSession,
   };
 };

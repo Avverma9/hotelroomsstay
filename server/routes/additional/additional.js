@@ -16,6 +16,9 @@ const {
   getSidebarLinksForUser,
   getUserSidebarPermissions,
   updateUserSidebarPermissions,
+  getUserRoutePermissions,
+  updateUserRoutePermissions,
+  checkUserRouteAccess,
 } = require('../../controllers/addtionalSettings/sidebarLinks');
 const router = express.Router();
 
@@ -34,6 +37,9 @@ router.delete('/sidebar-links/:id', deleteSidebarLinkById)
 router.get('/sidebar-links/for-user/:userId', getSidebarLinksForUser)
 router.get('/sidebar-permissions/:userId', getUserSidebarPermissions)
 router.put('/sidebar-permissions/:userId', updateUserSidebarPermissions)
+router.get('/route-permissions/:userId', getUserRoutePermissions)
+router.put('/route-permissions/:userId', updateUserRoutePermissions)
+router.post('/route-permissions/:userId/check', checkUserRouteAccess)
 //========================================Bed list=============================
 router.post("/add-bed", addBed)
 router.get("/get-bed", getBed)
