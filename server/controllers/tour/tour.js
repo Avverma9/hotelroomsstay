@@ -1,13 +1,12 @@
 const Tour = require("../../models/tour/tour");
+const mongoose = require("mongoose");
 
 /* =========================================================
    HELPERS (INTERNAL ONLY)
 ========================================================= */
 const toTermsMap = (terms) => {
   if (!terms) return undefined;
-
   if (typeof terms === "object" && !Array.isArray(terms)) return terms;
-
   try {
     const parsed = JSON.parse(terms);
     return typeof parsed === "object" ? parsed : undefined;
@@ -18,9 +17,7 @@ const toTermsMap = (terms) => {
 
 const normalizeVehicles = (vehicles) => {
   if (!vehicles) return [];
-
   let parsed = vehicles;
-
   if (typeof vehicles === "string") {
     try {
       parsed = JSON.parse(vehicles);
@@ -28,15 +25,12 @@ const normalizeVehicles = (vehicles) => {
       return [];
     }
   }
-
   if (!Array.isArray(parsed)) return [];
-
   return parsed.map((v) => ({
     name: v.name,
     vehicleNumber: v.vehicleNumber || "",
     totalSeats: Number(v.totalSeats),
     seaterType: v.seaterType || "",
-
     seatConfig: v.seatConfig
       ? {
           rows: Number(v.seatConfig.rows),
@@ -45,7 +39,6 @@ const normalizeVehicles = (vehicles) => {
           aisle: v.seatConfig.aisle !== false,
         }
       : undefined,
-
     seatLayout: Array.isArray(v.seatLayout) ? v.seatLayout : [],
     bookedSeats: Array.isArray(v.bookedSeats) ? v.bookedSeats : [],
     pricePerSeat: Number(v.pricePerSeat || 0),
@@ -65,6 +58,95 @@ const parseArrayField = (value) => {
   return [];
 };
 
+const toNum = (v) => {
+  if (v === undefined || v === null) return null;
+  const raw = String(v).trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+};
+
+const toBool = (v) => {
+  if (v === undefined) return null;
+  const s = String(v).toLowerCase().trim();
+  if (["true", "1", "yes"].includes(s)) return true;
+  if (["false", "0", "no"].includes(s)) return false;
+  return null;
+};
+
+const toDate = (v) => {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isFinite(d.getTime()) ? d : null;
+};
+
+const splitList = (v) =>
+  String(v || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+const escapeRegex = (value) =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const escapeRegexExact = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const normalizeSpace = (s) => String(s || "").trim().replace(/\s+/g, " ");
+
+const sanitizeKeyword = (v) => {
+  const normalized = normalizeSpace(v);
+  if (!normalized) return "";
+  const lower = normalized.toLowerCase();
+  if (["null", "undefined"].includes(lower)) return "";
+  return normalized;
+};
+
+const buildPlaceTokenRegex = (place) => {
+  const normalized = normalizeSpace(place);
+  if (!normalized) return null;
+  const escaped = escapeRegexExact(normalized).replace(/\s+/g, "\\s+");
+  const pattern = `(?:^|[|,])\\s*(?:\\d+\\s*[Nn]\\s*)?${escaped}\\s*(?=[|,]|$)`;
+  return new RegExp(pattern, "i");
+};
+
+const buildLooseContainsRegex = (value) => {
+  const normalized = normalizeSpace(value);
+  if (!normalized) return null;
+  const escaped = escapeRegexExact(normalized).replace(/\s+/g, "\\s*");
+  return new RegExp(escaped, "i");
+};
+
+const normalizeMatchText = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/\d+\s*[Nn]\s*/g, " ")
+    .replace(/[^a-z0-9\u0900-\u097f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const splitPlaces = (rawPlaces) =>
+  String(rawPlaces || "")
+    .split(/[|,]/g)
+    .map((part) => normalizeMatchText(part))
+    .filter(Boolean);
+
+const matchesCityLoose = (cityName, keyword) => {
+  const cityNorm = normalizeMatchText(cityName);
+  const keywordNorm = normalizeMatchText(keyword);
+  if (!cityNorm || !keywordNorm) return false;
+  return cityNorm.includes(keywordNorm) || keywordNorm.includes(cityNorm);
+};
+
+const matchesPlaceLoose = (rawPlaces, keyword) => {
+  const keywordNorm = normalizeMatchText(keyword);
+  if (!keywordNorm) return false;
+  const rawNorm = normalizeMatchText(rawPlaces);
+  if (rawNorm.includes(keywordNorm)) return true;
+  const tokens = splitPlaces(rawPlaces);
+  return tokens.some(
+    (token) => token.includes(keywordNorm) || keywordNorm.includes(token)
+  );
+};
+
 /* =========================================================
    CREATE TOUR
 ========================================================= */
@@ -75,7 +157,6 @@ exports.createTour = async (req, res) => {
       : [];
 
     const body = { ...req.body };
-
     const termsMap = toTermsMap(body.termsAndConditions);
     if (termsMap) body.termsAndConditions = termsMap;
 
@@ -86,7 +167,6 @@ exports.createTour = async (req, res) => {
     body.dayWise = parseArrayField(body.dayWise);
 
     const created = await Tour.create({ ...body, images });
-
     return res.status(201).json({
       success: true,
       message: "Tour created successfully",
@@ -106,10 +186,8 @@ exports.createTour = async (req, res) => {
 ========================================================= */
 exports.updateTour = async (req, res) => {
   const { id } = req.params;
-
   try {
     const body = { ...req.body };
-
     const termsMap = toTermsMap(body.termsAndConditions);
     if (termsMap) body.termsAndConditions = termsMap;
 
@@ -142,7 +220,6 @@ exports.updateTour = async (req, res) => {
 ========================================================= */
 exports.changeTourImage = async (req, res) => {
   const { id } = req.params;
-
   try {
     const images = Array.isArray(req.files)
       ? req.files.map((f) => f.location)
@@ -159,17 +236,13 @@ exports.changeTourImage = async (req, res) => {
 
     return res.json({ success: true, data: updated });
   } catch {
-    return res.status(500).json({
-      success: false,
-      message: "Image update failed",
-    });
+    return res.status(500).json({ success: false, message: "Image update failed" });
   }
 };
 
 exports.deleteTourImage = async (req, res) => {
   const { id } = req.params;
   const { index } = req.body;
-
   try {
     const tour = await Tour.findById(id);
     if (!tour)
@@ -182,312 +255,214 @@ exports.deleteTourImage = async (req, res) => {
     const removed = tour.images.splice(idx, 1);
     await tour.save();
 
-    return res.json({
-      success: true,
-      removed: removed[0],
-      remaining: tour.images,
-    });
+    return res.json({ success: true, removed: removed[0], remaining: tour.images });
   } catch {
-    return res.status(500).json({
-      success: false,
-      message: "Delete image failed",
-    });
+    return res.status(500).json({ success: false, message: "Delete image failed" });
   }
 };
 
 /* =========================================================
-   FILTERS & SORTING  (⚠️ ORIGINAL NAMES PRESERVED)
+   GET SINGLE TOUR
 ========================================================= */
-exports.sortByOrder = async (req, res) => {
-  const order = req.query.sort === "desc" ? -1 : 1;
-  const data = await Tour.find({ isAccepted: true }).sort({ price: order });
-  return res.json({ success: true, data });
-};
-
-exports.sortByPrice = async (req, res) => {
-  const { minPrice, maxPrice } = req.query;
-  const q = { isAccepted: true };
-
-  if (minPrice) q.price = { ...q.price, $gte: Number(minPrice) };
-  if (maxPrice) q.price = { ...q.price, $lte: Number(maxPrice) };
-
-  const data = await Tour.find(q);
-  return res.json({ success: true, data });
-};
-
-exports.sortByDuration = async (req, res) => {
-  const { minNights, maxNights } = req.query;
-  const q = { isAccepted: true };
-
-  if (minNights) q.nights = { ...q.nights, $gte: Number(minNights) };
-  if (maxNights) q.nights = { ...q.nights, $lte: Number(maxNights) };
-
-  const data = await Tour.find(q);
-  return res.json({ success: true, data });
-};
-
-/** ⚠️ ORIGINAL NAME MAINTAINED */
-exports.sortBythemes = async (req, res) => {
-  const { themes } = req.query;
-  const data = await Tour.find({ themes, isAccepted: true });
-  return res.json({ success: true, data });
-};
-
-/* =========================================================
-   FETCH TOURS
-========================================================= */
-exports.getTourList = async (_, res) => {
-  const data = await Tour.find({ isAccepted: true }).sort({ createdAt: -1 });
-  return res.json({ success: true, data });
-};
-
 exports.getTourById = async (req, res) => {
   const data = await Tour.findById(req.params.id);
   if (!data)
     return res.status(404).json({ success: false, message: "Tour not found" });
   return res.json({ success: true, data });
 };
-// controllers/tour.controller.js
-const mongoose = require("mongoose");
 
-const toNum = (v) => {
-  if (v === undefined || v === null) return null;
-  const raw = String(v).trim();
-  if (!raw) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
+/* =========================================================
+   ADMIN – PENDING TOUR REQUESTS
+========================================================= */
+exports.getRequestedTour = async (_, res) => {
+  const data = await Tour.find({ isAccepted: false }).sort({ createdAt: -1 });
+  return res.json({ success: true, data });
 };
 
-const toBool = (v) => {
-  if (v === undefined) return null;
-  const s = String(v).toLowerCase().trim();
-  if (["true", "1", "yes"].includes(s)) return true;
-  if (["false", "0", "no"].includes(s)) return false;
-  return null;
+/* =========================================================
+   OWNER TOURS
+========================================================= */
+exports.getTourByOwner = async (req, res) => {
+  const { email } = req.query;
+  const data = await Tour.find({
+    agencyEmail: { $regex: email, $options: "i" },
+    isAccepted: true,
+  }).sort({ createdAt: -1 });
+  return res.json({ success: true, data });
 };
 
-const toDate = (v) => {
-  if (!v) return null;
-  const d = new Date(v);
-  return Number.isFinite(d.getTime()) ? d : null;
+/* =========================================================
+   UTILITY – CITIES & VISITING PLACES
+========================================================= */
+exports.getAllCities = async (_, res) => {
+  const docs = await Tour.find({ isAccepted: true }).select("city");
+  const cities = [...new Set(docs.map((d) => d.city).filter(Boolean))];
+  return res.json({ success: true, data: cities });
 };
 
-const splitList = (v) =>
-  String(v || "")
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
-
-const escapeRegexExact = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const normalizeSpace = (s) => String(s || "").trim().replace(/\s+/g, " ");
-const sanitizeKeyword = (v) => {
-  const normalized = normalizeSpace(v);
-  if (!normalized) return "";
-  const lower = normalized.toLowerCase();
-  if (["null", "undefined"].includes(lower)) return "";
-  return normalized;
+exports.getAllVisitingPlaces = async (_, res) => {
+  try {
+    const docs = await Tour.find({ isAccepted: true }).select("visitngPlaces");
+    const set = new Set();
+    docs.forEach((d) => {
+      const raw = d.visitngPlaces;
+      if (!raw || typeof raw !== "string") return;
+      raw
+        .split(/[|,]/g)
+        .map((p) => p.replace(/\d+\s*[Nn]\s*/g, "").trim())
+        .filter(Boolean)
+        .forEach((p) => set.add(p));
+    });
+    return res.json({ success: true, data: Array.from(set) });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch visiting places",
+      error: error.message,
+    });
+  }
 };
 
-// Match a place token in comma/pipe separated strings, with optional prefix like "1N "
-const buildPlaceTokenRegex = (place) => {
-  const normalized = normalizeSpace(place);
-  if (!normalized) return null;
-
-  const escaped = escapeRegexExact(normalized).replace(/\s+/g, "\\s+");
-  const pattern = `(?:^|[|,])\\s*(?:\\d+\\s*[Nn]\\s*)?${escaped}\\s*(?=[|,]|$)`;
-  return new RegExp(pattern, "i");
-};
-
-const buildLooseContainsRegex = (value) => {
-  const normalized = normalizeSpace(value);
-  if (!normalized) return null;
-
-  const escaped = escapeRegexExact(normalized).replace(/\s+/g, "\\s*");
-  return new RegExp(escaped, "i");
-};
-
-const normalizeMatchText = (value) =>
-  String(value || "")
-    .toLowerCase()
-    .replace(/\d+\s*[Nn]\s*/g, " ")
-    .replace(/[^a-z0-9\u0900-\u097f]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const splitPlaces = (rawPlaces) =>
-  String(rawPlaces || "")
-    .split(/[|,]/g)
-    .map((part) => normalizeMatchText(part))
-    .filter(Boolean);
-
-const matchesCityLoose = (cityName, keyword) => {
-  const cityNorm = normalizeMatchText(cityName);
-  const keywordNorm = normalizeMatchText(keyword);
-  if (!cityNorm || !keywordNorm) return false;
-  return cityNorm.includes(keywordNorm) || keywordNorm.includes(cityNorm);
-};
-
-const matchesPlaceLoose = (rawPlaces, keyword) => {
-  const keywordNorm = normalizeMatchText(keyword);
-  if (!keywordNorm) return false;
-
-  const rawNorm = normalizeMatchText(rawPlaces);
-  if (rawNorm.includes(keywordNorm)) return true;
-
-  const tokens = splitPlaces(rawPlaces);
-  return tokens.some(
-    (token) => token.includes(keywordNorm) || keywordNorm.includes(token),
-  );
-};
-
+/* =========================================================
+   MAIN FILTER / SEARCH  (replaces: sortByOrder, sortByPrice,
+   sortByDuration, sortBythemes, getTourList, getByCity, searchTours)
+========================================================= */
 exports.filterTours = async (req, res) => {
   try {
     const {
-      // text search
       q,
-
-      // location
-      country,
-      state,
-      city,
+      country, state, city,
       from: fromCity,
-
-      // themes & amenities
-      themes, // comma separated: "Culture,Heritage"
-      amenities, // comma separated: "Hotel Stay,Breakfast"
-      amenitiesMode, // "all" (default) | "any"
-      fromWhere, // match token in visitngPlaces (supports optional "1N " prefix)
-      to, // match token in visitngPlaces (supports optional "1N " prefix)
-      visitingPlace, // single place filter alias
-      visitingPlaces, // single place filter alias
-
-      // numeric filters
-      minPrice,
-      maxPrice,
-      minNights,
-      maxNights,
-      minRating, // starRating >= minRating
-      nights, // exact nights (optional)
-      price, // exact price (optional)
-      starRating, // exact starRating (optional)
-
-      // date filters (data me from/to/tourStartDate)
-      fromDate, // e.g. 2025-02-20
-      toDate: toDateQuery, // e.g. 2025-02-24
-      startDate, // alias
-      endDate,   // alias
-
-      // flags
-      isCustomizable,
-      hasImages,
-      hasVehicles,
-
-      // pagination/sort
+      themes, amenities, amenitiesMode,
+      fromWhere, to,
+      visitingPlace, visitingPlaces,
+      minPrice, maxPrice,
+      minNights, maxNights,
+      minRating,
+      nights, price, starRating,
+      fromDate, toDate: toDateQuery,
+      startDate, endDate,
+      isCustomizable, hasImages, hasVehicles,
       page = 1,
       limit = 10,
-      sortBy = "createdAt", // createdAt | price | starRating | nights | tourStartDate
-      sortOrder = "desc",   // asc | desc
+      sortBy = "createdAt",
+      sortOrder = "desc",
     } = req.query;
 
+    // ── Sort setup (needed for both paths) ──────────────────
+    const allowedSort = new Set(["createdAt", "price", "starRating", "nights", "tourStartDate"]);
+    const sortField = allowedSort.has(sortBy) ? sortBy : "createdAt";
+    const sortDir   = String(sortOrder).toLowerCase() === "asc" ? 1 : -1;
+    const sort      = { [sortField]: sortDir };
+
+    const pageNum  = Math.max(1, Number(page) || 1);
+    const limitNum = Math.min(50, Math.max(1, Number(limit) || 10));
+    const skip     = (pageNum - 1) * limitNum;
+
+    /* =========================================================
+       SHORT-CIRCUIT: no filters at all → return everything
+    ========================================================= */
+    const hasAnyFilter =
+      q || country || state || city || fromCity ||
+      themes || amenities ||
+      fromWhere || to || visitingPlace || visitingPlaces ||
+      minPrice || maxPrice || minNights || maxNights || minRating ||
+      nights || price || starRating ||
+      fromDate || toDate || startDate || endDate ||
+      isCustomizable || hasImages || hasVehicles;
+
+    if (!hasAnyFilter) {
+      const [docs, total] = await Promise.all([
+        Tour.find({ isAccepted: true }).sort(sort).skip(skip).limit(limitNum).lean(),
+        Tour.countDocuments({ isAccepted: true }),
+      ]);
+
+      return res.json({
+        success: true,
+        data: docs,
+        pagination: {
+          page: pageNum, limit: limitNum, total,
+          hasNextPage: skip + docs.length < total,
+          hasPrevPage: pageNum > 1,
+        },
+        applied: {
+          q: "", country: "", state: "", city: "", from: "",
+          themes: "", amenities: "", amenitiesMode: "all",
+          fromWhere: "", to: "", visitingPlace: "",
+          minPrice: null, maxPrice: null,
+          minNights: null, maxNights: null, minRating: null,
+          fromDate: null, toDate: null,
+          sortBy: sortField, sortOrder: sortDir === 1 ? "asc" : "desc",
+          usedCityFallback: false, usedRouteLooseFallback: false,
+        },
+      });
+    }
+
+    /* =========================================================
+       FILTER BUILD (only runs when at least one param exists)
+    ========================================================= */
     const filter = { isAccepted: true };
     const andClauses = [];
     const routeClauses = [];
     const cityValue = sanitizeKeyword(city || fromCity);
 
-    // --- location exact (case-insensitive safe) ---
     if (country) filter.country = new RegExp(`^${escapeRegexExact(country)}$`, "i");
-    if (state) filter.state = new RegExp(`^${escapeRegexExact(state)}$`, "i");
-    if (cityValue) filter.city = new RegExp(`^${escapeRegexExact(cityValue)}$`, "i");
+    if (state)   filter.state   = new RegExp(`^${escapeRegexExact(state)}$`,   "i");
+    if (cityValue) filter.city  = new RegExp(`^${escapeRegexExact(cityValue)}$`, "i");
 
-    // --- themes: match ANY theme token inside string like "Culture, Heritage, Group" OR "धार्मिक यात्रा" ---
     if (themes) {
       const list = splitList(themes);
-      if (list.length) {
-        // themes is a string in your data, so regex OR works best
+      if (list.length)
         filter.themes = { $in: list.map((t) => new RegExp(escapeRegexExact(t), "i")) };
-      }
     }
 
-    // --- amenities: data me amenities array hai (most), kabhi string bhi ho sakta ---
     if (amenities) {
       const list = splitList(amenities);
       if (list.length) {
         const mode = String(amenitiesMode || "all").toLowerCase().trim();
-        if (mode === "any") {
-          filter.amenities = { $in: list };
-        } else {
-          // default ALL
-          filter.amenities = { $all: list };
-        }
+        filter.amenities = mode === "any" ? { $in: list } : { $all: list };
       }
     }
 
-    // --- route keywords inside visitngPlaces string ---
     const routeAnd = [];
-    const fromWhereValue = sanitizeKeyword(fromWhere);
-    const toValue = sanitizeKeyword(to);
+    const fromWhereValue   = sanitizeKeyword(fromWhere);
+    const toValue          = sanitizeKeyword(to);
     const singlePlaceValue = sanitizeKeyword(visitingPlace || visitingPlaces);
 
     const pushFromWhereClause = (placeValue) => {
-      const fromCityRegex = buildLooseContainsRegex(placeValue);
-      const placeRegex = buildPlaceTokenRegex(placeValue);
+      const fromCityRegex   = buildLooseContainsRegex(placeValue);
+      const placeRegex      = buildPlaceTokenRegex(placeValue);
       const placeLooseRegex = buildLooseContainsRegex(placeValue);
       const fromWhereOr = [{ city: fromCityRegex }];
-
-      if (placeRegex) {
-        fromWhereOr.push(
-          { visitngPlaces: placeRegex },
-          { visitingPlaces: placeRegex },
-        );
-      }
-
-      if (placeLooseRegex) {
-        fromWhereOr.push(
-          { visitngPlaces: placeLooseRegex },
-          { visitingPlaces: placeLooseRegex },
-        );
-      }
-
+      if (placeRegex)
+        fromWhereOr.push({ visitngPlaces: placeRegex }, { visitingPlaces: placeRegex });
+      if (placeLooseRegex)
+        fromWhereOr.push({ visitngPlaces: placeLooseRegex }, { visitingPlaces: placeLooseRegex });
       routeAnd.push({ $or: fromWhereOr });
     };
 
     const pushPlaceClause = (placeValue) => {
-      const placeRegex = buildPlaceTokenRegex(placeValue);
+      const placeRegex      = buildPlaceTokenRegex(placeValue);
       const placeLooseRegex = buildLooseContainsRegex(placeValue);
       const placeOr = [];
-
-      if (placeRegex) {
-        placeOr.push(
-          { visitngPlaces: placeRegex },
-          { visitingPlaces: placeRegex },
-        );
-      }
-
-      if (placeLooseRegex) {
-        placeOr.push(
-          { visitngPlaces: placeLooseRegex },
-          { visitingPlaces: placeLooseRegex },
-        );
-      }
-
+      if (placeRegex)
+        placeOr.push({ visitngPlaces: placeRegex }, { visitingPlaces: placeRegex });
+      if (placeLooseRegex)
+        placeOr.push({ visitngPlaces: placeLooseRegex }, { visitingPlaces: placeLooseRegex });
       if (placeOr.length === 0) return;
       routeAnd.push({ $or: placeOr });
     };
 
     if (fromWhereValue) pushFromWhereClause(fromWhereValue);
-    if (toValue) pushPlaceClause(toValue);
-    if (!fromWhereValue && !toValue && singlePlaceValue) {
-      pushPlaceClause(singlePlaceValue);
-    }
+    if (toValue)        pushPlaceClause(toValue);
+    if (!fromWhereValue && !toValue && singlePlaceValue) pushPlaceClause(singlePlaceValue);
 
     if (routeAnd.length > 0) {
       routeClauses.push(...routeAnd);
       andClauses.push(...routeAnd);
     }
 
-    // --- numeric ranges ---
-    const minP = toNum(minPrice);
-    const maxP = toNum(maxPrice);
+    const minP = toNum(minPrice), maxP = toNum(maxPrice);
     if (minP !== null || maxP !== null) {
       filter.price = {};
       if (minP !== null) filter.price.$gte = minP;
@@ -496,8 +471,7 @@ exports.filterTours = async (req, res) => {
     const exactPrice = toNum(price);
     if (exactPrice !== null) filter.price = exactPrice;
 
-    const minN = toNum(minNights);
-    const maxN = toNum(maxNights);
+    const minN = toNum(minNights), maxN = toNum(maxNights);
     if (minN !== null || maxN !== null) {
       filter.nights = {};
       if (minN !== null) filter.nights.$gte = minN;
@@ -508,80 +482,39 @@ exports.filterTours = async (req, res) => {
 
     const minR = toNum(minRating);
     if (minR !== null) filter.starRating = { $gte: minR };
-
     const exactRating = toNum(starRating);
     if (exactRating !== null) filter.starRating = exactRating;
 
-    // --- flags ---
     const customizable = toBool(isCustomizable);
     if (customizable !== null) filter.isCustomizable = customizable;
 
     const imgFlag = toBool(hasImages);
-    if (imgFlag !== null) {
+    if (imgFlag !== null)
       filter.images = imgFlag ? { $exists: true, $ne: [] } : { $in: [[], null] };
-    }
 
     const vehFlag = toBool(hasVehicles);
-    if (vehFlag !== null) {
+    if (vehFlag !== null)
       filter.vehicles = vehFlag ? { $exists: true, $ne: [] } : { $in: [[], null] };
-    }
 
-    // --- date range ---
     const d1 = toDate(fromDate || startDate);
     const d2 = toDate(toDateQuery || endDate);
-
     if (d1 || d2) {
-      // your docs may have `from`, `to`, or `tourStartDate`
-      // We’ll match if any of these fall in range.
       const range = {};
       if (d1) range.$gte = d1;
       if (d2) range.$lte = d2;
-
-      filter.$or = [
-        { from: range },          // if from is Date
-        { to: range },            // if to is Date
-        { tourStartDate: range }, // if tourStartDate is Date/String(Date)
-      ];
+      filter.$or = [{ from: range }, { to: range }, { tourStartDate: range }];
     }
 
-    // --- search (agency/city/places/themes) ---
     if (q && String(q).trim()) {
-      const needle = escapeRegex(String(q).trim());
-      const rx = new RegExp(needle, "i");
-
-      // combine with existing $or if already present (date-range)
+      const rx = new RegExp(escapeRegex(String(q).trim()), "i");
       const searchOr = [
-        { travelAgencyName: rx },
-        { city: rx },
-        { state: rx },
-        { country: rx },
-        { visitngPlaces: rx },
-        { visitingPlaces: rx },
-        { themes: rx },
-        { overview: rx },
+        { travelAgencyName: rx }, { city: rx }, { state: rx }, { country: rx },
+        { visitngPlaces: rx }, { visitingPlaces: rx }, { themes: rx }, { overview: rx },
       ];
-
-      if (filter.$or) {
-        andClauses.push({ $or: searchOr });
-      } else {
-        filter.$or = searchOr;
-      }
+      filter.$or ? andClauses.push({ $or: searchOr }) : (filter.$or = searchOr);
     }
 
-    if (andClauses.length > 0) {
-      filter.$and = andClauses;
-    }
-
-    // --- sorting ---
-    const allowedSort = new Set(["createdAt", "price", "starRating", "nights", "tourStartDate"]);
-    const sortField = allowedSort.has(sortBy) ? sortBy : "createdAt";
-    const sortDir = String(sortOrder).toLowerCase() === "asc" ? 1 : -1;
-    const sort = { [sortField]: sortDir };
-
-    // --- pagination ---
-    const pageNum = Math.max(1, Number(page) || 1);
-    const limitNum = Math.min(50, Math.max(1, Number(limit) || 10));
-    const skip = (pageNum - 1) * limitNum;
+    if (andClauses.length > 0) filter.$and = andClauses;
 
     const runQuery = async (queryFilter) => {
       const [docs, count] = await Promise.all([
@@ -593,19 +526,12 @@ exports.filterTours = async (req, res) => {
 
     const buildFilterWithoutRouteClauses = () => {
       const cleanedFilter = { ...filter };
-
       if (Array.isArray(filter.$and)) {
-        const remainingAnd = filter.$and.filter(
-          (clause) => !routeClauses.includes(clause),
-        );
-
-        if (remainingAnd.length > 0) {
-          cleanedFilter.$and = remainingAnd;
-        } else {
-          delete cleanedFilter.$and;
-        }
+        const remainingAnd = filter.$and.filter((c) => !routeClauses.includes(c));
+        remainingAnd.length > 0
+          ? (cleanedFilter.$and = remainingAnd)
+          : delete cleanedFilter.$and;
       }
-
       return cleanedFilter;
     };
 
@@ -613,46 +539,32 @@ exports.filterTours = async (req, res) => {
     let usedCityFallback = false;
     let usedRouteLooseFallback = false;
 
-    const hasCityFilter = Boolean(cityValue);
-    const shouldFallbackToCityOnly =
-      hasCityFilter && routeClauses.length > 0 && items.length === 0;
-
-    if (shouldFallbackToCityOnly) {
-      const fallbackFilter = buildFilterWithoutRouteClauses();
-      ({ docs: items, count: total } = await runQuery(fallbackFilter));
+    if (cityValue && routeClauses.length > 0 && items.length === 0) {
+      ({ docs: items, count: total } = await runQuery(buildFilterWithoutRouteClauses()));
       usedCityFallback = true;
     }
 
-    const shouldRunLooseRouteFallback =
-      routeClauses.length > 0 && items.length === 0;
-
-    if (shouldRunLooseRouteFallback) {
-      const looseFilter = buildFilterWithoutRouteClauses();
-      const candidates = await Tour.find(looseFilter).sort(sort).lean();
-
+    if (routeClauses.length > 0 && items.length === 0) {
+      const candidates = await Tour.find(buildFilterWithoutRouteClauses()).sort(sort).lean();
       const routeMatched = candidates.filter((doc) => {
         const fromMatch = fromWhereValue
           ? matchesCityLoose(doc.city, fromWhereValue) ||
             matchesPlaceLoose(doc.visitngPlaces, fromWhereValue) ||
             matchesPlaceLoose(doc.visitingPlaces, fromWhereValue)
           : true;
-
         const toMatch = toValue
           ? matchesPlaceLoose(doc.visitngPlaces, toValue) ||
             matchesPlaceLoose(doc.visitingPlaces, toValue) ||
             matchesCityLoose(doc.city, toValue)
           : true;
-
         const singlePlaceMatch =
           !fromWhereValue && !toValue && singlePlaceValue
             ? matchesPlaceLoose(doc.visitngPlaces, singlePlaceValue) ||
               matchesPlaceLoose(doc.visitingPlaces, singlePlaceValue) ||
               matchesCityLoose(doc.city, singlePlaceValue)
             : true;
-
         return fromMatch && toMatch && singlePlaceMatch;
       });
-
       total = routeMatched.length;
       items = routeMatched.slice(skip, skip + limitNum);
       usedRouteLooseFallback = true;
@@ -662,148 +574,27 @@ exports.filterTours = async (req, res) => {
       success: true,
       data: items,
       pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
+        page: pageNum, limit: limitNum, total,
         hasNextPage: skip + items.length < total,
         hasPrevPage: pageNum > 1,
       },
       applied: {
-        q: q || "",
-        country: country || "",
-        state: state || "",
-        city: cityValue || "",
-        from: sanitizeKeyword(fromCity),
-        themes: themes || "",
-        amenities: amenities || "",
+        q: q || "", country: country || "", state: state || "",
+        city: cityValue || "", from: sanitizeKeyword(fromCity),
+        themes: themes || "", amenities: amenities || "",
         amenitiesMode: amenitiesMode || "all",
-        fromWhere: sanitizeKeyword(fromWhere),
-        to: sanitizeKeyword(to),
+        fromWhere: sanitizeKeyword(fromWhere), to: sanitizeKeyword(to),
         visitingPlace: sanitizeKeyword(visitingPlace || visitingPlaces),
-        minPrice: minP,
-        maxPrice: maxP,
-        minNights: minN,
-        maxNights: maxN,
+        minPrice: minP, maxPrice: maxP, minNights: minN, maxNights: maxN,
         minRating: minR,
         fromDate: d1 ? d1.toISOString() : null,
-        toDate: d2 ? d2.toISOString() : null,
-        sortBy: sortField,
-        sortOrder: sortDir === 1 ? "asc" : "desc",
-        usedCityFallback,
-        usedRouteLooseFallback,
+        toDate:   d2 ? d2.toISOString() : null,
+        sortBy: sortField, sortOrder: sortDir === 1 ? "asc" : "desc",
+        usedCityFallback, usedRouteLooseFallback,
       },
     });
+
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: err?.message || "Server error",
-    });
-  }
-};
-
-exports.getTourByOwner = async (req, res) => {
-  const { email } = req.query;
-  const data = await Tour.find({
-    agencyEmail: { $regex: email, $options: "i" },
-    isAccepted: true,
-  }).sort({ createdAt: -1 });
-
-  return res.json({ success: true, data });
-};
-
-exports.getByCity = async (req, res) => {
-  const q = req.query.city
-    ? { city: { $regex: req.query.city, $options: "i" }, isAccepted: true }
-    : { isAccepted: true };
-
-  const data = await Tour.find(q).sort({ createdAt: -1 });
-  return res.json({ success: true, data });
-};
-
-exports.getAllCities = async (_, res) => {
-  const docs = await Tour.find({ isAccepted: true }).select("city");
-  const cities = [...new Set(docs.map((d) => d.city).filter(Boolean))];
-  return res.json({ success: true, data: cities });
-};
-
-exports.getRequestedTour = async (_, res) => {
-  const data = await Tour.find({ isAccepted: false }).sort({ createdAt: -1 });
-  return res.json({ success: true, data });
-};
-
-const escapeRegex = (value) =>
-  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const normalizeQuery = (value) =>
-  String(value || "")
-    .trim()
-    .replace(/\s+/g, " "); // multiple spaces -> single
-
-const buildLooseSpaceRegex = (value) => {
-  const normalized = normalizeQuery(value);
-  if (!normalized) return null;
-
-  // escape special chars first, then make spaces flexible
-  const escaped = escapeRegex(normalized);
-  const pattern = escaped.replace(/\s+/g, "\\s*"); // "new york" => "new\\s*york"
-  return new RegExp(pattern, "i");
-};
-
-exports.searchTours = async (req, res) => {
-  try {
-    const { from, to } = req.query;
-
-    const queryObj = { isAccepted: true };
-    const andFilters = [];
-
-    const fromRegex = buildLooseSpaceRegex(from);
-    if (fromRegex) {
-      andFilters.push({ visitngPlaces: { $regex: fromRegex } });
-    }
-
-    const toRegex = buildLooseSpaceRegex(to);
-    if (toRegex) {
-      andFilters.push({ visitngPlaces: { $regex: toRegex } });
-    }
-
-    if (andFilters.length) queryObj.$and = andFilters;
-
-    const data = await Tour.find(queryObj).sort({ createdAt: -1 });
-    return res.json({ success: true, data });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to search tours",
-      error: error.message,
-    });
-  }
-};
-
-/* =========================================================
-   VISITING PLACES LIST
-========================================================= */
-exports.getAllVisitingPlaces = async (_, res) => {
-  try {
-    const docs = await Tour.find({ isAccepted: true }).select("visitngPlaces");
-    const set = new Set();
-
-    docs.forEach((d) => {
-      const raw = d.visitngPlaces;
-      if (!raw || typeof raw !== "string") return;
-
-      raw
-        .split(/[|,]/g)
-        .map((p) => p.replace(/\d+\s*[Nn]\s*/g, "").trim())
-        .filter(Boolean)
-        .forEach((p) => set.add(p));
-    });
-
-    return res.json({ success: true, data: Array.from(set) });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch visiting places",
-      error: error.message,
-    });
+    return res.status(500).json({ success: false, message: err?.message || "Server error" });
   }
 };
