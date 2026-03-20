@@ -89,6 +89,56 @@ const splitList = (v) =>
 const escapeRegex = (value) =>
   String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/* =========================================================
+   ROUTE & STATUS HELPERS
+========================================================= */
+/**
+ * Converts visitingPlaces string like "1N Patna | 2N Delhi | 3N sasaram"
+ * into a route string like "Patna->Delhi->Sasaram"
+ */
+const buildRouteFromVisitingPlaces = (raw) => {
+  if (!raw || typeof raw !== "string") return "";
+  return raw
+    .split(/[|,]/g)
+    .map((p) => p.replace(/\d+\s*[Nn]\s*/g, "").trim())
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join("->");
+};
+
+/**
+ * Computes runningStatus based on tourStartDate and tourEndDate vs today.
+ * - upcoming : startDate is in the future
+ * - ongoing  : today falls between start and end (inclusive)
+ * - completed: endDate is in the past
+ */
+const computeRunningStatus = (tourStartDate, tourEndDate) => {
+  if (!tourStartDate) return undefined;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const start = new Date(tourStartDate);
+  const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+
+  if (!tourEndDate) {
+    return startDay > today ? "upcoming" : "completed";
+  }
+  const end = new Date(tourEndDate);
+  const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+
+  if (today < startDay) return "upcoming";
+  if (today > endDay) return "completed";
+  return "ongoing";
+};
+
+/** Adds runningStatus to a mongoose doc or plain lean object */
+const withStatus = (doc) => {
+  if (!doc) return doc;
+  const plain = doc.toObject ? doc.toObject() : { ...doc };
+  const status = computeRunningStatus(plain.tourStartDate, plain.tourEndDate);
+  if (status !== undefined) plain.runningStatus = status;
+  return plain;
+};
+
 const escapeRegexExact = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const normalizeSpace = (s) => String(s || "").trim().replace(/\s+/g, " ");
 
@@ -166,11 +216,17 @@ exports.createTour = async (req, res) => {
     body.exclusion = parseArrayField(body.exclusion);
     body.dayWise = parseArrayField(body.dayWise);
 
+    // Auto-generate route from visitingPlaces if not provided
+    const rawPlaces = body.visitngPlaces || body.visitingPlaces;
+    if (rawPlaces && !body.route) {
+      body.route = buildRouteFromVisitingPlaces(rawPlaces);
+    }
+
     const created = await Tour.create({ ...body, images });
     return res.status(201).json({
       success: true,
       message: "Tour created successfully",
-      data: created,
+      data: withStatus(created),
     });
   } catch (error) {
     return res.status(500).json({
@@ -197,6 +253,12 @@ exports.updateTour = async (req, res) => {
       if (body[f]) body[f] = parseArrayField(body[f]);
     });
 
+    // Re-generate route if visitingPlaces is being updated
+    const rawPlaces = body.visitngPlaces || body.visitingPlaces;
+    if (rawPlaces) {
+      body.route = buildRouteFromVisitingPlaces(rawPlaces);
+    }
+
     const updated = await Tour.findByIdAndUpdate(id, body, {
       new: true,
       runValidators: true,
@@ -205,7 +267,7 @@ exports.updateTour = async (req, res) => {
     if (!updated)
       return res.status(404).json({ success: false, message: "Tour not found" });
 
-    return res.json({ success: true, data: updated });
+    return res.json({ success: true, data: withStatus(updated) });
   } catch (error) {
     return res.status(500).json({
       success: false,
@@ -268,15 +330,15 @@ exports.getTourById = async (req, res) => {
   const data = await Tour.findById(req.params.id);
   if (!data)
     return res.status(404).json({ success: false, message: "Tour not found" });
-  return res.json({ success: true, data });
+  return res.json({ success: true, data: withStatus(data) });
 };
 
 /* =========================================================
    ADMIN – PENDING TOUR REQUESTS
 ========================================================= */
 exports.getRequestedTour = async (_, res) => {
-  const data = await Tour.find({ isAccepted: false }).sort({ createdAt: -1 });
-  return res.json({ success: true, data });
+  const docs = await Tour.find({ isAccepted: false }).sort({ createdAt: -1 });
+  return res.json({ success: true, data: docs.map(withStatus) });
 };
 
 /* =========================================================
@@ -284,11 +346,11 @@ exports.getRequestedTour = async (_, res) => {
 ========================================================= */
 exports.getTourByOwner = async (req, res) => {
   const { email } = req.query;
-  const data = await Tour.find({
+  const docs = await Tour.find({
     agencyEmail: { $regex: email, $options: "i" },
     isAccepted: true,
   }).sort({ createdAt: -1 });
-  return res.json({ success: true, data });
+  return res.json({ success: true, data: docs.map(withStatus) });
 };
 
 /* =========================================================
@@ -348,6 +410,7 @@ exports.filterTours = async (req, res) => {
       limit = 10,
       sortBy = "createdAt",
       sortOrder = "desc",
+      runningStatus,
     } = req.query;
 
     // ── Sort setup (needed for both paths) ──────────────────
@@ -370,7 +433,7 @@ exports.filterTours = async (req, res) => {
       minPrice || maxPrice || minNights || maxNights || minRating ||
       nights || price || agencyEmail || starRating ||
       fromDate || toDate || startDate || endDate ||
-      isCustomizable || hasImages || hasVehicles;
+      isCustomizable || hasImages || hasVehicles || runningStatus;
 
     if (!hasAnyFilter) {
       const [docs, total] = await Promise.all([
@@ -380,7 +443,7 @@ exports.filterTours = async (req, res) => {
 
       return res.json({
         success: true,
-        data: docs,
+        data: docs.map(withStatus),
         pagination: {
           page: pageNum, limit: limitNum, total,
           hasNextPage: skip + docs.length < total,
@@ -521,6 +584,21 @@ exports.filterTours = async (req, res) => {
       filter.$or ? andClauses.push({ $or: searchOr }) : (filter.$or = searchOr);
     }
 
+    // runningStatus filter – uses stored tourStartDate / tourEndDate
+    if (runningStatus) {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const status = String(runningStatus).toLowerCase().trim();
+      if (status === "upcoming") {
+        filter.tourStartDate = { $gt: today };
+      } else if (status === "ongoing") {
+        filter.tourStartDate = { $lte: today };
+        filter.tourEndDate = { $gte: today };
+      } else if (status === "completed") {
+        filter.tourEndDate = { $lt: today };
+      }
+    }
+
     if (andClauses.length > 0) filter.$and = andClauses;
 
     const runQuery = async (queryFilter) => {
@@ -579,7 +657,7 @@ exports.filterTours = async (req, res) => {
 
     return res.json({
       success: true,
-      data: items,
+      data: items.map(withStatus),
       pagination: {
         page: pageNum, limit: limitNum, total,
         hasNextPage: skip + items.length < total,
@@ -597,6 +675,7 @@ exports.filterTours = async (req, res) => {
         fromDate: d1 ? d1.toISOString() : null,
         toDate: d2 ? d2.toISOString() : null,
         sortBy: sortField, sortOrder: sortDir === 1 ? "asc" : "desc",
+        runningStatus: runningStatus || null,
         usedCityFallback, usedRouteLooseFallback,
       },
     });
