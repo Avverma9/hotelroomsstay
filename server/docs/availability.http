@@ -1,0 +1,69 @@
+### ============================================================
+###  HOTEL AVAILABILITY API  —  VS Code REST Client Script
+###  Install: "REST Client" extension (humao.rest-client)
+###  Click "Send Request" above any ### block
+### ============================================================
+
+@baseUrl   = http://localhost:5000
+@hotelId   = 12345678
+@fromDate  = 2026-03-20
+@toDate    = 2026-03-25
+
+
+# ============================================================
+# 1. CHECK AVAILABILITY — single hotel
+#    GET /check/hotels/room-availability
+#    Required: hotelId, fromDate, toDate
+#    Returns: actualAvailableRooms, isAvailable, bookingSummary
+# ============================================================
+
+### Check single hotel availability
+GET {{baseUrl}}/check/hotels/room-availability?hotelId={{hotelId}}&fromDate={{fromDate}}&toDate={{toDate}}
+
+###
+### Missing hotelId → expect 400 error
+GET {{baseUrl}}/check/hotels/room-availability?fromDate={{fromDate}}&toDate={{toDate}}
+
+###
+### Invalid date → expect 400 error
+GET {{baseUrl}}/check/hotels/room-availability?hotelId={{hotelId}}&fromDate=not-a-date&toDate={{toDate}}
+
+###
+### toDate before fromDate → expect 400 error
+GET {{baseUrl}}/check/hotels/room-availability?hotelId={{hotelId}}&fromDate=2026-03-25&toDate=2026-03-20
+
+###
+### Hotel not found → expect 404 error
+GET {{baseUrl}}/check/hotels/room-availability?hotelId=00000000&fromDate={{fromDate}}&toDate={{toDate}}
+
+
+# ============================================================
+# 2. FIND ALL AVAILABLE HOTELS
+#    GET /check/all-hotels/room-availability
+#    Required: fromDate, toDate
+#    Optional: city (case-sensitive)
+#    Returns: array of hotels with actualAvailableRooms, isAvailable
+# ============================================================
+
+### Get all available hotels (no city filter)
+GET {{baseUrl}}/check/all-hotels/room-availability?fromDate={{fromDate}}&toDate={{toDate}}
+
+###
+### Filter by city
+GET {{baseUrl}}/check/all-hotels/room-availability?fromDate={{fromDate}}&toDate={{toDate}}&city=Mumbai
+
+###
+### Weekend availability
+GET {{baseUrl}}/check/all-hotels/room-availability?fromDate=2026-03-22&toDate=2026-03-24
+
+###
+### Long stay (1 week)
+GET {{baseUrl}}/check/all-hotels/room-availability?fromDate={{fromDate}}&toDate=2026-03-27
+
+###
+### Missing fromDate → expect 400 error
+GET {{baseUrl}}/check/all-hotels/room-availability?toDate={{toDate}}
+
+###
+### toDate same as fromDate → expect 400 error (must be strictly after)
+GET {{baseUrl}}/check/all-hotels/room-availability?fromDate=2026-03-20&toDate=2026-03-20

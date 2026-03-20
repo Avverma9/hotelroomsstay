@@ -1,0 +1,189 @@
+### ============================================================
+###  COMPLAINTS API  —  VS Code REST Client Script
+###  Install: "REST Client" extension by Humao (ext id: humao.rest-client)
+###  Usage: Click "Send Request" above any ### block
+### ============================================================
+
+@baseUrl = http://localhost:5000
+@userId  = 64f1a2b3c4d5e6f7a8b9c0d1
+@mongoId = 64f1a2b3c4d5e6f7a8b9c0d2
+@complaintId = 12345678
+
+
+# ============================================================
+# 1. CREATE A COMPLAINT
+#    POST /create-a-complaint/on/hotel
+#    Body: multipart/form-data (supports image uploads)
+#    Required: userId, hotelId, regarding, issue
+# ============================================================
+
+### Create Complaint (JSON — no images)
+POST {{baseUrl}}/create-a-complaint/on/hotel
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "hotelId": "64f1a2b3c4d5e6f7a8b9c0aa",
+  "regarding": "Hotel",
+  "issue": "Room was not clean and AC was not working.",
+  "hotelName": "Grand Palace Hotel",
+  "hotelEmail": "contact@grandpalace.com",
+  "bookingId": "BK-2024-001",
+  "status": "Pending"
+}
+
+
+# ============================================================
+# 2. GET ALL COMPLAINTS  (Admin Panel)
+#    GET /get/all-complaint-on-admin/panel
+# ============================================================
+
+### Get All Complaints
+GET {{baseUrl}}/get/all-complaint-on-admin/panel
+
+
+# ============================================================
+# 3. GET COMPLAINTS BY USER ID
+#    GET /complaints/:userId
+# ============================================================
+
+### Get Complaints by User
+GET {{baseUrl}}/complaints/{{userId}}
+
+
+# ============================================================
+# 4. GET SINGLE COMPLAINT BY ID  (MongoDB _id)
+#    GET /complaint/by-id/:id
+# ============================================================
+
+### Get Single Complaint by _id
+GET {{baseUrl}}/complaint/by-id/{{mongoId}}
+
+
+# ============================================================
+# 5. FILTER COMPLAINTS  (Admin Panel)
+#    GET /get/all-complaint-on-admin/panel/by-filter
+#    Query params (all optional): status, hotelName, hotelEmail, complaintId
+# ============================================================
+
+### Filter by status
+GET {{baseUrl}}/get/all-complaint-on-admin/panel/by-filter?status=Pending
+
+###
+### Filter by status + hotelName
+GET {{baseUrl}}/get/all-complaint-on-admin/panel/by-filter?status=Working&hotelName=Grand
+
+###
+### Filter by complaintId (8-digit auto-generated id)
+GET {{baseUrl}}/get/all-complaint-on-admin/panel/by-filter?complaintId={{complaintId}}
+
+###
+### Filter by hotelEmail
+GET {{baseUrl}}/get/all-complaint-on-admin/panel/by-filter?hotelEmail=contact@grandpalace.com
+
+
+# ============================================================
+# 6. UPDATE COMPLAINT  (Admin Panel — approve/reject/resolve)
+#    PATCH /approveComplaint-on-panel/by-id/:id
+#    Required: updatedBy.name, updatedBy.email
+#    status enum: Pending | Approved | Rejected | Resolved | Working
+# ============================================================
+
+### Approve a Complaint
+PATCH {{baseUrl}}/approveComplaint-on-panel/by-id/{{mongoId}}
+Content-Type: application/json
+
+{
+  "status": "Approved",
+  "feedBack": "We have acknowledged your complaint and are investigating.",
+  "updatedBy": {
+    "name": "Admin Rahul",
+    "email": "admin@hotel.com"
+  },
+  "messages": [
+    "Your complaint has been received.",
+    "Our team will contact you within 24 hours."
+  ]
+}
+
+###
+### Mark as Working
+PATCH {{baseUrl}}/approveComplaint-on-panel/by-id/{{mongoId}}
+Content-Type: application/json
+
+{
+  "status": "Working",
+  "feedBack": "Issue is being resolved by the hotel.",
+  "updatedBy": {
+    "name": "Admin Priya",
+    "email": "priya@hotel.com"
+  }
+}
+
+###
+### Resolve a Complaint
+PATCH {{baseUrl}}/approveComplaint-on-panel/by-id/{{mongoId}}
+Content-Type: application/json
+
+{
+  "status": "Resolved",
+  "feedBack": "The issue has been resolved. Compensation credited.",
+  "updatedBy": {
+    "name": "Admin Rahul",
+    "email": "admin@hotel.com"
+  }
+}
+
+###
+### Reject a Complaint
+PATCH {{baseUrl}}/approveComplaint-on-panel/by-id/{{mongoId}}
+Content-Type: application/json
+
+{
+  "status": "Rejected",
+  "feedBack": "Complaint could not be verified. Please contact support.",
+  "updatedBy": {
+    "name": "Admin Rahul",
+    "email": "admin@hotel.com"
+  }
+}
+
+
+# ============================================================
+# 7. CHAT SUPPORT ON A COMPLAINT
+#    POST /do/chat-support/:complaintId
+#    Uses the 8-digit complaintId (not MongoDB _id)
+#    Required: sender, receiver, content
+# ============================================================
+
+### Send a chat message on a complaint
+POST {{baseUrl}}/do/chat-support/{{complaintId}}
+Content-Type: application/json
+
+{
+  "sender": "user@gmail.com",
+  "receiver": "admin@hotel.com",
+  "content": "Hello, I still have not received any update on my complaint."
+}
+
+###
+### Admin replies to user
+POST {{baseUrl}}/do/chat-support/{{complaintId}}
+Content-Type: application/json
+
+{
+  "sender": "admin@hotel.com",
+  "receiver": "user@gmail.com",
+  "content": "We apologize for the inconvenience. Your issue is being looked into."
+}
+
+
+# ============================================================
+# 8. DELETE A COMPLAINT
+#    DELETE /delete-a-particular/complaints/delete/by/id/:id
+#    Uses MongoDB _id
+#    Also deletes all related chat messages
+# ============================================================
+
+### Delete Complaint (and its chats)
+DELETE {{baseUrl}}/delete-a-particular/complaints/delete/by/id/{{mongoId}}
