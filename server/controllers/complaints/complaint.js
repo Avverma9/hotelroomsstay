@@ -1,4 +1,4 @@
-const Complaint = require('../../models/complaint');
+const Complaint = require('../../models/complaints/complaint');
 const chat = require('../../models/complaints/chat');
 const {
   createUserNotificationSafe,
@@ -200,6 +200,26 @@ const deleteComplaint = async (req, res) => {
   }
 };
 
+//=======================get complaint by ID=============================================
+
+const getComplaintById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const complaint = await Complaint.findById(id).lean();
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+
+    const chats = await chat.find({ complaintId: complaint.complaintId }).lean();
+
+    return res.status(200).json({ success: true, data: { ...complaint, chats } });
+  } catch (error) {
+    console.error("Error fetching complaint by ID:", error);
+    return res.status(500).json({ success: false, message: "Something went wrong", error: error.message });
+  }
+};
+
 //=======================get all complaint=============================================
 
 const getComplaint = async (req, res) => {
@@ -266,8 +286,8 @@ module.exports = {
     createComplaint,
     updateComplaint,
     getComplaintsByUserId,
+    getComplaintById,
     deleteComplaint,
     filteredComplaints,
     getComplaint,
-    deleteComplaint,
 };

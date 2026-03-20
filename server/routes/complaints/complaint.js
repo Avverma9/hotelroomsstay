@@ -14,6 +14,7 @@ router.patch(
   complaintController.updateComplaint
 ); //on panel);
 router.get("/complaints/:userId", complaintController.getComplaintsByUserId); //on site
+router.get("/complaint/by-id/:id", complaintController.getComplaintById); //get single complaint by _id
 router.delete(
   "/delete-a-particular/complaints/delete/by/id/:id",
   complaintController.deleteComplaint
