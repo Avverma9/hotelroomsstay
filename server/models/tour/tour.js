@@ -60,6 +60,13 @@ const tourSchema = new mongoose.Schema(
 
     // NEW: vehicles inventory
     vehicles: { type: [vehicleSchema], default: [] },
+
+    // Trip dates & status
+    tourStartDate: { type: Date },
+    tourEndDate: { type: Date },
+
+    // Auto-generated from visitingPlaces e.g. "Patna->Delhi->Mumbai"
+    route: { type: String, default: "" },
   },
   { timestamps: true, strict: false }
 );
