@@ -189,6 +189,7 @@ const getFormattedISTTime = (date = new Date()) => {
 const createBooking = async (req, res) => {
   try {
     const { userId, hotelId } = req.params;
+    const payloadHotelDetails = req.body?.hotelDetails || {};
     let {
       checkInDate,
       checkOutDate,
@@ -211,6 +212,13 @@ const createBooking = async (req, res) => {
       hotelOwnerName,
       destination,
     } = req.body;
+
+    // Support both legacy flat payloads and the current nested hotelDetails payload.
+    hotelName = hotelName || payloadHotelDetails.hotelName;
+    hotelEmail = hotelEmail || payloadHotelDetails.hotelEmail;
+    hotelCity = hotelCity || payloadHotelDetails.hotelCity;
+    hotelOwnerName = hotelOwnerName || payloadHotelDetails.hotelOwnerName;
+    destination = destination || payloadHotelDetails.destination || payloadHotelDetails.hotelCity;
 
     const user = await userModel.findOne({ userId });
     if (!user) {
