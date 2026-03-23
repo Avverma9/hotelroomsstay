@@ -60,10 +60,20 @@ exports.removeCoupon = async (req, res) => {
     const modifiedCount = bulkRoomUpdates.length
 
     if (modifiedCount === 0) {
-      return res.status(200).json({ message: 'No active coupons or room offers found for the provided hotels.' });
+      return res.status(200).json({
+        success: true,
+        message: 'No active coupons or room offers found for the provided hotels.',
+        hotelIds,
+        affectedRooms: 0,
+      });
     }
 
-    res.status(200).json({ message: 'Active coupons and room offers removed successfully for the selected hotels.' });
+    res.status(200).json({
+      success: true,
+      message: 'Active coupons and room offers removed successfully for the selected hotels.',
+      hotelIds,
+      affectedRooms: modifiedCount,
+    });
 
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -104,7 +114,12 @@ exports.changeStatus = async (req, res) => {
     }
 
     res.status(200).json({
+      success: true,
       message: `${result.modifiedCount} hotel(s) updated successfully.`,
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+      hotelIds,
+      updates,
     });
   } catch (error) {
     console.error('Error updating hotel statuses:', error);
@@ -127,7 +142,10 @@ exports.bulkDelete = async (req, res) => {
     }
 
     res.status(200).json({
+      success: true,
       message: `${result.deletedCount} hotel(s) deleted successfully.`,
+      deletedCount: result.deletedCount,
+      hotelIds,
     });
   } catch (error) {
     console.error('Error deleting hotels:', error);

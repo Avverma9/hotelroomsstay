@@ -18,6 +18,79 @@ const {
 } = require("./offerUtils");
 
 const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const isValueProvided = (value) => value !== undefined;
+
+const buildHotelUpdatePayload = (payload = {}) => {
+  const allowedFields = [
+    "isAccepted",
+    "onFront",
+    "hotelName",
+    "hotelOwnerName",
+    "hotelEmail",
+    "localId",
+    "description",
+    "customerWelcomeNote",
+    "generalManagerContact",
+    "salesManagerContact",
+    "landmark",
+    "pinCode",
+    "hotelCategory",
+    "propertyType",
+    "starRating",
+    "city",
+    "state",
+    "destination",
+    "latitude",
+    "longitude",
+    "contact",
+  ];
+
+  const updatePayload = {};
+
+  for (const field of allowedFields) {
+    if (!isValueProvided(payload[field])) {
+      continue;
+    }
+
+    let normalizedValue = payload[field];
+
+    if ((field === "isAccepted" || field === "onFront") && typeof normalizedValue === "string") {
+      const lowered = normalizedValue.trim().toLowerCase();
+      if (["true", "1", "yes"].includes(lowered)) {
+        normalizedValue = true;
+      } else if (["false", "0", "no"].includes(lowered)) {
+        normalizedValue = false;
+      }
+    }
+
+    if ((field === "pinCode" || field === "contact") && typeof normalizedValue === "string") {
+      const parsedNumber = Number(normalizedValue);
+      if (Number.isFinite(parsedNumber)) {
+        normalizedValue = parsedNumber;
+      }
+    }
+
+    if (field === "propertyType" && typeof normalizedValue === "string") {
+      try {
+        const parsedPropertyType = JSON.parse(normalizedValue);
+        normalizedValue = Array.isArray(parsedPropertyType)
+          ? parsedPropertyType
+          : [parsedPropertyType];
+      } catch (error) {
+        normalizedValue = normalizedValue
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean);
+      }
+    }
+
+    updatePayload[field] = normalizedValue;
+  }
+
+  return updatePayload;
+};
+
 const createHotel = async (req, res) => {
   try {
     const {
@@ -155,13 +228,13 @@ const updateHotelImage = async (req, res) => {
     const images = req.files.map((file) => file.location);
 
     // Check if the hotel exists
-    const updatedHotel = await hotelModel.findById(hotelId);
+    const updatedHotel = await hotelModel.findOne({ hotelId });
     if (!updatedHotel) {
       return res.status(404).json({ message: "Hotel not found" });
     }
 
     // Update images
-    updatedHotel.images = [...updatedHotel.images, ...images]; // Append new images
+    updatedHotel.images = [...(updatedHotel.images || []), ...images]; // Append new images
     await updatedHotel.save();
 
     res.status(200).json({
@@ -250,54 +323,35 @@ const UpdateHotelStatus = async function (req, res) {
 //================================update hotel info =================================================
 const UpdateHotelInfo = async function (req, res) {
   const { hotelId } = req.params;
-  const {
-    isAccepted,
-    onFront,
-    hotelName,
-    hotelOwnerName,
-    hotelEmail,
-    localId,
-    description,
-    customerWelcomeNote,
-    generalManagerContact,
-    salesManagerContact,
-    landmark,
-    pinCode,
-    hotelCategory,
-    propertyType,
-    starRating,
-    city,
-    state,
-  } = req.body;
+  const updatePayload = buildHotelUpdatePayload(req.body);
 
   try {
+    if (!hotelId) {
+      return res.status(400).json({ success: false, message: "hotelId is required" });
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one updatable field is required",
+      });
+    }
+
     const updateDetails = await hotelModel.findOneAndUpdate(
-      { hotelId: hotelId }, // Use hotelId for querying
-      {
-        $set: {
-          isAccepted: isAccepted,
-          onFront: onFront,
-          hotelName: hotelName,
-          hotelOwnerName: hotelOwnerName,
-          hotelEmail: hotelEmail,
-          generalManagerContact: generalManagerContact,
-          salesManagerContact: salesManagerContact,
-          landmark: landmark,
-          pinCode: pinCode,
-          hotelCategory: hotelCategory,
-          propertyType: propertyType,
-          starRating: starRating,
-          city: city,
-          state: state,
-          localId: localId,
-          description: description,
-          customerWelcomeNote: customerWelcomeNote,
-        },
-      }, // Update fields
-      { new: true }, // To return the updated document
+      { hotelId },
+      { $set: updatePayload },
+      { new: true, runValidators: true },
     );
 
-    res.json(updateDetails);
+    if (!updateDetails) {
+      return res.status(404).json({ success: false, message: "Hotel not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Hotel updated successfully",
+      data: updateDetails,
+    });
   } catch (error) {
     console.error("Error updating hotel:", error);
     res.status(500).json({ error: "Failed to update hotel details." });

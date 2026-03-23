@@ -12,6 +12,7 @@ router.post('/hotels/bulk', uploadNone, createHotelBulk);
 
 router.patch('/hotels/update/:hotelId', hotelController.UpdateHotelStatus); // isAccepted, onFront admin panel
 router.patch('/hotels/update/info/:hotelId', hotelController.UpdateHotelInfo); // basic details
+router.patch('/hotels/:hotelId', hotelController.UpdateHotelInfo); // cleaner alias
 router.get('/get/all/hotels', hotelController.getAllHotels); // on panel
 router.delete('/delete/hotels/by/:hotelId', hotelController.deleteHotelById); // on panel
 router.get('/get/main/get/hotels', hotelController.getHotels);

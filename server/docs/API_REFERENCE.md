@@ -8,7 +8,9 @@
 
 1. [Complaints API](#1-complaints-api)
 2. [Hotel Availability API](#2-hotel-availability-api)
-3. [Monthly Price API](#3-monthly-price-api)
+3. [Hotel Update API](#3-hotel-update-api)
+4. [Bulk Hotel Management API](#4-bulk-hotel-management-api)
+5. [Monthly Price API](#5-monthly-price-api)
 
 ---
 
@@ -364,7 +366,187 @@ GET /check/all-hotels/room-availability?fromDate=2026-03-20&toDate=2026-03-25&ci
 
 ---
 
-## 3. Monthly Price API
+## 3. Hotel Update API
+
+### PATCH `/hotels/:hotelId`
+
+Hotel ki basic details update karne ke liye recommended endpoint.
+
+Legacy alias bhi available hai:
+`PATCH /hotels/update/info/:hotelId`
+
+**URL Param:** `hotelId` - hotel ka 8 digit `hotelId`
+
+**Request Body:** All fields optional, lekin kam se kam 1 field bhejna zaroori hai.
+
+```json
+{
+  "hotelName": "Grand Palace Hotel",
+  "hotelOwnerName": "Aman Verma",
+  "hotelEmail": "info@hotelroomsstay.com",
+  "city": "Jaipur",
+  "state": "Rajasthan",
+  "starRating": "4",
+  "propertyType": ["Hotel", "Resort"],
+  "description": "Updated hotel description",
+  "customerWelcomeNote": "Welcome to our hotel",
+  "onFront": true,
+  "isAccepted": true
+}
+```
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Hotel updated successfully",
+  "data": {
+    "hotelId": "12345678",
+    "hotelName": "Grand Palace Hotel"
+  }
+}
+```
+
+**Error Responses:**
+```json
+// 400
+{ "success": false, "message": "hotelId is required" }
+{ "success": false, "message": "At least one updatable field is required" }
+
+// 404
+{ "success": false, "message": "Hotel not found" }
+```
+
+---
+
+## 4. Bulk Hotel Management API
+
+### 4.1 POST `/hotels/bulk`
+
+Bulk me hotels create karne ke liye.
+
+**Content-Type:** `application/json` ya `multipart/form-data`
+
+**Request Body:**
+```json
+[
+  {
+    "hotelName": "Hotel One",
+    "city": "Delhi",
+    "state": "Delhi",
+    "hotelEmail": "hotel1@example.com",
+    "propertyType": ["Hotel"],
+    "rooms": []
+  },
+  {
+    "hotelName": "Hotel Two",
+    "city": "Jaipur",
+    "state": "Rajasthan",
+    "hotelEmail": "hotel2@example.com",
+    "propertyType": ["Resort"],
+    "rooms": []
+  }
+]
+```
+
+**Response `201`:**
+```json
+{
+  "status": true,
+  "message": "Bulk hotels inserted",
+  "count": 2,
+  "data": []
+}
+```
+
+### 4.2 PATCH `/hotels/bulk/update`
+
+Multiple hotels ka status/basic bulk flags update karne ke liye.
+
+Legacy alias:
+`PATCH /remove-bulk-hotel-from-hotels/by-hotel/ids`
+
+**Request Body:**
+```json
+{
+  "hotelIds": ["12345678", "87654321"],
+  "isAccepted": true,
+  "onFront": false
+}
+```
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "2 hotel(s) updated successfully.",
+  "matchedCount": 2,
+  "modifiedCount": 2,
+  "hotelIds": ["12345678", "87654321"],
+  "updates": {
+    "isAccepted": true,
+    "onFront": false
+  }
+}
+```
+
+### 4.3 PATCH `/hotels/bulk/remove-coupons`
+
+Selected hotels ke rooms se active offers/coupons remove karne ke liye.
+
+Legacy alias:
+`PATCH /remove-bulk-coupons-from-hotels/by-hotel/id`
+
+**Request Body:**
+```json
+{
+  "hotelIds": ["12345678", "87654321"]
+}
+```
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Active coupons and room offers removed successfully for the selected hotels.",
+  "hotelIds": ["12345678", "87654321"],
+  "affectedRooms": 5
+}
+```
+
+### 4.4 DELETE `/hotels/bulk/delete`
+
+Multiple hotels delete karne ke liye.
+
+Legacy alias:
+`DELETE /delete-bulk-hotels-from-list-of-hotels/by-ids`
+
+**Request Body:**
+```json
+{
+  "hotelIds": ["12345678", "87654321"]
+}
+```
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "2 hotel(s) deleted successfully.",
+  "deletedCount": 2,
+  "hotelIds": ["12345678", "87654321"]
+}
+```
+
+**Common errors:**
+```json
+{ "message": "hotelIds must be a non-empty array." }
+{ "message": "No hotels found with the provided IDs." }
+```
+
+---
+
+## 5. Monthly Price API
 
 ### Endpoints Overview
 
