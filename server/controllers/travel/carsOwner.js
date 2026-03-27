@@ -28,7 +28,7 @@ exports.addOwner = async (req, res) => {
     return res.status(201).json("Successfully Created");
   } catch (error) {
     console.error(error);
-    return res.status(500).json("We are working hard to fix this");
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -37,7 +37,7 @@ exports.getOwner = async (_, res) => {
     const findData = await Owner.find();
     return res.status(200).json(findData);
   } catch (error) {
-    return res.status(500).json("We are working hard to fix this");
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -55,7 +55,7 @@ exports.getOwnerById = async (req, res) => {
     return res.status(200).json(findData);
   } catch (error) {
     console.error("Error in getOwnerById:", error);
-    return res.status(500).json("We are working hard to fix this");
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -146,7 +146,7 @@ exports.updateOwner = async (req, res) => {
       .json({ message: "Successfully Updated", updatedOwner });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: "We are working hard to fix this" });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -156,6 +156,6 @@ exports.deleteOwner = async (req, res) => {
     await Owner.findByIdAndDelete(id);
     return res.status(200).json({ message: "Successfully Deleted" });
   } catch (error) {
-    return res.status(500).json("We are working hard to fix this");
+    return res.status(500).json({ message: error.message });
   }
 };

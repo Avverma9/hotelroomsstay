@@ -229,7 +229,7 @@ exports.getSeatsData = async (req, res) => {
     });
   } catch (error) {
     console.error('getSeatsData error:', error);
-    return res.status(500).json({ message: 'We are working hard to fix this' });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -239,7 +239,7 @@ exports.getAllCars = async (_, res) => {
     return res.status(200).json(findData);
   } catch (error) {
     console.error('getAllCars error:', error);
-    return res.status(500).json({ message: 'We are working hard to fix this' });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -257,7 +257,7 @@ exports.getCarById = async (req, res) => {
     return res.status(200).json(findCar);
   } catch (error) {
     console.error('getCarById error:', error);
-    return res.status(500).json({ message: 'We are working hard to fix this' });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -275,7 +275,7 @@ exports.getCarByOwnerId = async (req, res) => {
     return res.status(200).json(cars);
   } catch (error) {
     console.error('getCarByOwnerId error:', error);
-    return res.status(500).json({ message: 'We are working hard to fix this' });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -363,7 +363,7 @@ exports.getMyCars = async (req, res) => {
     return res.status(200).json(cars);
   } catch (error) {
     console.error('getMyCars error:', error);
-    return res.status(500).json({ message: 'We are working hard to fix this' });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -442,7 +442,7 @@ exports.updateCar = async (req, res) => {
     return res.status(200).json({ message: 'Successfully Updated', car: updatedCar });
   } catch (error) {
     console.error('updateCar error:', error);
-    return res.status(500).json({ message: 'We are working hard to fix this' });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -462,6 +462,6 @@ exports.deleteCarById = async (req, res) => {
     return res.status(200).json({ message: 'Successfully deleted' });
   } catch (error) {
     console.error('deleteCarById error:', error);
-    return res.status(500).json({ message: 'We are working hard to fix this' });
+    return res.status(500).json({ message: error.message });
   }
 };
