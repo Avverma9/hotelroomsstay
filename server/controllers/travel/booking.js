@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const mongoose = require("mongoose");
 const CarBooking = require("../../models/travel/carBooking");
 const Car = require("../../models/travel/cars");
@@ -7,13 +8,47 @@ const {
   createUserNotificationSafe,
 } = require("../notification/helpers");
 
-const BOOKING_STATUS = new Set(["Pending", "Confirmed", "Cancelled", "Failed"]);
-const RELEASE_SEAT_STATUS = new Set(["Cancelled", "Failed"]);
+const BOOKING_STATUS = new Set([
+  "Pending",
+  "Confirmed",
+  "Completed",
+  "Cancelled",
+  "Failed",
+]);
+const RIDE_STATUS = new Set([
+  "AwaitingConfirmation",
+  "AwaitingPickup",
+  "InProgress",
+  "Completed",
+  "Cancelled",
+  "Failed",
+]);
+const RELEASE_SEAT_STATUS = new Set(["Completed", "Cancelled", "Failed"]);
+const BOOKING_STATUS_TRANSITIONS = new Map([
+  ["Pending", new Set(["Confirmed", "Cancelled", "Failed"])],
+  ["Confirmed", new Set(["Completed", "Cancelled", "Failed"])],
+  ["Completed", new Set()],
+  ["Cancelled", new Set()],
+  ["Failed", new Set()],
+]);
+const RIDE_STATUS_TRANSITIONS = new Map([
+  ["AwaitingConfirmation", new Set(["AwaitingPickup", "Cancelled", "Failed"])],
+  ["AwaitingPickup", new Set(["InProgress", "Cancelled", "Failed"])],
+  ["InProgress", new Set(["Completed", "Failed"])],
+  ["Completed", new Set()],
+  ["Cancelled", new Set()],
+  ["Failed", new Set()],
+]);
 const ALLOWED_UPDATE_FIELDS = new Set([
   "customerMobile",
   "customerEmail",
   "bookedBy",
   "bookingStatus",
+  "cancellationReason",
+  "assignedDriverId",
+  "assignedDriverName",
+  "isPaid",
+  "paymentId",
 ]);
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
@@ -66,6 +101,146 @@ const buildSeatDetails = (car, bookingSeatIds = []) => {
   return car.seatConfig.filter((seat) => seatIdSet.has(String(seat._id)));
 };
 
+const generateVerificationCode = () =>
+  crypto.randomInt(100000, 1000000).toString();
+
+const normalizeBoolean = (value) => value === true || value === "true";
+
+const canTransition = (transitionMap, currentStatus, nextStatus) => {
+  if (currentStatus === nextStatus) {
+    return true;
+  }
+
+  return Boolean(transitionMap.get(currentStatus)?.has(nextStatus));
+};
+
+const sendTravelEmailSafe = async ({ email, subject, message }) => {
+  try {
+    await sendCustomEmail({
+      email,
+      subject,
+      message,
+      link: process.env.FRONTEND_URL,
+    });
+  } catch (error) {
+    console.error("Travel booking email failed:", error.message);
+  }
+};
+
+const notifyTravelEventSafe = async ({
+  booking,
+  name,
+  message,
+  eventType,
+  metadata = {},
+}) => {
+  await createUserNotificationSafe({
+    name,
+    message,
+    path: "/app/bookings/travel",
+    eventType,
+    metadata: {
+      bookingId: booking.bookingId,
+      bookingStatus: booking.bookingStatus,
+      rideStatus: booking.rideStatus,
+      carId: String(booking.carId),
+      ...metadata,
+    },
+    userIds: [String(booking.userId)],
+  });
+};
+
+const applyPaymentDetails = (booking, { isPaid, paymentId } = {}) => {
+  if (paymentId !== undefined) {
+    booking.paymentId = String(paymentId || "").trim();
+  }
+
+  if (isPaid !== undefined) {
+    booking.isPaid = normalizeBoolean(isPaid);
+  }
+
+  if (booking.isPaid && !booking.paymentConfirmedAt) {
+    booking.paymentConfirmedAt = new Date();
+  }
+};
+
+const ensureLifecycleFields = (booking) => {
+  if (!booking.pickupCode) {
+    booking.pickupCode = generateVerificationCode();
+  }
+
+  if (!booking.dropCode) {
+    booking.dropCode = generateVerificationCode();
+  }
+
+  if (!booking.rideStatus || !RIDE_STATUS.has(booking.rideStatus)) {
+    if (booking.bookingStatus === "Confirmed") {
+      booking.rideStatus = "AwaitingPickup";
+    } else if (booking.bookingStatus === "Completed") {
+      booking.rideStatus = "Completed";
+    } else if (booking.bookingStatus === "Cancelled") {
+      booking.rideStatus = "Cancelled";
+    } else if (booking.bookingStatus === "Failed") {
+      booking.rideStatus = "Failed";
+    } else {
+      booking.rideStatus = "AwaitingConfirmation";
+    }
+  }
+
+  if (booking.bookingStatus === "Confirmed" && !booking.confirmedAt) {
+    booking.confirmedAt = booking.updatedAt || new Date();
+  }
+
+  if (booking.isPaid && !booking.paymentConfirmedAt) {
+    booking.paymentConfirmedAt = booking.updatedAt || new Date();
+  }
+};
+
+const applyBookingStatusChange = (booking, nextStatus, options = {}) => {
+  const now = new Date();
+  const previousStatus = booking.bookingStatus;
+
+  if (!canTransition(BOOKING_STATUS_TRANSITIONS, previousStatus, nextStatus)) {
+    throw new Error(
+      `Booking status transition ${previousStatus} -> ${nextStatus} is not allowed`,
+    );
+  }
+
+  booking.bookingStatus = nextStatus;
+
+  if (nextStatus === "Confirmed") {
+    booking.confirmedAt = booking.confirmedAt || now;
+    if (
+      canTransition(
+        RIDE_STATUS_TRANSITIONS,
+        booking.rideStatus,
+        "AwaitingPickup",
+      )
+    ) {
+      booking.rideStatus = "AwaitingPickup";
+    }
+  }
+
+  if (nextStatus === "Cancelled") {
+    booking.rideStatus = "Cancelled";
+    booking.cancelledAt = now;
+    booking.cancellationReason = String(
+      options.cancellationReason || booking.cancellationReason || "",
+    ).trim();
+  }
+
+  if (nextStatus === "Failed") {
+    booking.rideStatus = "Failed";
+  }
+
+  if (nextStatus === "Completed") {
+    booking.rideStatus = "Completed";
+    booking.rideCompletedAt = booking.rideCompletedAt || now;
+  }
+
+  return previousStatus;
+};
+
 exports.bookCar = async (req, res) => {
   try {
     const {
@@ -80,6 +255,10 @@ exports.bookCar = async (req, res) => {
       passengerName,
       paymentMethod,
       paymentId,
+      isPaid,
+      confirmOnCreate,
+      assignedDriverId,
+      assignedDriverName,
     } = req.body;
 
     const normalizedUserId = String(userId || "").trim();
@@ -229,6 +408,15 @@ exports.bookCar = async (req, res) => {
     const gstRate = Number(gstData?.gstPrice || 0);
     const gstAmount = Number(((totalSeatPrice * gstRate) / 100).toFixed(2));
     const finalPrice = Number((totalSeatPrice + gstAmount).toFixed(2));
+    const shouldConfirmOnCreate = normalizeBoolean(confirmOnCreate);
+    const resolvedIsPaid = normalizeBoolean(isPaid);
+    const pickupCode = generateVerificationCode();
+    const dropCode = generateVerificationCode();
+    const initialBookingStatus = shouldConfirmOnCreate ? "Confirmed" : "Pending";
+    const initialRideStatus = shouldConfirmOnCreate
+      ? "AwaitingPickup"
+      : "AwaitingConfirmation";
+    const now = new Date();
 
     let newBooking;
     try {
@@ -250,7 +438,8 @@ exports.bookCar = async (req, res) => {
         // Payment
         paymentMethod: paymentMethod || "Online",
         paymentId: String(paymentId || "").trim(),
-        isPaid: false,
+        isPaid: resolvedIsPaid,
+        paymentConfirmedAt: resolvedIsPaid ? now : undefined,
         // Vehicle
         sharingType: reservedCar.sharingType,
         vehicleType: reservedCar.vehicleType,
@@ -263,6 +452,13 @@ exports.bookCar = async (req, res) => {
         dropP: reservedCar.dropP,
         pickupD: reservedCar.pickupD,
         dropD: reservedCar.dropD,
+        bookingStatus: initialBookingStatus,
+        rideStatus: initialRideStatus,
+        confirmedAt: shouldConfirmOnCreate ? now : undefined,
+        assignedDriverId: String(assignedDriverId || "").trim(),
+        assignedDriverName: String(assignedDriverName || "").trim(),
+        pickupCode,
+        dropCode,
       });
     } catch (bookingError) {
       await releaseSeatsByIds({
@@ -273,33 +469,34 @@ exports.bookCar = async (req, res) => {
       throw bookingError;
     }
 
-    try {
-      await sendCustomEmail({
-        email: customerEmail,
-        subject: "Your Travel Booking is Confirmed",
-        message: `Your booking (ID: ${newBooking.bookingId}) has been confirmed. Vehicle Number: ${reservedCar.vehicleNumber}.`,
-        link: process.env.FRONTEND_URL,
-      });
-    } catch (mailError) {
-      console.error("Booking email failed:", mailError.message);
-    }
+    await sendTravelEmailSafe({
+      email: customerEmail,
+      subject: shouldConfirmOnCreate
+        ? "Your Travel Booking is Confirmed"
+        : "Your Travel Booking Request is Pending",
+      message: shouldConfirmOnCreate
+        ? `Your booking (ID: ${newBooking.bookingId}) is confirmed. Vehicle Number: ${reservedCar.vehicleNumber}. Pickup code: ${pickupCode}.`
+        : `Your booking request (ID: ${newBooking.bookingId}) has been received and is awaiting confirmation.`,
+    });
 
-    await createUserNotificationSafe({
-      name: "Travel Booking Successful",
-      message: `Your travel booking ${newBooking.bookingId} is created successfully.`,
-      path: "/app/bookings/travel",
-      eventType: "travel_booking_success",
-      metadata: {
-        bookingId: newBooking.bookingId,
-        bookingStatus: newBooking.bookingStatus,
-        carId: String(newBooking.carId),
-      },
-      userIds: [String(newBooking.userId)],
+    await notifyTravelEventSafe({
+      booking: newBooking,
+      name: shouldConfirmOnCreate
+        ? "Travel Booking Confirmed"
+        : "Travel Booking Pending",
+      message: shouldConfirmOnCreate
+        ? `Your travel booking ${newBooking.bookingId} is confirmed.`
+        : `Your travel booking ${newBooking.bookingId} is pending confirmation.`,
+      eventType: shouldConfirmOnCreate
+        ? "travel_booking_confirmed"
+        : "travel_booking_pending",
     });
 
     return res.status(201).json({
       success: true,
-      message: "Booking successful",
+      message: shouldConfirmOnCreate
+        ? "Booking confirmed successfully"
+        : "Booking created successfully and is pending confirmation",
       data: newBooking,
     });
   } catch (error) {
@@ -311,9 +508,68 @@ exports.bookCar = async (req, res) => {
   }
 };
 
+exports.confirmTravelBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assignedDriverId, assignedDriverName, isPaid, paymentId } = req.body;
+
+    if (!id || !isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid booking id" });
+    }
+
+    const booking = await CarBooking.findById(id);
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    ensureLifecycleFields(booking);
+    applyPaymentDetails(booking, { isPaid, paymentId });
+    booking.assignedDriverId = String(assignedDriverId || booking.assignedDriverId || "").trim();
+    booking.assignedDriverName = String(
+      assignedDriverName || booking.assignedDriverName || "",
+    ).trim();
+
+    const previousStatus = applyBookingStatusChange(booking, "Confirmed");
+    await booking.save();
+
+    if (previousStatus !== "Confirmed") {
+      await sendTravelEmailSafe({
+        email: booking.customerEmail,
+        subject: "Your Travel Booking is Confirmed",
+        message: `Your travel booking ${booking.bookingId} is confirmed. Pickup code: ${booking.pickupCode}.`,
+      });
+
+      await notifyTravelEventSafe({
+        booking,
+        name: "Travel Booking Confirmed",
+        message: `Your travel booking ${booking.bookingId} is confirmed.`,
+        eventType: "travel_booking_confirmed",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Travel booking confirmed successfully",
+      booking,
+    });
+  } catch (error) {
+    console.error("confirmTravelBooking error:", error);
+    return res.status(400).json({
+      message: error.message || "Unable to confirm booking",
+    });
+  }
+};
+
 exports.changeBookingStatus = async (req, res) => {
   try {
-    const { bookingStatus } = req.body;
+    const {
+      bookingStatus,
+      cancellationReason,
+      assignedDriverId,
+      assignedDriverName,
+      isPaid,
+      paymentId,
+      bypassCodeVerification,
+    } = req.body;
     const { id } = req.params;
 
     if (!id || !isValidObjectId(id)) {
@@ -327,22 +583,69 @@ exports.changeBookingStatus = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
+    ensureLifecycleFields(booking);
+    if (
+      bookingStatus === "Completed" &&
+      !booking.dropCodeVerifiedAt &&
+      !normalizeBoolean(bypassCodeVerification)
+    ) {
+      return res.status(400).json({
+        message: "Use drop code verification before marking booking completed",
+      });
+    }
 
-    const previousStatus = booking.bookingStatus;
-    booking.bookingStatus = bookingStatus;
+    applyPaymentDetails(booking, { isPaid, paymentId });
+    if (assignedDriverId !== undefined) {
+      booking.assignedDriverId = String(assignedDriverId || "").trim();
+    }
+    if (assignedDriverName !== undefined) {
+      booking.assignedDriverName = String(assignedDriverName || "").trim();
+    }
+
+    const previousStatus = applyBookingStatusChange(booking, bookingStatus, {
+      cancellationReason,
+    });
     await booking.save();
 
     if (previousStatus !== "Confirmed" && booking.bookingStatus === "Confirmed") {
-      await createUserNotificationSafe({
+      await sendTravelEmailSafe({
+        email: booking.customerEmail,
+        subject: "Your Travel Booking is Confirmed",
+        message: `Your travel booking ${booking.bookingId} is confirmed. Pickup code: ${booking.pickupCode}.`,
+      });
+
+      await notifyTravelEventSafe({
+        booking,
         name: "Travel Booking Confirmed",
         message: `Your travel booking ${booking.bookingId} is confirmed.`,
-        path: "/app/bookings/travel",
         eventType: "travel_booking_confirmed",
-        metadata: {
-          bookingId: booking.bookingId,
-          bookingStatus: booking.bookingStatus,
-        },
-        userIds: [String(booking.userId)],
+      });
+    }
+
+    if (previousStatus !== "Cancelled" && booking.bookingStatus === "Cancelled") {
+      await notifyTravelEventSafe({
+        booking,
+        name: "Travel Booking Cancelled",
+        message: `Your travel booking ${booking.bookingId} has been cancelled.`,
+        eventType: "travel_booking_cancelled",
+      });
+    }
+
+    if (previousStatus !== "Failed" && booking.bookingStatus === "Failed") {
+      await notifyTravelEventSafe({
+        booking,
+        name: "Travel Booking Failed",
+        message: `Your travel booking ${booking.bookingId} has failed.`,
+        eventType: "travel_booking_failed",
+      });
+    }
+
+    if (previousStatus !== "Completed" && booking.bookingStatus === "Completed") {
+      await notifyTravelEventSafe({
+        booking,
+        name: "Travel Ride Completed",
+        message: `Your travel ride ${booking.bookingId} has been completed successfully.`,
+        eventType: "travel_ride_completed",
       });
     }
 
@@ -359,6 +662,125 @@ exports.changeBookingStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("changeBookingStatus error:", error);
+    return res.status(400).json({
+      message: error.message || "Something went wrong",
+    });
+  }
+};
+
+exports.verifyPickupCode = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { pickupCode } = req.body;
+
+    if (!id || !isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid booking id" });
+    }
+    if (!pickupCode) {
+      return res.status(400).json({ message: "pickupCode is required" });
+    }
+
+    const booking = await CarBooking.findById(id);
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+    ensureLifecycleFields(booking);
+    if (booking.bookingStatus !== "Confirmed") {
+      return res.status(400).json({
+        message: "Only confirmed bookings can verify pickup code",
+      });
+    }
+    if (booking.rideStatus !== "AwaitingPickup") {
+      return res.status(400).json({
+        message: "Pickup code can only be verified before ride starts",
+      });
+    }
+    if (String(booking.pickupCode) !== String(pickupCode).trim()) {
+      return res.status(400).json({ message: "Invalid pickup code" });
+    }
+
+    booking.rideStatus = "InProgress";
+    booking.pickupCodeVerifiedAt = new Date();
+    booking.rideStartedAt = booking.rideStartedAt || new Date();
+    await booking.save();
+
+    await notifyTravelEventSafe({
+      booking,
+      name: "Travel Ride Started",
+      message: `Your travel ride ${booking.bookingId} has started successfully.`,
+      eventType: "travel_ride_started",
+    });
+
+    return res.status(200).json({
+      message: "Pickup code verified successfully",
+      booking,
+    });
+  } catch (error) {
+    console.error("verifyPickupCode error:", error);
+    return res.status(500).json({
+      message: "Something went wrong",
+      error: error.message,
+    });
+  }
+};
+
+exports.verifyDropCode = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { dropCode } = req.body;
+
+    if (!id || !isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid booking id" });
+    }
+    if (!dropCode) {
+      return res.status(400).json({ message: "dropCode is required" });
+    }
+
+    const booking = await CarBooking.findById(id);
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+    ensureLifecycleFields(booking);
+    if (booking.bookingStatus !== "Confirmed") {
+      return res.status(400).json({
+        message: "Only confirmed bookings can verify drop code",
+      });
+    }
+    if (booking.rideStatus !== "InProgress") {
+      return res.status(400).json({
+        message: "Drop code can only be verified for in-progress rides",
+      });
+    }
+    if (String(booking.dropCode) !== String(dropCode).trim()) {
+      return res.status(400).json({ message: "Invalid drop code" });
+    }
+
+    booking.dropCodeVerifiedAt = new Date();
+    booking.rideCompletedAt = new Date();
+    booking.rideStatus = "Completed";
+    booking.bookingStatus = "Completed";
+    await booking.save();
+    await releaseSeatsForBooking(booking);
+
+    await notifyTravelEventSafe({
+      booking,
+      name: "Travel Ride Completed",
+      message: `Your travel ride ${booking.bookingId} has been completed successfully.`,
+      eventType: "travel_ride_completed",
+    });
+
+    await sendTravelEmailSafe({
+      email: booking.customerEmail,
+      subject: "Your Travel Ride is Completed",
+      message: `Your travel booking ${booking.bookingId} has been completed successfully.`,
+    });
+
+    return res.status(200).json({
+      message: "Drop code verified successfully",
+      booking,
+    });
+  } catch (error) {
+    console.error("verifyDropCode error:", error);
     return res.status(500).json({
       message: "Something went wrong",
       error: error.message,
@@ -435,11 +857,44 @@ exports.updateBooking = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
+    ensureLifecycleFields(booking);
+    if (data.bookingStatus === "Completed" && !booking.dropCodeVerifiedAt) {
+      return res.status(400).json({
+        message: "Use drop code verification before marking booking completed",
+      });
+    }
 
     const previousStatus = booking.bookingStatus;
+    if (
+      data.assignedDriverId !== undefined ||
+      data.assignedDriverName !== undefined
+    ) {
+      if (data.assignedDriverId !== undefined) {
+        booking.assignedDriverId = String(data.assignedDriverId || "").trim();
+      }
+      if (data.assignedDriverName !== undefined) {
+        booking.assignedDriverName = String(data.assignedDriverName || "").trim();
+      }
+    }
+
+    applyPaymentDetails(booking, {
+      isPaid: data.isPaid,
+      paymentId: data.paymentId,
+    });
+
     requestedFields.forEach((field) => {
+      if (["bookingStatus", "assignedDriverId", "assignedDriverName", "isPaid", "paymentId"].includes(field)) {
+        return;
+      }
+
       booking[field] = data[field];
     });
+
+    if (data.bookingStatus !== undefined) {
+      applyBookingStatusChange(booking, data.bookingStatus, {
+        cancellationReason: data.cancellationReason,
+      });
+    }
 
     const updatedBooking = await booking.save();
     if (
@@ -453,16 +908,29 @@ exports.updateBooking = async (req, res) => {
       previousStatus !== "Confirmed" &&
       updatedBooking.bookingStatus === "Confirmed"
     ) {
-      await createUserNotificationSafe({
+      await sendTravelEmailSafe({
+        email: updatedBooking.customerEmail,
+        subject: "Your Travel Booking is Confirmed",
+        message: `Your travel booking ${updatedBooking.bookingId} is confirmed. Pickup code: ${updatedBooking.pickupCode}.`,
+      });
+
+      await notifyTravelEventSafe({
+        booking: updatedBooking,
         name: "Travel Booking Confirmed",
         message: `Your travel booking ${updatedBooking.bookingId} is confirmed.`,
-        path: "/app/bookings/travel",
         eventType: "travel_booking_confirmed",
-        metadata: {
-          bookingId: updatedBooking.bookingId,
-          bookingStatus: updatedBooking.bookingStatus,
-        },
-        userIds: [String(updatedBooking.userId)],
+      });
+    }
+
+    if (
+      previousStatus !== "Completed" &&
+      updatedBooking.bookingStatus === "Completed"
+    ) {
+      await notifyTravelEventSafe({
+        booking: updatedBooking,
+        name: "Travel Ride Completed",
+        message: `Your travel ride ${updatedBooking.bookingId} has been completed successfully.`,
+        eventType: "travel_ride_completed",
       });
     }
 
@@ -472,9 +940,8 @@ exports.updateBooking = async (req, res) => {
     });
   } catch (error) {
     console.error("Update Booking Error:", error);
-    return res.status(500).json({
-      message: "Something went wrong",
-      error: error.message,
+    return res.status(400).json({
+      message: error.message || "Something went wrong",
     });
   }
 };
