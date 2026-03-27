@@ -138,6 +138,7 @@ const GoogleSignIn = async function (req, res) {
       );
       return res.status(201).json({
         message: "User already exists",
+        _id: existingUser._id,
         userId: existingUser.userId,
         mobile: existingUser.mobile,
         name: existingUser.userName,
@@ -158,6 +159,7 @@ const GoogleSignIn = async function (req, res) {
 
     res.status(201).json({
       message: "Sign-in successful",
+      _id: user._id,
       userId: user.userId,
       name: user.userName,
       rsToken: token,
@@ -219,6 +221,7 @@ const verifyOTP = async (req, res) => {
 
     res.status(200).json({
       result,
+      _id: user._id,
       userId: user.userId,
       mobile: user.mobile,
       email: user.email,
@@ -252,6 +255,7 @@ const signIn = async function (req, res) {
 
     res.status(200).json({
       message: "Sign-in successful",
+      _id: user._id,
       userId: user.userId,
       mobile: user.mobile,
       name: user.userName,
