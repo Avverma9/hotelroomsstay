@@ -64,7 +64,7 @@ const travelBookingSchema = new mongoose.Schema(
     sharingType: String,
     vehicleNumber: {
       type: String,
-      required: true,
+      default: "",
     },
     make: { type: String, default: "" },
     model: { type: String, default: "" },
@@ -73,19 +73,17 @@ const travelBookingSchema = new mongoose.Schema(
     // Trip Info
     pickupP: {
       type: String,
-      required: true,
+      default: "",
     },
     dropP: {
       type: String,
-      required: true,
+      default: "",
     },
     pickupD: {
       type: Date,
-      required: true,
     },
     dropD: {
       type: Date,
-      required: true,
     },
 
     // Seats
