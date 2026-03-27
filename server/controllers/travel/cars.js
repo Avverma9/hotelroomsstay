@@ -374,27 +374,10 @@ exports.updateCar = async (req, res) => {
       return res.status(400).json({ message: 'Invalid car id' });
     }
 
-    // Ownership check
-    const loggedInUserId = req.user.id;
-    const user = await User.findOne({ userId: loggedInUserId });
-    if (!user || !user.email) {
-      return res.status(403).json({ message: 'Access denied: User not found or email is missing.' });
-    }
-
-    const carOwner = await CarOwner.findOne({ email: user.email });
-    if (!carOwner) {
-      return res.status(403).json({ message: 'Access denied: You are not registered as a car owner.' });
-    }
-
     const existingCar = await Car.findById(id);
     if (!existingCar) {
       return res.status(404).json({ message: 'Car not found' });
     }
-
-    if (existingCar.ownerId.toString() !== carOwner._id.toString()) {
-      return res.status(403).json({ message: 'Access denied: You do not own this car.' });
-    }
-    // End ownership check
 
     const data = { ...req.body };
     const images = req.files?.map((file) => file.location) || [];
@@ -470,27 +453,10 @@ exports.deleteCarById = async (req, res) => {
       return res.status(400).json({ message: 'Invalid car id' });
     }
 
-    // Ownership check
-    const loggedInUserId = req.user.id;
-    const user = await User.findOne({ userId: loggedInUserId });
-    if (!user || !user.email) {
-      return res.status(403).json({ message: 'Access denied: User not found or email is missing.' });
-    }
-
-    const carOwner = await CarOwner.findOne({ email: user.email });
-    if (!carOwner) {
-      return res.status(403).json({ message: 'Access denied: You are not registered as a car owner.' });
-    }
-
     const findCar = await Car.findById(id);
     if (!findCar) {
       return res.status(404).json({ message: 'Car not found' });
     }
-
-    if (findCar.ownerId.toString() !== carOwner._id.toString()) {
-      return res.status(403).json({ message: 'Access denied: You do not own this car.' });
-    }
-    // End ownership check
 
     await Car.findByIdAndDelete(id);
     return res.status(200).json({ message: 'Successfully deleted' });
