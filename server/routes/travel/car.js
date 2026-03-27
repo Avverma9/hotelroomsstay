@@ -19,8 +19,8 @@ router.get('/get-a-car/:id', getCarById);
 router.get('/get-my-cars', getMyCars);
 router.get('/get-a-car/by-owner/:ownerId', getCarByOwnerId);
 router.get('/get-all-car', getAllCars);
-router.patch('/update-a-car/:id', auth, upload, updateCar);
-router.delete('/delete-a-car/:id', auth, deleteCarById);
+router.patch('/update-a-car/:id', upload, updateCar);
+router.delete('/delete-a-car/:id', deleteCarById);
 router.get('/filter-car/by-query',filterCar);
 router.get('/get-seat-data/by-id/:id',getSeatsData);
 
