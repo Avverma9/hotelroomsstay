@@ -1,5 +1,22 @@
 const mongoose = require("mongoose");
 
+const BOOKING_STATUSES = [
+  "Pending",
+  "Confirmed",
+  "Completed",
+  "Cancelled",
+  "Failed",
+];
+
+const RIDE_STATUSES = [
+  "AwaitingConfirmation",
+  "AwaitingPickup",
+  "InProgress",
+  "Completed",
+  "Cancelled",
+  "Failed",
+];
+
 const generateBookingId = () => {
   return [...Array(8)]
     .map(() => Math.random().toString(36).charAt(2).toUpperCase())
@@ -97,15 +114,46 @@ const travelBookingSchema = new mongoose.Schema(
     },
     paymentId: { type: String, default: "" },
     isPaid: { type: Boolean, default: false },
+    paymentConfirmedAt: { type: Date },
 
     // Status
     bookingStatus: {
       type: String,
       default: "Pending",
-      enum: ["Pending", "Confirmed", "Cancelled", "Failed"],
+      enum: BOOKING_STATUSES,
     },
+    rideStatus: {
+      type: String,
+      default: "AwaitingConfirmation",
+      enum: RIDE_STATUSES,
+    },
+    confirmedAt: { type: Date },
     cancellationReason: { type: String, default: "" },
     cancelledAt: { type: Date },
+    rideStartedAt: { type: Date },
+    rideCompletedAt: { type: Date },
+
+    assignedDriverId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    assignedDriverName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    pickupCode: {
+      type: String,
+      required: true,
+    },
+    dropCode: {
+      type: String,
+      required: true,
+    },
+    pickupCodeVerifiedAt: { type: Date },
+    dropCodeVerifiedAt: { type: Date },
 
     bookingDate: {
       type: Date,
