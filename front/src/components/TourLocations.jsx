@@ -28,7 +28,8 @@ export default function HeaderTravel() {
         if (!locations || locations.length === 0) {
             fetchData();
         }
-    }, [dispatch, locations, showLoader, hideLoader]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dispatch]);
 
     const handleScroll = () => {
         const container = scrollContainerRef.current;

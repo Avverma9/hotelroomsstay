@@ -227,7 +227,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await toast.promise(
-        apiClient.post(`/signIn`, { email, password }),
+        apiClient.post(`/signIn`, { email, password, loginType: 'user' }),
         {
           loading: "Signing in...",
           success: "Signed in successfully.",
@@ -275,10 +275,11 @@ export default function LoginPage() {
     try {
       const promise =
         authMethod === "email"
-          ? apiClient.post(`/mail/send-otp`, { email })
+          ? apiClient.post(`/mail/send-otp`, { email, loginType: 'user' })
           : apiClient.post(`/send-otp`, {
               phoneNumber: countryCode + phone,
               mobile: countryCode + phone,
+              loginType: 'user',
             });
 
       const res = await toast.promise(promise, {
@@ -305,11 +306,12 @@ export default function LoginPage() {
     try {
       const promise =
         authMethod === "email"
-          ? apiClient.post(`/mail/verify-otp/site`, { email, otp })
+          ? apiClient.post(`/mail/verify-otp`, { email, otp, loginType: 'user' })
           : apiClient.post(`/verify-otp`, {
               phoneNumber: countryCode + phone,
               mobile: countryCode + phone,
               code: otp,
+              loginType: 'user',
             });
 
       const res = await toast.promise(promise, {
