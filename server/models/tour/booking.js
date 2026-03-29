@@ -16,7 +16,7 @@ const tourBookingSchema = new mongoose.Schema(
     bookingCode: {
       type: String,
       unique: true,
-      index: true,
+      // index declared below via schema.index() — no need for index:true here
       default: () => {
         const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         return Array.from({ length: 10 })
@@ -46,7 +46,7 @@ const tourBookingSchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "held", "confirmed", "cancelled", "failed"],
       default: "pending",
-      index: true
+      // index declared below via schema.index()
     },
 
     // passenger counts
@@ -91,11 +91,15 @@ const tourBookingSchema = new mongoose.Schema(
 
     // payment snapshot
     payment: {
-      provider: String,
-      orderId: String,
-      paymentId: String,
-      signature: String,
-      paidAt: Date
+      provider: { type: String, default: "" },         // "phonepe" | "offline" | ""
+      mode: { type: String, enum: ["online", "offline", ""], default: "" },
+      orderId: { type: String, default: "" },          // PhonePe merchantOrderId
+      phonepeOrderId: { type: String, default: "" },   // same as orderId, explicit alias
+      paymentId: { type: String, default: "" },        // PhonePe transactionId after success
+      signature: { type: String, default: "" },
+      paidAt: { type: Date, default: null },
+      isPaid: { type: Boolean, default: false },
+      collectedBy: { type: String, default: "" },      // for offline: staff name/id
     }
   },
   {
@@ -123,7 +127,7 @@ tourBookingSchema.pre("save", function (next) {
 // indexes
 tourBookingSchema.index({ userId: 1, createdAt: -1 });
 tourBookingSchema.index({ tourId: 1, vehicleId: 1, createdAt: -1 });
-tourBookingSchema.index({ bookingCode: 1 }, { unique: true });
+// bookingCode: unique index already created by unique:true on the field
 tourBookingSchema.index({ status: 1 });
 
 module.exports = mongoose.model("TourBooking", tourBookingSchema);

@@ -268,14 +268,20 @@ const createBooking = async (req, res) => {
       bookingStatus: { $nin: ["Cancelled", "Failed"] },
     });
 
+    // Determine payment mode: offline = panel booking or pm/paymentMode says offline
+    const resolvedPaymentMode =
+      String(pm || "").trim().toLowerCase() === "offline"
+      || String(bookingSource || "").trim().toLowerCase() === "panel"
+        ? "offline"
+        : "online";
+
     const normalizedBookingStatus = String(bookingStatus || "").trim();
-    const isPanelOrOfflineBooking =
-      String(bookingSource || "").trim().toLowerCase() === "panel"
-      || String(pm || "").trim().toLowerCase() === "offline";
     const shouldForcePending = Boolean(existingSameHotelBooking) || nights > 3;
+    // Offline bookings created from panel can be Confirmed immediately;
+    // Online bookings always start as Pending until PhonePe confirms payment.
     const resolvedBookingStatus = shouldForcePending
       ? "Pending"
-      : normalizedBookingStatus || (isPanelOrOfflineBooking ? "Confirmed" : "Pending");
+      : normalizedBookingStatus || (resolvedPaymentMode === "offline" ? "Confirmed" : "Pending");
 
     const booking = new bookingModel({
       bookingId,
@@ -306,7 +312,7 @@ const createBooking = async (req, res) => {
       gstAmount,
       foodPrice,
       baseRoomPrice: roomBaseTotal,
-      discountedRoomPrice: discountedRoomTotal, // Add this field for clarity
+      discountedRoomPrice: discountedRoomTotal,
       checkInDate,
       checkOutDate,
       guests,
@@ -315,6 +321,10 @@ const createBooking = async (req, res) => {
       couponCode,
       discountPrice: discountAmount,
       pm,
+      paymentMode: resolvedPaymentMode,
+      // isPaid is false at creation for online bookings;
+      // offline bookings confirmed on panel can be marked paid by admin later.
+      isPaid: false,
       isPartialBooking,
       partialAmount,
       bookingStatus: resolvedBookingStatus,

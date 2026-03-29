@@ -481,9 +481,9 @@ const getAllHotels = async (req, res) => {
       if (price <= gstData.gstMinThreshold) {
         gstPercent = 0;
       } else if (price <= gstData.gstMaxThreshold) {
-        gstPercent = 12;
+        gstPercent = gstData.gstPrice || 12; // mid-tier rate from DB
       } else {
-        gstPercent = gstData.gstPrice || 18;
+        gstPercent = 18; // luxury tier: 18% per GST regulations
       }
       
       const gstAmount = Math.round((price * gstPercent) / 100);
@@ -621,7 +621,7 @@ const getAllHotels = async (req, res) => {
           startingFrom: lowestPrice === Infinity ? 0 : lowestPrice,
           startingFromWithGST: lowestPriceWithGST === Infinity ? 0 : lowestPriceWithGST,
           gstApplicable: gstData ? true : false,
-          gstNote: gstData ? `GST @${gstData.gstPrice}% applicable on rooms above ₹${gstData.gstMaxThreshold}` : null
+          gstNote: gstData ? `GST @${gstData.gstPrice || 12}% for ₹${gstData.gstMinThreshold + 1}–₹${gstData.gstMaxThreshold}; @18% above ₹${gstData.gstMaxThreshold}` : null
         }
       };
       
@@ -634,7 +634,8 @@ const getAllHotels = async (req, res) => {
     res.write(JSON.stringify(gstData ? {
       minThreshold: gstData.gstMinThreshold,
       maxThreshold: gstData.gstMaxThreshold,
-      defaultRate: gstData.gstPrice
+      midRate: gstData.gstPrice || 12,
+      luxuryRate: 18
     } : null));
     res.write('}');
     res.end();
@@ -792,9 +793,9 @@ const getHotelsById = async (req, res) => {
       if (price <= gstData.gstMinThreshold) {
         gstPercent = 0; // No GST for very low prices
       } else if (price <= gstData.gstMaxThreshold) {
-        gstPercent = 12; // 12% GST for mid-range
+        gstPercent = gstData.gstPrice || 12; // mid-tier rate from DB
       } else {
-        gstPercent = gstData.gstPrice || 18; // 18% GST for high prices
+        gstPercent = 18; // luxury tier: 18% per GST regulations
       }
       
       const gstAmount = Math.round((price * gstPercent) / 100);
@@ -1378,9 +1379,16 @@ const getHotelsByFilters = async (req, res) => {
     const normalizedSortBy = normalizeQueryValue(sortBy).toLowerCase() || "price";
     const normalizedSortOrder = normalizeQueryValue(sortOrder).toLowerCase() === "desc" ? "desc" : "asc";
 
-    const filters = {
-      isAccepted: acceptedRequired === null ? true : acceptedRequired,
-    };
+    // Default filters. If `isAccepted` is explicitly provided, honor it.
+    // Otherwise, default to only accepted hotels for public queries —
+    // but if caller is searching by owner email, allow both accepted and
+    // unaccepted hotels so owners/admins can find unpublished entries.
+    const filters = {};
+    if (acceptedRequired !== null) {
+      filters.isAccepted = acceptedRequired;
+    } else if (!hotelEmail && !req.query.hotelOwnerEmail) {
+      filters.isAccepted = true;
+    }
 
     if (searchTrim) {
       filters.$or = [
@@ -1397,7 +1405,8 @@ const getHotelsByFilters = async (req, res) => {
     addExactStringListFilter(filters, "hotelId", hotelId);
     addRegexListFilter(filters, "hotelName", hotelName);
     addRegexListFilter(filters, "hotelOwnerName", hotelOwnerName);
-    addRegexListFilter(filters, "hotelEmail", hotelEmail);
+    // Accept both `hotelEmail` and legacy/alternate `hotelOwnerEmail` query param
+    addRegexListFilter(filters, "hotelEmail", hotelEmail || req.query.hotelOwnerEmail);
     addRegexListFilter(filters, "destination", destination);
     addRegexListFilter(filters, "city", city);
     addRegexListFilter(filters, "state", state);
@@ -1497,9 +1506,9 @@ const getHotelsByFilters = async (req, res) => {
       if (price <= gstData.gstMinThreshold) {
         gstPercent = 0;
       } else if (price <= gstData.gstMaxThreshold) {
-        gstPercent = 12;
+        gstPercent = gstData.gstPrice || 12; // mid-tier rate from DB
       } else {
-        gstPercent = gstData.gstPrice || 18;
+        gstPercent = 18; // luxury tier: 18% per GST regulations
       }
 
       return {
@@ -1687,7 +1696,7 @@ const getHotelsByFilters = async (req, res) => {
             ? (lowestPriceWithGST === Infinity ? 0 : lowestPriceWithGST)
             : visibleLowestPriceWithGST,
           gstApplicable: Boolean(gstData),
-          gstNote: gstData ? `GST @${gstData.gstPrice}% applicable on rooms above Rs ${gstData.gstMaxThreshold}` : null,
+          gstNote: gstData ? `GST @${gstData.gstPrice || 12}% for ₹${gstData.gstMinThreshold + 1}–₹${gstData.gstMaxThreshold}, @18% above ₹${gstData.gstMaxThreshold}` : null,
         },
       });
     }
@@ -1752,7 +1761,8 @@ const getHotelsByFilters = async (req, res) => {
         ? {
             minThreshold: gstData.gstMinThreshold,
             maxThreshold: gstData.gstMaxThreshold,
-            defaultRate: gstData.gstPrice,
+            midRate: gstData.gstPrice || 12,
+            luxuryRate: 18,
           }
         : null,
     });

@@ -7,13 +7,15 @@
         "start": "node index.js",
         "migrate:coupons": "node scripts/migrateCouponsToUnified.js",
         "migrate:travel-bookings": "node scripts/migrateTravelBookingsLifecycle.js",
-        "seed:hotels": "node scripts/seedFullHotels.js"
+        "seed:hotels": "node scripts/seedFullHotels.js",
+        "test:partner-by-id": "node scripts/testPartnerById.js"
     },
     "keywords": [],
     "author": "",
     "license": "ISC",
     "dependencies": {
         "@aws-sdk/client-s3": "^3.525.0",
+        "@phonepe-pg/pg-sdk-node": "^2.0.5",
         "body-parser": "^1.20.2",
         "cors": "^2.8.5",
         "date-fns": "^4.1.0",

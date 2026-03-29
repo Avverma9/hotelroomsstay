@@ -26,7 +26,8 @@ const additionalSettings =require("./additional/additional")
 const GSTRouter = require('./GST/gst');
 const travelBookings = require('./travel/booking');
 const couponRouterV2 = require('./coupons/coupon');
-const statistics = require("./statistics")
+const statistics = require("./statistics");
+const paymentRouter = require('./payment/payment');
 const router = express.Router();
 
 // Define routes with root paths
@@ -55,7 +56,8 @@ router.use('/travel', carRouter);
 router.use('/travel', travelBookings);
 router.use('/coupons', couponRouterV2);
 router.use('/additional', additionalSettings);
-router.use("/statistics",statistics)
+router.use("/statistics", statistics);
+router.use("/payment", paymentRouter);
 // router.use('/chatApp',chatApp)
 
 module.exports = router;

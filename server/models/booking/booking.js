@@ -44,7 +44,15 @@ const bookingSchema = new mongoose.Schema(
     checkOutTime: {
       type: String,
     },
-    pm: String,
+    pm: String,               // legacy field (kept for backward compat)
+    paymentMode: {
+      type: String,
+      enum: ["online", "offline"],
+      default: "online",
+    },
+    phonepeOrderId: { type: String, default: "" },    // PhonePe merchantOrderId
+    isPaid: { type: Boolean, default: false },
+    paymentConfirmedAt: { type: Date, default: null },
     bookingSource: String,
     guests: {
       type: Number,
