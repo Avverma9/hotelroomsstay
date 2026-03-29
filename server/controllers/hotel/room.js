@@ -76,15 +76,29 @@ exports.getRoomsByEmailId = async (req, res) => {
     }
 };
 exports.updateRoomsByRoomId = async (req, res) => {
-    const { roomId, type, bedTypes, price, countRooms, soldOut,totalRooms} = req.body;
+    const { roomId, type, bedTypes, price, countRooms, soldOut, totalRooms } = req.body;
     const images = req.files ? req.files.map((file) => file.location) : [];
-    const parsedCountRooms = Number(countRooms);
-    const parsedTotalRooms = Number(totalRooms);
 
-    const parsedPrice = Number(price);
+    if (!roomId) {
+        return res.status(400).json({ message: 'roomId is required' });
+    }
+
+    const parsedPrice = price !== undefined && price !== '' ? Number(price) : undefined;
+    const parsedCountRooms = countRooms !== undefined && countRooms !== '' ? Number(countRooms) : undefined;
+    const parsedTotalRooms = totalRooms !== undefined && totalRooms !== '' ? Number(totalRooms) : undefined;
+
+    // Reject NaN values early so Mongoose never sees them
+    if (parsedPrice !== undefined && isNaN(parsedPrice)) {
+        return res.status(400).json({ message: 'Invalid input: price must be a number.' });
+    }
+    if (parsedCountRooms !== undefined && isNaN(parsedCountRooms)) {
+        return res.status(400).json({ message: 'Invalid input: countRooms must be a number.' });
+    }
+    if (parsedTotalRooms !== undefined && isNaN(parsedTotalRooms)) {
+        return res.status(400).json({ message: 'Invalid input: totalRooms must be a number.' });
+    }
 
     try {
-        // Create the update query
         const existingHotel = await hotelModel.findOne({ 'rooms.roomId': roomId });
         if (!existingHotel) {
             return res.status(404).json({ message: 'No data found for the provided roomId' });
@@ -93,29 +107,29 @@ exports.updateRoomsByRoomId = async (req, res) => {
         const existingRoom = existingHotel.rooms.find((room) => room.roomId === roomId);
         const preserveOfferPricing = Boolean(existingRoom?.isOffer);
 
-        let updateQuery = {
-            $set: {
-                'rooms.$.type': type,
-                'rooms.$.soldOut': soldOut,
-                'rooms.$.bedTypes': bedTypes,
-                'rooms.$.price': parsedPrice,
-                'rooms.$.originalPrice': parsedPrice,
-                'rooms.$.countRooms': parsedCountRooms,
-                'rooms.$.totalRooms': parsedTotalRooms, // Update totalRooms based on countRooms
-            },
-        };
+        // Only include fields that were actually provided — avoids NaN/undefined casting errors
+        const setFields = {};
+        if (type !== undefined)              setFields['rooms.$.type'] = type;
+        if (soldOut !== undefined)           setFields['rooms.$.soldOut'] = soldOut;
+        if (bedTypes !== undefined)          setFields['rooms.$.bedTypes'] = bedTypes;
+        if (parsedPrice !== undefined)       setFields['rooms.$.price'] = parsedPrice;
+        if (parsedPrice !== undefined)       setFields['rooms.$.originalPrice'] = parsedPrice;
+        if (parsedCountRooms !== undefined)  setFields['rooms.$.countRooms'] = parsedCountRooms;
+        // Sync totalRooms with countRooms when only countRooms is provided
+        if (parsedTotalRooms !== undefined)   setFields['rooms.$.totalRooms'] = parsedTotalRooms;
+        else if (parsedCountRooms !== undefined) setFields['rooms.$.totalRooms'] = parsedCountRooms;
+        if (preserveOfferPricing)            setFields['rooms.$.isOffer'] = true;
+        if (images.length > 0)              setFields['rooms.$.images'] = images;
 
-        if (preserveOfferPricing) {
-            updateQuery.$set['rooms.$.isOffer'] = true;
+        if (Object.keys(setFields).length === 0) {
+            return res.status(400).json({ message: 'At least one field to update is required.' });
         }
 
-        // If images are provided, include them in the update query
-        if (images.length > 0) {
-            updateQuery.$set['rooms.$.images'] = images;
-        }
-
-        // Find the hotel document based on roomId and update the room
-        const updatedHotel = await hotelModel.findOneAndUpdate({ 'rooms.roomId': roomId }, updateQuery, { new: true });
+        const updatedHotel = await hotelModel.findOneAndUpdate(
+            { 'rooms.roomId': roomId },
+            { $set: setFields },
+            { new: true }
+        );
 
         res.json({
             message: 'Rooms updated successfully',
@@ -123,7 +137,7 @@ exports.updateRoomsByRoomId = async (req, res) => {
         });
     } catch (error) {
         console.error('Error while updating rooms:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        res.status(500).json({ message: 'Internal server error', error: error.message });
     }
 };
 
@@ -155,26 +169,37 @@ exports.deleteRoomByRoomId = async (req, res) => {
 exports.decreaseRoomCountByOne = async (req, res) => {
     const { roomId } = req.body;
 
+    if (!roomId) {
+        return res.status(400).json({ message: 'roomId is required' });
+    }
+
     try {
+        // Use arrayFilters to only decrement when countRooms > 0 (prevents negative rooms)
         const updatedHotel = await hotelModel.findOneAndUpdate(
-            { 'rooms.roomId': roomId }, // Query to find the hotel with the specified roomId
+            { 'rooms.roomId': roomId },
+            { $inc: { 'rooms.$[r].countRooms': -1 } },
             {
-                $inc: { 'rooms.$.countRooms': -1 }, // Decrement countRooms by 1
-            },
-            { new: true } // Return the updated document
+                new: true,
+                arrayFilters: [{ 'r.roomId': roomId, 'r.countRooms': { $gt: 0 } }]
+            }
         );
 
         if (!updatedHotel) {
             return res.status(404).json({ message: 'Hotel or roomId not found' });
         }
 
-        // Respond with success
+        const updatedRoom = updatedHotel.rooms.find((r) => r.roomId === roomId);
+        if (!updatedRoom) {
+            return res.status(404).json({ message: 'Room not found' });
+        }
+
         res.json({
             message: 'Room count decreased successfully',
+            countRooms: updatedRoom.countRooms,
             hotel: updatedHotel,
         });
     } catch (error) {
         console.error('Error while updating rooms:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        res.status(500).json({ message: 'Internal server error', error: error.message });
     }
 };

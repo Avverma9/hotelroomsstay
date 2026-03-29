@@ -21,7 +21,28 @@ const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g,
 
 const isValueProvided = (value) => value !== undefined;
 
+// Frontend may send different field names than the schema uses — map them here.
+const FIELD_ALIASES = {
+  phone:          "contact",
+  mobile:         "contact",
+  contactNumber:  "contact",
+  owner:          "hotelOwnerName",
+  ownerName:      "hotelOwnerName",
+  address:        "landmark",
+  hotelAddress:   "landmark",
+  name:           "hotelName",
+};
+
 const buildHotelUpdatePayload = (payload = {}) => {
+  // Resolve aliases so frontend can send e.g. "phone" or "owner" and they map correctly
+  const normalizedPayload = { ...payload };
+  for (const [alias, schemaField] of Object.entries(FIELD_ALIASES)) {
+    if (normalizedPayload[alias] !== undefined && normalizedPayload[schemaField] === undefined) {
+      normalizedPayload[schemaField] = normalizedPayload[alias];
+    }
+    delete normalizedPayload[alias]; // always remove alias key
+  }
+
   const allowedFields = [
     "isAccepted",
     "onFront",
@@ -49,11 +70,11 @@ const buildHotelUpdatePayload = (payload = {}) => {
   const updatePayload = {};
 
   for (const field of allowedFields) {
-    if (!isValueProvided(payload[field])) {
+    if (!isValueProvided(normalizedPayload[field])) {
       continue;
     }
 
-    let normalizedValue = payload[field];
+    let normalizedValue = normalizedPayload[field];
 
     if ((field === "isAccepted" || field === "onFront") && typeof normalizedValue === "string") {
       const lowered = normalizedValue.trim().toLowerCase();
@@ -89,6 +110,13 @@ const buildHotelUpdatePayload = (payload = {}) => {
   }
 
   return updatePayload;
+};
+
+// Build query for hotel lookup — hotelId is type:String in the schema,
+// always cast to string to avoid Mongoose type-mismatch no-ops.
+const buildHotelQuery = (hotelId) => {
+  if (!hotelId) return {};
+  return { hotelId: String(hotelId) };
 };
 
 const createHotel = async (req, res) => {
@@ -168,30 +196,6 @@ const createHotel = async (req, res) => {
 };
 
 
-const updatePolicies = async (req, res) => {
-  const { hotelId } = req.params;
-  const { policies } = req.body;
-
-  if (!policies || !Array.isArray(policies)) {
-    return res.status(400).json({ message: 'Policies must be provided as an array' });
-  }
-
-  try {
-    const updatedHotel = await hotelModel.findOneAndUpdate(
-      { hotelId },
-      { $set: { policies } },
-      { new: true }
-    );
-
-    if (!updatedHotel) {
-      return res.status(404).json({ message: 'Hotel not found' });
-    }
-
-    return res.json({ message: 'Policies updated successfully', policies: updatedHotel.policies });
-  } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
 //=================================Count of hotel=============================
 const getCount = async function (req, res) {
   try {
@@ -215,39 +219,6 @@ const getCountPendingHotels = async function (req, res) {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
-//=================================update hotel images=================
-const updateHotelImage = async (req, res) => {
-  try {
-    const { hotelId } = req.params;
-
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: "No files were uploaded" });
-    }
-
-    // Extract image locations
-    const images = req.files.map((file) => file.location);
-
-    // Check if the hotel exists
-    const updatedHotel = await hotelModel.findOne({ hotelId });
-    if (!updatedHotel) {
-      return res.status(404).json({ message: "Hotel not found" });
-    }
-
-    // Update images
-    updatedHotel.images = [...(updatedHotel.images || []), ...images]; // Append new images
-    await updatedHotel.save();
-
-    res.status(200).json({
-      message: "Hotel images updated successfully",
-      data: updatedHotel,
-    });
-  } catch (error) {
-    console.error("Error updating hotel images:", error);
-    res
-      .status(500)
-      .json({ message: "An error occurred while updating hotel images" });
-  }
-};
 
 //======================================Delete hotel images=======================
 const deleteHotelImages = async function (req, res) {
@@ -260,8 +231,9 @@ const deleteHotelImages = async function (req, res) {
 
   try {
     // Use $pull to remove the image URL from the images array
+    const query = buildHotelQuery(hotelId);
     const hotel = await hotelModel.findOneAndUpdate(
-      { hotelId: hotelId },
+      query,
       { $pull: { images: imageUrl } },
       { new: true }
     );
@@ -282,79 +254,237 @@ const deleteHotelImages = async function (req, res) {
   }
 };
 
-//==================================UpdateHotel================================
-const UpdateHotelStatus = async function (req, res) {
+//=================== MASTER API handles all hotel updates — see UpdateHotelMaster below ===================
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MASTER HOTEL UPDATE API
+// PATCH /hotels/master/:hotelId
+//
+// Single API that can update EVERYTHING about a hotel in one request:
+//   - Basic info (hotelName, city, state, contact, email, etc.)
+//   - Status     (isAccepted, onFront, localId)
+//   - Rooms      (add new rooms / update existing by roomId / delete by roomId)
+//   - Foods      (replace entire array, or add/remove individual items)
+//   - Amenities  (replace entire array)
+//   - Policies   (replace entire array)
+//   - Images     (add via multipart upload OR replace with provided URLs)
+//
+// Request body (JSON or multipart/form-data):
+// {
+//   // --- Basic info (all optional) ---
+//   "hotelName": "...",  "city": "...",  "state": "...",
+//   "phone": "...",  "owner": "...",  "address": "...",   // aliases accepted
+//   "hotelEmail": "...",  "starRating": "4",  "isAccepted": true,
+//   "onFront": false,  "description": "...",  "propertyType": ["Hotel"],
+//   ... (any field from basicDetails schema)
+//
+//   // --- Rooms (optional) ---
+//   "rooms": [
+//     // ADD a new room — no roomId
+//     { "type": "Deluxe", "bedTypes": "Double", "price": 3000, "countRooms": 5 },
+//     // UPDATE existing room — send roomId
+//     { "roomId": "abc12345", "price": 3500, "soldOut": false },
+//     // DELETE existing room — send roomId + "_delete": true
+//     { "roomId": "xyz67890", "_delete": true }
+//   ],
+//
+//   // --- Foods (optional) ---
+//   "foods": [
+//     // ADD new food — no foodId
+//     { "name": "Breakfast", "price": 250, "foodType": "Veg" },
+//     // UPDATE existing — send foodId
+//     { "foodId": "f001", "price": 300 },
+//     // DELETE — send foodId + "_delete": true
+//     { "foodId": "f002", "_delete": true }
+//   ],
+//
+//   // --- Amenities (optional) — replaces entire array ---
+//   "amenities": [ { "amenities": "WiFi" }, { "amenities": "Pool" } ],
+//
+//   // --- Policies (optional) — replaces entire array ---
+//   "policies": [ { "hotelsPolicy": "No smoking", "petsAllowed": false } ],
+//
+//   // --- Image URLs to remove (optional) ---
+//   "removeImages": ["https://..."]
+// }
+// Files attached as multipart will be uploaded to S3 and appended to hotel.images
+// ═══════════════════════════════════════════════════════════════════════════
+const { v4: uuidv4 } = require("uuid");
+
+const UpdateHotelMaster = async function (req, res) {
   const { hotelId } = req.params;
-  const { isAccepted, onFront } = req.body;
 
-  try {
-    const updateDetails = await hotelModel.findOneAndUpdate(
-      { hotelId }, // Same as hotelId: hotelId
-      {
-        $set: {
-          isAccepted: isAccepted,
-          onFront: onFront,
-        },
-      },
-      { new: true },
-    );
-
-    if (!updateDetails) {
-      return res.status(404).json({ error: "Hotel not found." });
-    }
-
-    // Send notification email
-    await sendCustomEmail({
-      email: updateDetails.hotelEmail,
-      subject: "Hotel Approval Confirmation",
-      message: `Your hotel with ID ${updateDetails.hotelId} has been ${
-        isAccepted ? "approved" : "rejected"
-      }.`,
-      link: process.env.FRONTEND_URL,
-    });
-
-    res.json({ success: true, data: updateDetails });
-  } catch (error) {
-    console.error("Error updating hotel:", error);
-    res.status(500).json({ error: "Failed to update hotel details." });
+  if (!hotelId) {
+    return res.status(400).json({ success: false, message: "hotelId is required" });
   }
-};
-
-//================================update hotel info =================================================
-const UpdateHotelInfo = async function (req, res) {
-  const { hotelId } = req.params;
-  const updatePayload = buildHotelUpdatePayload(req.body);
 
   try {
-    if (!hotelId) {
-      return res.status(400).json({ success: false, message: "hotelId is required" });
-    }
-
-    if (Object.keys(updatePayload).length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "At least one updatable field is required",
-      });
-    }
-
-    const updateDetails = await hotelModel.findOneAndUpdate(
-      { hotelId },
-      { $set: updatePayload },
-      { new: true, runValidators: true },
-    );
-
-    if (!updateDetails) {
+    // ── 1. Load current hotel ───────────────────────────────────────────────
+    const hotel = await hotelModel.findOne(buildHotelQuery(hotelId));
+    if (!hotel) {
       return res.status(404).json({ success: false, message: "Hotel not found" });
     }
 
-    res.status(200).json({
+    // ── 2. Basic info fields ────────────────────────────────────────────────
+    const basicPayload = buildHotelUpdatePayload(req.body);
+    Object.assign(hotel, basicPayload);
+
+    // ── 3. Rooms ────────────────────────────────────────────────────────────
+    let roomsInput = req.body.rooms;
+    if (typeof roomsInput === "string") {
+      try { roomsInput = JSON.parse(roomsInput); } catch { roomsInput = null; }
+    }
+
+    if (Array.isArray(roomsInput)) {
+      for (const roomInput of roomsInput) {
+        if (!roomInput || typeof roomInput !== "object") continue;
+
+        if (roomInput.roomId) {
+          // UPDATE or DELETE existing room
+          const idx = hotel.rooms.findIndex((r) => String(r.roomId) === String(roomInput.roomId));
+          if (idx === -1) continue; // roomId not found — skip
+
+          if (roomInput._delete === true || roomInput._delete === "true") {
+            hotel.rooms.splice(idx, 1); // delete
+          } else {
+            // Merge only provided fields onto the existing room
+            const existing = hotel.rooms[idx].toObject ? hotel.rooms[idx].toObject() : { ...hotel.rooms[idx] };
+            const { _delete: _d, roomId: _r, ...updatableFields } = roomInput;
+
+            // Normalise numeric fields
+            if (updatableFields.price !== undefined)        updatableFields.price        = Number(updatableFields.price) || existing.price;
+            if (updatableFields.countRooms !== undefined)   updatableFields.countRooms   = Number(updatableFields.countRooms) || existing.countRooms;
+            if (updatableFields.totalRooms !== undefined)   updatableFields.totalRooms   = Number(updatableFields.totalRooms) || existing.totalRooms;
+            // Keep totalRooms in sync if only countRooms sent
+            if (updatableFields.countRooms !== undefined && updatableFields.totalRooms === undefined) {
+              updatableFields.totalRooms = updatableFields.countRooms;
+            }
+            if (updatableFields.originalPrice === undefined && updatableFields.price !== undefined) {
+              updatableFields.originalPrice = updatableFields.price;
+            }
+
+            Object.assign(hotel.rooms[idx], updatableFields);
+            // Also use .set() for each field so Mongoose tracks strict:false fields (e.g. amenities, description)
+            for (const [key, val] of Object.entries(updatableFields)) {
+              hotel.rooms[idx].set(key, val);
+            }
+          }
+        } else {
+          // ADD new room
+          const price = Number(roomInput.price) || 0;
+          const countRooms = Number(roomInput.countRooms) || 1;
+          const { _delete: _d, ...roomFields } = roomInput;
+
+          hotel.rooms.push({
+            roomId: uuidv4().substr(0, 8),
+            hotelId: String(hotelId),
+            images: [],
+            soldOut: false,
+            isOffer: false,
+            offerName: "N/A",
+            offerPriceLess: 0,
+            offerExp: null,
+            ...roomFields,
+            price,
+            originalPrice: price,
+            countRooms,
+            totalRooms: countRooms,
+          });
+        }
+      }
+    }
+
+    // ── 4. Foods ────────────────────────────────────────────────────────────
+    let foodsInput = req.body.foods;
+    if (typeof foodsInput === "string") {
+      try { foodsInput = JSON.parse(foodsInput); } catch { foodsInput = null; }
+    }
+
+    if (Array.isArray(foodsInput)) {
+      for (const foodInput of foodsInput) {
+        if (!foodInput || typeof foodInput !== "object") continue;
+
+        if (foodInput.foodId) {
+          const idx = (hotel.foods || []).findIndex((f) => String(f.foodId) === String(foodInput.foodId));
+          if (idx === -1) continue;
+
+          if (foodInput._delete === true || foodInput._delete === "true") {
+            hotel.foods.splice(idx, 1);
+          } else {
+            const { _delete: _d, foodId: _f, ...updatableFields } = foodInput;
+            Object.assign(hotel.foods[idx], updatableFields);
+          }
+        } else {
+          // ADD new food
+          if (!hotel.foods) hotel.foods = [];
+          const { _delete: _d, ...foodFields } = foodInput;
+          hotel.foods.push({
+            foodId: uuidv4().substr(0, 8),
+            ...foodFields,
+          });
+        }
+      }
+    }
+
+    // ── 5. Amenities (full replace if provided) ─────────────────────────────
+    let amenitiesInput = req.body.amenities;
+    if (typeof amenitiesInput === "string") {
+      try { amenitiesInput = JSON.parse(amenitiesInput); } catch { amenitiesInput = null; }
+    }
+    if (Array.isArray(amenitiesInput)) {
+      hotel.amenities = amenitiesInput;
+    }
+
+    // ── 6. Policies (full replace if provided) ──────────────────────────────
+    let policiesInput = req.body.policies;
+    if (typeof policiesInput === "string") {
+      try { policiesInput = JSON.parse(policiesInput); } catch { policiesInput = null; }
+    }
+    if (Array.isArray(policiesInput)) {
+      hotel.policies = policiesInput;
+    }
+
+    // ── 7. Images ───────────────────────────────────────────────────────────
+    // 7a. Remove images by URL
+    let removeImages = req.body.removeImages;
+    if (typeof removeImages === "string") {
+      try { removeImages = JSON.parse(removeImages); } catch { removeImages = [removeImages]; }
+    }
+    if (Array.isArray(removeImages) && removeImages.length > 0) {
+      hotel.images = (hotel.images || []).filter((img) => !removeImages.includes(img));
+    }
+
+    // 7b. Append new uploaded files (multipart)
+    if (req.files && req.files.length > 0) {
+      const newImageUrls = req.files.map((f) => f.location);
+      hotel.images = [...(hotel.images || []), ...newImageUrls];
+    }
+
+    // ── 8. Save ─────────────────────────────────────────────────────────────
+    // markModified ensures Mongoose tracks changes to non-schema fields (strict:false)
+    // e.g. room-level amenities, description, custom fields
+    hotel.markModified('rooms');
+    hotel.markModified('foods');
+    const saved = await hotel.save();
+
+    // ── 9. Fire approval email if isAccepted explicitly changed ─────────────
+    if ("isAccepted" in basicPayload) {
+      sendCustomEmail({
+        email: saved.hotelEmail,
+        subject: "Hotel Status Update",
+        message: `Your hotel "${saved.hotelName}" (ID: ${saved.hotelId}) has been ${basicPayload.isAccepted ? "approved" : "rejected"}.`,
+        link: process.env.FRONTEND_URL,
+      }).catch((err) => console.error("Email error:", err));
+    }
+
+    return res.status(200).json({
       success: true,
       message: "Hotel updated successfully",
-      data: updateDetails,
+      data: saved,
     });
   } catch (error) {
-    console.error("Error updating hotel:", error);
-    res.status(500).json({ error: "Failed to update hotel details." });
+    console.error("Error in UpdateHotelMaster:", error);
+    return res.status(500).json({ success: false, error: "Failed to update hotel", message: error.message });
   }
 };
 
@@ -681,7 +811,9 @@ const setOnFront = async (req, res) => {
     res.write('[');
     let first = true;
     
-    const cursor = hotelModel.find({ onFront: true }).sort({ createdAt: -1 }).cursor();
+    // Use .lean() so hotel and room objects are plain JS objects.
+    // Without .lean(), spreading Mongoose subdocs (e.g. ...room) gives incomplete objects.
+    const cursor = hotelModel.find({ onFront: true }).sort({ createdAt: -1 }).lean().cursor();
     
     for await (const hotel of cursor) {
       // Process rooms with monthly pricing
@@ -761,8 +893,8 @@ const getHotelsById = async (req, res) => {
     const { checkInDate, checkOutDate, countRooms } = req.query;
     const requestedRooms = parseInt(countRooms) || 1;
 
-    // Fetch hotel data
-    const hotel = await hotelModel.findOne({ hotelId }).lean();
+    // Fetch hotel data — cast to String for consistent matching with schema type:String
+    const hotel = await hotelModel.findOne({ hotelId: String(hotelId) }).lean();
     
     if (!hotel) {
       return res.status(404).json({ success: false, message: "Hotel not found" });
@@ -944,7 +1076,9 @@ const getHotelsById = async (req, res) => {
         features: {
           isOffer: isOfferActive(r),
           offerText: r.offerName || (r.offerExp ? String(r.offerExp) : '')
-        }
+        },
+        amenities: Array.isArray(r.amenities) ? r.amenities : [],
+        description: r.description || ''
       };
     });
 
@@ -1127,48 +1261,71 @@ const getHotelsById = async (req, res) => {
 
     const responsePayload = {
       _id: hotel._id,
+      hotelId: hotel.hotelId,
+      // ── Status fields ──────────────────────────────────────────────────────
+      isAccepted:   hotel.isAccepted   ?? false,
+      onFront:      hotel.onFront      ?? false,
+      localId:      hotel.localId      || '',
+      destination:  hotel.destination  || '',
+      rating:       hotel.rating       || 0,
+      reviewCount:  hotel.reviewCount  || 0,
+      ratingBreakdown:    hotel.ratingBreakdown   || {},
+      ratingDistribution: hotel.ratingDistribution || {},
+      startDate:    hotel.startDate    || null,
+      endDate:      hotel.endDate      || null,
+      customerWelcomeNote: hotel.customerWelcomeNote || '',
+      // ── Availability summary ───────────────────────────────────────────────
+      availability: {
+        totalRooms,
+        availableRooms,
+        status: availabilityStatus,
+        isFullyBooked,
+      },
       basicInfo: {
-        name: hotel.hotelName || hotel.basicInfo?.name || '',
-        owner: hotel.hotelOwnerName || hotel.basicInfo?.owner || '',
-        description: hotel.description || hotel.basicInfo?.description || '',
-        category: hotel.hotelCategory || hotel.basicInfo?.category || '',
-        starRating: hotel.starRating != null ? Number(hotel.starRating) : (hotel.rating || 0),
+        name:        hotel.hotelName     || '',
+        owner:       hotel.hotelOwnerName || '',
+        description: hotel.description   || '',
+        category:    hotel.hotelCategory  || '',
+        starRating:  hotel.starRating != null ? Number(hotel.starRating) : (hotel.rating || 0),
+        propertyType: Array.isArray(hotel.propertyType) ? hotel.propertyType : (hotel.propertyType ? [hotel.propertyType] : []),
         images: hotel.images || [],
         location: {
-          address: hotel.landmark || hotel.location?.address || '',
-          city: hotel.city || hotel.location?.city || '',
-          state: hotel.state || hotel.location?.state || '',
-          pinCode: hotel.pinCode || hotel.location?.pinCode || '',
+          address:    hotel.landmark  || '',
+          city:       hotel.city      || '',
+          state:      hotel.state     || '',
+          pinCode:    hotel.pinCode   || '',
           coordinates: {
-            lat: hotel.latitude || (hotel.location && hotel.location.coordinates && hotel.location.coordinates.lat) || null,
-            lng: hotel.longitude || (hotel.location && hotel.location.coordinates && hotel.location.coordinates.lng) || null
+            lat: hotel.latitude  || null,
+            lng: hotel.longitude || null,
           },
-          googleMapLink: hotel.googleMapLink || ''
+          googleMapLink: hotel.googleMapLink || '',
         },
         contacts: {
-          phone: hotel.contact || hotel.basicInfo?.contacts?.phone || '',
-          email: hotel.hotelEmail || hotel.basicInfo?.contacts?.email || '',
+          phone:          hotel.contact               || '',
+          email:          hotel.hotelEmail            || '',
           generalManager: hotel.generalManagerContact || '',
-          salesManager: hotel.salesManagerContact || ''
-        }
+          salesManager:   hotel.salesManagerContact   || '',
+        },
       },
       pricingOverview: {
-        lowestBasePrice: lowestPrice === Infinity ? 0 : Math.round(lowestPrice),
+        lowestBasePrice:    lowestPrice === Infinity ? 0 : Math.round(lowestPrice),
         lowestPriceWithTax: lowestPriceWithGST === Infinity ? 0 : Math.round(lowestPriceWithGST),
         currencySymbol: '₹',
         displayString: `Starts from ₹ ${formatCurrency(lowestPrice === Infinity ? 0 : Math.round(lowestPrice))}`,
-        taxNote: gstData ? `GST ${gstData.gstPrice}% applicable (Included in final price)` : ''
+        taxNote: gstData ? `GST ${gstData.gstPrice}% applicable (Included in final price)` : '',
       },
-      rooms: mappedRooms,
-      foods: mappedFoods,
-      policies: policiesObj,
-      amenities: mappedAmenities,
+      rooms:      mappedRooms,
+      foods:      mappedFoods,
+      amenities:  mappedAmenities,
+      policies:   policiesObj,
+      // Raw policies array for admin editing
+      rawPolicies: hotel.policies || [],
       gstConfig: gstData ? {
-        enabled: true,
-        rate: gstData.gstPrice,
+        enabled:  true,
+        rate:     gstData.gstPrice,
         minLimit: gstData.gstMinThreshold,
-        maxLimit: gstData.gstMaxThreshold
-      } : { enabled: false, rate: 0, minLimit: 0, maxLimit: 0 }
+        maxLimit: gstData.gstMaxThreshold,
+      } : { enabled: false, rate: 0, minLimit: 0, maxLimit: 0 },
     };
 
     res.json({ success: true, data: responsePayload });
@@ -1181,18 +1338,32 @@ const getHotelsById = async (req, res) => {
 //==================================================================================
 const deleteHotelById = async function (req, res) {
   const { hotelId } = req.params;
-  const deletedData = await hotelModel.findOneAndDelete({ hotelId: hotelId });
-  res.status(200).json({ message: "deleted" });
+  try {
+    const deletedData = await hotelModel.findOneAndDelete({ hotelId: String(hotelId) });
+    if (!deletedData) {
+      return res.status(404).json({ success: false, message: "Hotel not found" });
+    }
+    res.status(200).json({ success: true, message: "Hotel deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting hotel:", error);
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
 };
 //===========================================================
 const getHotelsByLocalID = async (req, res) => {
-  const { localId } = req.params;
+  // localId comes from query string — route is /hotelsLocalId?localId=Accepted
+  const { localId } = req.query;
+
+  if (!localId) {
+    return res.status(400).json({ error: "localId query parameter is required" });
+  }
 
   try {
     res.setHeader('Content-Type', 'application/json');
     res.write('[');
     let first = true;
-    const cursor = hotelModel.find({ "location.localId": localId }).sort({ createdAt: -1 }).cursor();
+    // Fixed: was "location.localId" — schema stores localId at top level
+    const cursor = hotelModel.find({ localId }).sort({ createdAt: -1 }).cursor();
     for await (const hotel of cursor) {
       if (!first) res.write(',');
       res.write(JSON.stringify(hotel));
@@ -1835,38 +2006,49 @@ const getHotelsCity = async (req, res) => {
   }
 };
 //=================================Update price monthly============================================
-const monthlyPrice = async function (req, res) {
-  try {
-    const rooms = await month.find();
-    const currentDate = new Date();
-    const hotels = await hotelModel.find();
+// Core logic extracted so it can be called by both the HTTP handler and the cron job
+const processMonthlyPrice = async () => {
+  const rooms = await month.find();
+  const currentDate = new Date();
+  const hotels = await hotelModel.find();
+  let updatedCount = 0;
 
-    for (const room of rooms) {
-      for (const hotel of hotels) {
-        for (const roomDetails of hotel.roomDetails) {
-          if (String(room.roomId) === String(roomDetails._id)) {
-            const roomDate = room.monthDate;
-
-            if (roomDate <= currentDate) {
-              roomDetails.price += room.monthPrice;
-              await hotel.save();
-            } else {
-              return res.status(400).json({ error: "Date not matched." });
-            }
+  for (const room of rooms) {
+    for (const hotel of hotels) {
+      for (const roomDetail of (hotel.rooms || [])) {  // Fixed: was hotel.roomDetails (wrong field)
+        if (String(room.roomId) === String(roomDetail._id)) {
+          const roomDate = room.monthDate;
+          if (roomDate <= currentDate) {
+            roomDetail.price += room.monthPrice;
+            await hotel.save();
+            updatedCount++;
           }
+          // Fixed: removed early `return` that aborted the entire request
+          // on the first unmatched date
         }
       }
     }
+  }
+  return updatedCount;
+};
 
-    res.status(200).json({ message: "Monthly prices updated successfully." });
+const monthlyPrice = async function (req, res) {
+  try {
+    const updatedCount = await processMonthlyPrice();
+    res.status(200).json({ message: "Monthly prices updated successfully.", updatedCount });
   } catch (error) {
     console.error("Error in monthlyPrice:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
+// Fixed: was `await monthlyPrice()` which requires req/res and would crash the cron
 cron.schedule("0 0 1 * *", async () => {
-  await monthlyPrice();
+  try {
+    await processMonthlyPrice();
+  } catch (error) {
+    console.error("Monthly price cron error:", error);
+  }
 });
 // The first 0 represents the minute (00).
 // The second 0 represents the hour (00).
@@ -2185,21 +2367,18 @@ module.exports = {
   getHotelsByFilters,
   getCity,
   getByQuery,
-  UpdateHotelStatus,
+  UpdateHotelMaster,
   getHotels,
   setOnFront,
   deleteHotelById,
-  UpdateHotelInfo,
   getHotelsState,
   getHotelsCity,
   getHotelsCityByState,
   monthlyPrice,
   getCount,
-  updatePolicies,
   getCouponsAppliedHotels,
   getRoomOfferStatus,
   getCountPendingHotels,
-  updateHotelImage,
   deleteHotelImages,
   autoCancelPendingBookings,
 };
