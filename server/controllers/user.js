@@ -1,6 +1,9 @@
 const booking = require("../models/booking/booking");
 const userModel = require("../models/user");
 const Coupon = require("../models/coupons/coupon");
+const Complaint = require("../models/complaints/complaint");
+const CarBooking = require("../models/travel/carBooking");
+const TourBooking = require("../models/tour/booking");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const otpAuth = require("../authentication/otpLogin");
@@ -489,6 +492,328 @@ const getAllUserDetails = async (req, res) => {
   }
 };
 
+/* ================================================================
+   ADMIN: Filter Users with Bookings, Coupons, Complaints
+   GET /admin/users/filter
+
+   Query params (all optional, combinable):
+     -- User search --
+     userId          exact userId
+     bookingId       any booking ID across hotel/tour/taxi (exact)
+     email           partial, case-insensitive
+     mobile          partial
+
+     -- Booking sub-filters (applied only when bookings tab is needed) --
+     serviceType     hotel | tour | taxi  (filters which collection to show)
+     bookingStatus   Confirmed | Checked-In | Checked-Out | Cancelled | Failed
+                     (for tour: confirmed | cancelled | failed | pending)
+
+     -- Coupon sub-filter --
+     couponStatus    active | used
+
+     -- Complaint sub-filter --
+     complaintStatus Pending | Working | Closed (Resolved)
+
+     -- Pagination --
+     page            (default: 1)
+     limit           (default: 20, max: 100)
+================================================================ */
+const filterUsers = async (req, res) => {
+  try {
+    const {
+      userId,
+      bookingId,
+      email,
+      mobile,
+      serviceType,
+      bookingStatus,
+      couponStatus,
+      complaintStatus,
+      page = 1,
+      limit = 20,
+    } = req.query;
+
+    const resolvedLimit = Math.min(Number(limit) || 20, 100);
+    const resolvedPage  = Math.max(Number(page)  || 1,  1);
+    const skip = (resolvedPage - 1) * resolvedLimit;
+
+    /* ── Step 1: Resolve userId from bookingId if provided ─────────── */
+
+    let resolvedUserId = userId ? String(userId).trim() : null;
+
+    if (!resolvedUserId && bookingId) {
+      const bid = String(bookingId).trim();
+
+      // Search across all 3 booking collections in parallel
+      const [hotelBk, tourBk, travelBk] = await Promise.all([
+        booking.findOne({ bookingId: bid }).select("user.userId userId").lean(),
+        TourBooking.findOne({ bookingCode: bid }).select("userId").lean(),
+        CarBooking.findOne({ bookingId: bid }).select("userId").lean(),
+      ]);
+
+      const found = hotelBk || tourBk || travelBk;
+      if (!found) {
+        return res.status(200).json({
+          success: true,
+          total: 0,
+          page: resolvedPage,
+          totalPages: 0,
+          data: [],
+          message: "No user found for the given bookingId",
+        });
+      }
+
+      resolvedUserId =
+        String(hotelBk?.user?.userId || hotelBk?.userId || found.userId || "").trim();
+    }
+
+    /* ── Step 2: Build user query ──────────────────────────────────── */
+
+    const userQuery = {};
+
+    if (resolvedUserId) {
+      userQuery.userId = resolvedUserId;
+    } else {
+      if (email)  userQuery.email  = { $regex: String(email).trim(),  $options: "i" };
+      if (mobile) userQuery.mobile = { $regex: String(mobile).trim(), $options: "i" };
+    }
+
+    // If no filter given at all, return paginated user list
+    const [users, total] = await Promise.all([
+      userModel.find(userQuery)
+        .select("userId uid userName email mobile address images createdAt")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(resolvedLimit)
+        .lean(),
+      userModel.countDocuments(userQuery),
+    ]);
+
+    if (!users.length) {
+      return res.status(200).json({
+        success: true,
+        total: 0,
+        page: resolvedPage,
+        totalPages: 0,
+        data: [],
+        message: "No users found",
+      });
+    }
+
+    const userIds = users.map((u) => String(u.userId));
+
+    /* ── Step 3: Fetch bookings per serviceType + bookingStatus ─────── */
+
+    const buildBookingResults = async () => {
+      const normalizedService = String(serviceType || "").toLowerCase();
+      const results = {};
+
+      const hotelStatusMap = new Set([
+        "Confirmed", "Checked-in", "Checked-out",
+        "Cancelled", "Failed", "Pending", "No-Show",
+      ]);
+      const tourStatusMap  = new Set(["pending", "held", "confirmed", "cancelled", "failed"]);
+      const travelStatusMap = new Set(["Pending", "Confirmed", "Completed", "Cancelled", "Failed"]);
+
+      // ─ Hotel ─
+      if (!normalizedService || normalizedService === "hotel") {
+        const hotelFilter = { "user.userId": { $in: userIds } };
+        if (bookingStatus && hotelStatusMap.has(bookingStatus)) {
+          hotelFilter.bookingStatus = bookingStatus;
+        }
+        results.hotel = await booking
+          .find(hotelFilter)
+          .select("bookingId user.userId bookingStatus checkInDate checkOutDate price hotelDetails.hotelName createdAt")
+          .sort({ createdAt: -1 })
+          .lean();
+      }
+
+      // ─ Tour ─
+      if (!normalizedService || normalizedService === "tour") {
+        // Map frontend-friendly status names to tour schema values
+        const tourStatus = bookingStatus
+          ? bookingStatus.toLowerCase()
+          : null;
+        const tourFilter = { userId: { $in: userIds } };
+        if (tourStatus && tourStatusMap.has(tourStatus)) {
+          tourFilter.status = tourStatus;
+        }
+        results.tour = await TourBooking
+          .find(tourFilter)
+          .select("bookingCode userId status totalAmount tourStartDate travelAgencyName createdAt")
+          .sort({ createdAt: -1 })
+          .lean();
+      }
+
+      // ─ Taxi / Travel ─
+      if (!normalizedService || normalizedService === "taxi") {
+        const travelFilter = { userId: { $in: userIds } };
+        if (bookingStatus && travelStatusMap.has(bookingStatus)) {
+          travelFilter.bookingStatus = bookingStatus;
+        }
+        results.taxi = await CarBooking
+          .find(travelFilter)
+          .select("bookingId userId bookingStatus pickupP dropP price paymentMode isPaid createdAt")
+          .sort({ createdAt: -1 })
+          .lean();
+      }
+
+      return results;
+    };
+
+    /* ── Step 4: Fetch coupons ─────────────────────────────────────── */
+
+    const buildCouponResults = async () => {
+      const couponFilter = {
+        $or: [
+          { userId: { $in: userIds } },
+          { targetUserId: { $in: userIds } },
+          { userIds: { $in: userIds } },
+        ],
+      };
+
+      const now = new Date();
+      if (couponStatus === "active") {
+        couponFilter.expired = { $ne: true };
+        couponFilter.validity = { $gte: now };
+      } else if (couponStatus === "used") {
+        couponFilter.$and = [
+          ...(couponFilter.$and || []),
+          {
+            $or: [
+              { expired: true },
+              { validity: { $lt: now } },
+              { $expr: { $gte: ["$usedCount", "$maxUsage"] } },
+            ],
+          },
+        ];
+      }
+
+      return Coupon
+        .find(couponFilter)
+        .select("couponCode couponName discountPrice validity expired usedCount maxUsage type userId targetUserId")
+        .sort({ createdAt: -1 })
+        .lean();
+    };
+
+    /* ── Step 5: Fetch complaints ──────────────────────────────────── */
+
+    const buildComplaintResults = async () => {
+      // Complaint.userId is ObjectId ref but userId on user model is a String.
+      // Look up user _ids first, then query complaints.
+      const userDocs = await userModel
+        .find({ userId: { $in: userIds } })
+        .select("_id userId")
+        .lean();
+
+      const objectIds = userDocs.map((u) => u._id);
+      if (!objectIds.length) return [];
+
+      const complaintFilter = { userId: { $in: objectIds } };
+
+      // Normalise complaint status aliases
+      const statusAliases = {
+        closed:   "Resolved",
+        resolved: "Resolved",
+        working:  "Working",
+        pending:  "Pending",
+      };
+      const normalizedComplaintStatus =
+        complaintStatus
+          ? statusAliases[complaintStatus.toLowerCase()] || complaintStatus
+          : null;
+
+      if (normalizedComplaintStatus) {
+        complaintFilter.status = normalizedComplaintStatus;
+      }
+
+      return Complaint
+        .find(complaintFilter)
+        .populate("userId", "userId userName email mobile")
+        .select("complaintId regarding hotelName bookingId status issue images createdAt updatedAt")
+        .sort({ createdAt: -1 })
+        .lean();
+    };
+
+    /* ── Step 6: Run all fetches in parallel ───────────────────────── */
+
+    const [bookings, coupons, complaints] = await Promise.all([
+      buildBookingResults(),
+      buildCouponResults(),
+      buildComplaintResults(),
+    ]);
+
+    /* ── Step 7: Shape response ────────────────────────────────────── */
+
+    // Index bookings, coupons, complaints by userId for fast lookup
+    const hotelBkByUser   = {};
+    const tourBkByUser    = {};
+    const taxiBkByUser    = {};
+    const couponsByUser   = {};
+    const complaintsByUser = {};
+
+    (bookings.hotel || []).forEach((b) => {
+      const uid = String(b.user?.userId || "");
+      (hotelBkByUser[uid] = hotelBkByUser[uid] || []).push(b);
+    });
+    (bookings.tour || []).forEach((b) => {
+      const uid = String(b.userId || "");
+      (tourBkByUser[uid] = tourBkByUser[uid] || []).push(b);
+    });
+    (bookings.taxi || []).forEach((b) => {
+      const uid = String(b.userId || "");
+      (taxiBkByUser[uid] = taxiBkByUser[uid] || []).push(b);
+    });
+    coupons.forEach((c) => {
+      const uid = String(c.targetUserId || c.userId || "");
+      (couponsByUser[uid] = couponsByUser[uid] || []).push(c);
+    });
+    complaints.forEach((c) => {
+      const uid = String(c.userId?.userId || "");
+      (complaintsByUser[uid] = complaintsByUser[uid] || []).push(c);
+    });
+
+    const data = users.map((user) => {
+      const uid = String(user.userId);
+      return {
+        // Profile
+        userId:   user.userId,
+        uid:      user.uid,
+        name:     user.userName,
+        email:    user.email,
+        mobile:   user.mobile,
+        address:  user.address,
+        avatar:   user.images,
+        joinedAt: user.createdAt,
+
+        // Bookings (only the types requested)
+        bookings: {
+          hotel: hotelBkByUser[uid]  || [],
+          tour:  tourBkByUser[uid]   || [],
+          taxi:  taxiBkByUser[uid]   || [],
+        },
+
+        // Coupons
+        coupons: couponsByUser[uid] || [],
+
+        // Complaints
+        complaints: complaintsByUser[uid] || [],
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      total,
+      page: resolvedPage,
+      totalPages: Math.ceil(total / resolvedLimit),
+      data,
+    });
+  } catch (error) {
+    console.error("filterUsers error:", error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 module.exports = {
   createSignup,
   getUserById,
@@ -502,4 +827,5 @@ module.exports = {
   getAllUserDetails,
   loginWithOtp,
   verifyOTP,
+  filterUsers,
 };

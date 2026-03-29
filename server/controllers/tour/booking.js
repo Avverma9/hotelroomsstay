@@ -126,6 +126,31 @@ exports.createBooking = async (req, res) => {
     const totalAmount =
       basePrice + seatPrice + Number(tax) - Number(discount);
 
+    /* ================= PAYMENT MODE RESOLUTION ================= */
+
+    // Determine payment mode from request body payment object or bookingSource.
+    // Online bookings start as "pending" — must be confirmed via /payment/verify after PhonePe.
+    // Offline bookings (panel/cash) can be marked confirmed if isPaid=true in the payment object.
+    const requestedMode = String(payment?.mode || "").toLowerCase();
+    const isOfflineSource = String(bookingSource || "").toLowerCase() === "panel";
+    const resolvedPaymentMode =
+      requestedMode === "offline" || isOfflineSource ? "offline" : "online";
+
+    const isOfflinePaid =
+      resolvedPaymentMode === "offline" && Boolean(payment?.isPaid || payment?.paidAt);
+
+    const resolvedPayment = {
+      provider: resolvedPaymentMode === "offline" ? "offline" : "",
+      mode: resolvedPaymentMode,
+      orderId: "",
+      phonepeOrderId: "",
+      paymentId: "",
+      signature: "",
+      isPaid: isOfflinePaid,
+      paidAt: isOfflinePaid ? new Date() : null,
+      collectedBy: String(payment?.collectedBy || "").trim(),
+    };
+
     /* ================= CREATE BOOKING ================= */
 
     const [booking] = await TourBooking.create(
@@ -136,7 +161,9 @@ exports.createBooking = async (req, res) => {
           vehicleId,
 
           seats,
-          status: payment?.paidAt ? "confirmed" : "pending",
+          // Online bookings stay "pending" until PhonePe confirms payment.
+          // Offline bookings paid at creation are "confirmed".
+          status: isOfflinePaid ? "confirmed" : "pending",
 
           numberOfAdults,
           numberOfChildren,
@@ -175,7 +202,7 @@ exports.createBooking = async (req, res) => {
           discount,
           totalAmount,
 
-          payment
+          payment: resolvedPayment,
         }
       ],
       { session }
@@ -202,11 +229,15 @@ exports.createBooking = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
+    const notifMessage = isOfflinePaid
+      ? `Your tour booking ${booking.bookingCode} is confirmed.`
+      : `Your tour booking ${booking.bookingCode} is created. Complete payment via /payment/create-order/tour/:id.`;
+
     await createUserNotificationSafe({
-      name: "Tour Booking Successful",
-      message: `Your tour booking ${booking.bookingCode} is created successfully.`,
+      name: isOfflinePaid ? "Tour Booking Confirmed" : "Tour Booking Pending Payment",
+      message: notifMessage,
       path: "/app/bookings/tour",
-      eventType: "tour_booking_success",
+      eventType: isOfflinePaid ? "tour_booking_confirmed" : "tour_booking_pending",
       metadata: {
         bookingCode: booking.bookingCode,
         bookingStatus: booking.status,
@@ -217,7 +248,9 @@ exports.createBooking = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Booking created successfully",
+      message: isOfflinePaid
+        ? "Tour booking confirmed successfully"
+        : "Tour booking created. Complete online payment to confirm.",
       data: booking
     });
   } catch (error) {

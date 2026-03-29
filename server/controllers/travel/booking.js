@@ -409,13 +409,29 @@ exports.bookCar = async (req, res) => {
     const gstAmount = Number(((totalSeatPrice * gstRate) / 100).toFixed(2));
     const finalPrice = Number((totalSeatPrice + gstAmount).toFixed(2));
     const shouldConfirmOnCreate = normalizeBoolean(confirmOnCreate);
-    const resolvedIsPaid = normalizeBoolean(isPaid);
+
+    // Determine payment mode — offline bookings are admin-created (e.g. cash, panel)
+    // Online bookings must go through PhonePe; isPaid from request body is ignored.
+    const resolvedPaymentMode =
+      String(paymentMethod || "").toLowerCase() === "offline" ||
+      String(paymentMethod || "").toLowerCase() === "cash"
+        ? "offline"
+        : "online";
+
+    // isPaid: only allowed at creation for offline bookings;
+    // online bookings start as unpaid and are confirmed via /payment/verify.
+    const resolvedIsPaid =
+      resolvedPaymentMode === "offline" ? normalizeBoolean(isPaid) : false;
+
     const pickupCode = generateVerificationCode();
     const dropCode = generateVerificationCode();
-    const initialBookingStatus = shouldConfirmOnCreate ? "Confirmed" : "Pending";
-    const initialRideStatus = shouldConfirmOnCreate
-      ? "AwaitingPickup"
-      : "AwaitingConfirmation";
+    // Offline bookings can be confirmed at creation; online stays Pending until paid.
+    const initialBookingStatus =
+      shouldConfirmOnCreate || (resolvedPaymentMode === "offline" && resolvedIsPaid)
+        ? "Confirmed"
+        : "Pending";
+    const initialRideStatus =
+      initialBookingStatus === "Confirmed" ? "AwaitingPickup" : "AwaitingConfirmation";
     const now = new Date();
 
     let newBooking;
@@ -436,8 +452,10 @@ exports.bookCar = async (req, res) => {
         gstAmount,
         price: finalPrice,
         // Payment
+        paymentMode: resolvedPaymentMode,
         paymentMethod: paymentMethod || "Online",
-        paymentId: String(paymentId || "").trim(),
+        paymentId: "",
+        phonepeOrderId: "",
         isPaid: resolvedIsPaid,
         paymentConfirmedAt: resolvedIsPaid ? now : undefined,
         // Vehicle
@@ -454,7 +472,7 @@ exports.bookCar = async (req, res) => {
         dropD: reservedCar.dropD,
         bookingStatus: initialBookingStatus,
         rideStatus: initialRideStatus,
-        confirmedAt: shouldConfirmOnCreate ? now : undefined,
+        confirmedAt: initialBookingStatus === "Confirmed" ? now : undefined,
         assignedDriverId: String(assignedDriverId || "").trim(),
         assignedDriverName: String(assignedDriverName || "").trim(),
         pickupCode,
@@ -469,34 +487,31 @@ exports.bookCar = async (req, res) => {
       throw bookingError;
     }
 
+    const isConfirmed = initialBookingStatus === "Confirmed";
     await sendTravelEmailSafe({
       email: customerEmail,
-      subject: shouldConfirmOnCreate
+      subject: isConfirmed
         ? "Your Travel Booking is Confirmed"
         : "Your Travel Booking Request is Pending",
-      message: shouldConfirmOnCreate
+      message: isConfirmed
         ? `Your booking (ID: ${newBooking.bookingId}) is confirmed. Vehicle Number: ${reservedCar.vehicleNumber}. Pickup code: ${pickupCode}.`
-        : `Your booking request (ID: ${newBooking.bookingId}) has been received and is awaiting confirmation.`,
+        : `Your booking request (ID: ${newBooking.bookingId}) has been received and is awaiting payment confirmation.`,
     });
 
     await notifyTravelEventSafe({
       booking: newBooking,
-      name: shouldConfirmOnCreate
-        ? "Travel Booking Confirmed"
-        : "Travel Booking Pending",
-      message: shouldConfirmOnCreate
+      name: isConfirmed ? "Travel Booking Confirmed" : "Travel Booking Pending",
+      message: isConfirmed
         ? `Your travel booking ${newBooking.bookingId} is confirmed.`
-        : `Your travel booking ${newBooking.bookingId} is pending confirmation.`,
-      eventType: shouldConfirmOnCreate
-        ? "travel_booking_confirmed"
-        : "travel_booking_pending",
+        : `Your travel booking ${newBooking.bookingId} is pending payment confirmation.`,
+      eventType: isConfirmed ? "travel_booking_confirmed" : "travel_booking_pending",
     });
 
     return res.status(201).json({
       success: true,
-      message: shouldConfirmOnCreate
+      message: isConfirmed
         ? "Booking confirmed successfully"
-        : "Booking created successfully and is pending confirmation",
+        : "Booking created successfully. Complete payment via /payment/create-order/travel/:id",
       data: newBooking,
     });
   } catch (error) {

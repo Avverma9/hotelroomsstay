@@ -105,12 +105,18 @@ const travelBookingSchema = new mongoose.Schema(
     price: { type: Number, default: 0 },        // final price (base + gst)
 
     // Payment
+    paymentMode: {
+      type: String,
+      enum: ["online", "offline"],
+      default: "online",
+    },
     paymentMethod: {
       type: String,
       enum: ["Online", "Offline", "Cash", "UPI", "Card"],
       default: "Online",
     },
-    paymentId: { type: String, default: "" },
+    phonepeOrderId: { type: String, default: "" },   // PhonePe merchantOrderId
+    paymentId: { type: String, default: "" },         // PhonePe transactionId after success
     isPaid: { type: Boolean, default: false },
     paymentConfirmedAt: { type: Date },
 

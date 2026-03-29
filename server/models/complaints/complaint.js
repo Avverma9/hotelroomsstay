@@ -41,7 +41,7 @@ const complaintSchema = new mongoose.Schema(
     },
     regarding: {
       type: String,
-      enum: ["Booking", "Hotel", "Website"],
+      enum: ["Booking", "Hotel", "Website", 'Service','Staff','Cleanliness','Food','Billing','Room','Other'],
     },
     hotelName: String,
     hotelEmail: String,

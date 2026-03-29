@@ -16,4 +16,8 @@ router.post('/get-user-data/in-bulk', userController.getAllUserBulkById)
 router.get("/get-all-users-booking-details/full-details",userController.getAllUserDetails)
 router.post("/send-otp", userController.loginWithOtp);
 router.post("/verify-otp", userController.verifyOTP);
+
+// Admin: filter users with bookings, coupons, complaints
+router.get("/admin/users/filter", userController.filterUsers);
+
 module.exports = router;

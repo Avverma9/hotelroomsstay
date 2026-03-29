@@ -415,34 +415,102 @@ const getPartnersById = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const user = await Dashboard.findById(userId);
+    const objectId = require('mongoose').Types.ObjectId;
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    const aggregationPipeline = [
+      { $match: { _id: new objectId(userId) } },
+      {
+        $lookup: {
+          from: 'hotels',
+          let: {
+            partnerEmailLower: {
+              $toLower: { $trim: { input: { $ifNull: ['$email', ''] } } },
+            },
+          },
+          pipeline: [
+            {
+              $addFields: {
+                hotelEmailLower: {
+                  $toLower: { $trim: { input: { $ifNull: ['$hotelEmail', ''] } } },
+                },
+              },
+            },
+            {
+              $match: {
+                $expr: { $eq: ['$hotelEmailLower', '$$partnerEmailLower'] },
+              },
+            },
+          ],
+          as: 'hotelInfo',
+        },
+      },
+      {
+        $addFields: {
+          hotelCount: { $size: '$hotelInfo' },
+          hotelInfo: {
+            $map: {
+              input: '$hotelInfo',
+              as: 'hotel',
+              in: {
+                name: '$$hotel.name',
+                role: '$$hotel.role',
+                email: '$$hotel.hotelEmail',
+                hotelName: '$$hotel.hotelName',
+                menuItems: '$$hotel.menuItems',
+                fullAddress: {
+                  $let: {
+                    vars: {
+                      parts: {
+                        $filter: {
+                          input: [
+                            '$$hotel.address',
+                            '$$hotel.city',
+                            '$$hotel.state',
+                            { $toString: '$$hotel.pinCode' },
+                          ],
+                          as: 'part',
+                          cond: { $and: [{ $ne: ['$$part', null] }, { $ne: ['$$part', ''] }] },
+                        },
+                      },
+                    },
+                    in: {
+                      $reduce: {
+                        input: '$$parts',
+                        initialValue: '',
+                        in: {
+                          $cond: {
+                            if: { $eq: ['$$value', ''] },
+                            then: '$$this',
+                            else: { $concat: ['$$value', ', ', '$$this'] },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          password: 0,
+          resetOtp: 0,
+          otpExpiry: 0,
+        },
+      },
+    ];
+
+    const result = await Dashboard.aggregate(aggregationPipeline);
+    if (!result || !result.length) {
+      return res.status(404).json({ message: 'User not found' });
     }
 
-    // const foundHotels = await Hotel.find({ email: user.email });
-
-    // const hotelDetails = foundHotels.map(hotel => ({
-    //     hotelId: hotel.hotelId,
-    //     name: hotel.hotelName,
-    //     address: hotel.address,
-    //     city: hotel.city,
-    //     state: hotel.state
-    // }));
-
-    // const responsePayload = {
-    //     user,
-    //     hotelCount: foundHotels.length,
-    //     hotels: hotelDetails
-    // };
-
-    res.status(200).json(user);
+    return res.status(200).json(result[0]);
   } catch (error) {
-    console.error("Error fetching partner by ID:", error);
-    return res
-      .status(500)
-      .json({ message: "Internal server error", error: error.message });
+    console.error('Error fetching partner by ID:', error);
+    return res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 };
 const deletePartner = async function (req, res) {
@@ -539,26 +607,47 @@ const updatePartner = async function (req, res) {
 
 const filterPartner = async (req, res) => {
   try {
-    const { search } = req.query;
+    const { 
+      search, 
+      role, 
+      status, 
+      city, 
+      state, 
+      mobile, 
+      email, 
+      isOnline 
+    } = req.query;
 
     const matchStage = {};
 
     if (search) {
       const regex = { $regex: search, $options: "i" };
-      const isEmail = search.includes("@") && search.includes(".com");
-      const isNumber = /^\d+$/.test(search);
-      const roles = ["admin", "pms", "tms", "ca", "rider"];
-      const isRole = roles.includes(search.toLowerCase());
-
-      if (isEmail) {
-        matchStage.email = regex;
-      } else if (isNumber) {
-        matchStage.mobile = parseInt(search);
-      } else if (isRole) {
-        matchStage.role = regex;
-      } else {
-        matchStage.$or = [{ name: regex }, { city: regex }];
+      matchStage.$or = [
+        { name: regex },
+        { email: regex },
+        { city: regex },
+        { state: regex },
+        { address: regex }
+      ];
+      
+      if (!isNaN(search)) {
+        matchStage.$or.push({ mobile: parseInt(search) });
+        matchStage.$or.push({ pinCode: parseInt(search) });
       }
+    }
+
+    if (role) matchStage.role = role; 
+    if (city) matchStage.city = { $regex: city, $options: "i" };
+    if (state) matchStage.state = { $regex: state, $options: "i" };
+    if (email) matchStage.email = { $regex: email, $options: "i" };
+    if (mobile) matchStage.mobile = parseInt(mobile);
+    
+    if (status !== undefined) {
+      matchStage.status = status === "true";
+    }
+    
+    if (isOnline !== undefined) {
+      matchStage.isOnline = isOnline === "true";
     }
 
     const aggregationPipeline = [];
@@ -656,16 +745,29 @@ const filterPartner = async (req, res) => {
       {
         $project: {
           password: 0,
+          resetOtp: 0,
+          otpExpiry: 0
         },
       },
+      {
+        $sort: { createdAt: -1 }
+      }
     );
 
     const partners = await Dashboard.aggregate(aggregationPipeline);
-    return res.status(200).json(partners);
+    
+    return res.status(200).json({
+      success: true,
+      count: partners.length,
+      data: partners
+    });
+    
   } catch (error) {
-    return res
-      .status(500)
-      .json({ message: "Server error", error: error.message });
+    return res.status(500).json({ 
+      success: false, 
+      message: "Server error", 
+      error: error.message 
+    });
   }
 };
 
