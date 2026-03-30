@@ -364,10 +364,10 @@ exports.getAllCities = async (_, res) => {
 
 exports.getAllVisitingPlaces = async (_, res) => {
   try {
-    const docs = await Tour.find({ isAccepted: true }).select("visitngPlaces");
+    const docs = await Tour.find({ isAccepted: true }).select("visitngPlaces visitingPlaces");
     const set = new Set();
     docs.forEach((d) => {
-      const raw = d.visitngPlaces;
+      const raw = d.visitngPlaces || d.visitingPlaces;
       if (!raw || typeof raw !== "string") return;
       raw
         .split(/[|,]/g)
@@ -382,6 +382,45 @@ exports.getAllVisitingPlaces = async (_, res) => {
       message: "Failed to fetch visiting places",
       error: error.message,
     });
+  }
+};
+
+exports.getAllTours = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = req.query;
+
+    const allowedSort = new Set(["createdAt", "price", "starRating", "nights", "tourStartDate"]);
+    const sortField = allowedSort.has(sortBy) ? sortBy : "createdAt";
+    const sortDir = String(sortOrder).toLowerCase() === "asc" ? 1 : -1;
+    const sort = { [sortField]: sortDir };
+
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 10));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [docs, total] = await Promise.all([
+      Tour.find({ isAccepted: true }).sort(sort).skip(skip).limit(limitNum).lean(),
+      Tour.countDocuments({ isAccepted: true }),
+    ]);
+
+    return res.json({
+      success: true,
+      data: docs.map(withStatus),
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        hasNextPage: skip + docs.length < total,
+        hasPrevPage: pageNum > 1,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err?.message || "Server error" });
   }
 };
 
@@ -432,7 +471,7 @@ exports.filterTours = async (req, res) => {
       fromWhere || to || visitingPlace || visitingPlaces ||
       minPrice || maxPrice || minNights || maxNights || minRating ||
       nights || price || agencyEmail || starRating ||
-      fromDate || toDate || startDate || endDate ||
+      fromDate || toDateQuery || startDate || endDate ||
       isCustomizable || hasImages || hasVehicles || runningStatus;
 
     if (!hasAnyFilter) {

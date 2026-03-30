@@ -1056,6 +1056,7 @@ const getHotelsById = async (req, res) => {
 
       return {
         id: id,
+        roomId: r.roomId || '',  // expose roomId for edit/update operations
         name: name,
         type: r.type || r.roomType || '',
         bedType: bedType,
