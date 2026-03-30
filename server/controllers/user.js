@@ -4,6 +4,8 @@ const Coupon = require("../models/coupons/coupon");
 const Complaint = require("../models/complaints/complaint");
 const CarBooking = require("../models/travel/carBooking");
 const TourBooking = require("../models/tour/booking");
+const Review = require('../models/review');
+const DashUser = require('../models/dashboardUser');
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const otpAuth = require("../authentication/otpLogin");
@@ -389,17 +391,145 @@ const update = async (req, res) => {
 
 const getAllUsers = async (req, res) => {
   try {
-    const userData = await userModel.find();
-    return res.status(200).json({
-      message: "User data fetched successfully",
-      data: userData,
+    // Load all users (note: for large datasets this may need pagination)
+    const users = await userModel.find().lean();
+
+    if (!users || users.length === 0) {
+      return res.status(200).json({ message: 'No users found', data: [] });
+    }
+
+    const userIds = users.map((u) => String(u.userId));
+    const emails = users.map((u) => u.email).filter(Boolean).map((e) => String(e).toLowerCase());
+    const mobiles = users.map((u) => u.mobile).filter(Boolean).map((m) => String(m));
+
+    // Fetch bookings, coupons, reviews, complaints and dashboard users in parallel for all users
+    const [hotelBks, tourBks, taxiBks, coupons, userDocs, reviews, dashUsers] = await Promise.all([
+      // Fetch full hotel booking documents for these users
+      booking
+        .find({ 'user.userId': { $in: userIds } })
+        .sort({ createdAt: -1 })
+        .lean(),
+      // Full tour booking docs
+      TourBooking
+        .find({ userId: { $in: userIds } })
+        .sort({ createdAt: -1 })
+        .lean(),
+      // Full taxi/travel booking docs
+      CarBooking
+        .find({ userId: { $in: userIds } })
+        .sort({ createdAt: -1 })
+        .lean(),
+      // Coupons related to these users
+      Coupon
+        .find({
+          $or: [
+            { userId: { $in: userIds } },
+            { targetUserId: { $in: userIds } },
+            { userIds: { $in: userIds } },
+          ],
+        })
+        .sort({ createdAt: -1 })
+        .lean(),
+      // Helper doc to map ObjectId -> userId for complaints
+      userModel.find({ userId: { $in: userIds } }).select('_id userId').lean(),
+      // Reviews written by these users
+      Review.find({ userId: { $in: userIds } }).sort({ createdAt: -1 }).lean(),
+      // Dashboard users (role info) matched by email or mobile when available
+      DashUser.find({
+        $or: [
+          ...(emails.length ? [{ email: { $in: emails } }] : []),
+          ...(mobiles.length ? [{ mobile: { $in: mobiles } }] : []),
+        ],
+      }).select('email mobile role').lean(),
+    ]);
+
+    // Complaints need user _ids (objectId) mapping
+    const objectIds = (userDocs || []).map((d) => d._id).filter(Boolean);
+    const complaintsList = objectIds.length
+      ? await Complaint.find({ userId: { $in: objectIds } })
+          .populate('userId', 'userId userName email mobile')
+          .select('complaintId regarding hotelName bookingId status issue images createdAt updatedAt userId')
+          .sort({ createdAt: -1 })
+          .lean()
+      : [];
+
+    // Index results by userId for fast lookup
+    const hotelBkByUser = {};
+    const tourBkByUser = {};
+    const taxiBkByUser = {};
+    const couponsByUser = {};
+    const complaintsByUser = {};
+
+    (hotelBks || []).forEach((b) => {
+      const uid = String(b.user?.userId || '');
+      (hotelBkByUser[uid] = hotelBkByUser[uid] || []).push(b);
     });
+    (tourBks || []).forEach((b) => {
+      const uid = String(b.userId || '');
+      (tourBkByUser[uid] = tourBkByUser[uid] || []).push(b);
+    });
+    (taxiBks || []).forEach((b) => {
+      const uid = String(b.userId || '');
+      (taxiBkByUser[uid] = taxiBkByUser[uid] || []).push(b);
+    });
+    (coupons || []).forEach((c) => {
+      const uid = String(c.targetUserId || c.userId || '');
+      (couponsByUser[uid] = couponsByUser[uid] || []).push(c);
+    });
+    (complaintsList || []).forEach((c) => {
+      const uid = String(c.userId?.userId || '');
+      (complaintsByUser[uid] = complaintsByUser[uid] || []).push(c);
+    });
+
+    // Build fast lookup for dashboard roles by email/mobile
+    const dashByEmail = {};
+    const dashByMobile = {};
+    (dashUsers || []).forEach((d) => {
+      if (d.email) dashByEmail[String(d.email).toLowerCase()] = d;
+      if (d.mobile) dashByMobile[String(d.mobile)] = d;
+    });
+
+    // Index reviews by userId
+    const reviewsByUser = {};
+    (reviews || []).forEach((r) => {
+      const uid = String(r.userId || '');
+      (reviewsByUser[uid] = reviewsByUser[uid] || []).push(r);
+    });
+
+    // Map users to enriched payload
+    const data = users.map((user) => {
+      const uid = String(user.userId);
+      // determine role: prefer dashboard user role (matched by email/mobile), fall back to user.role
+      const emailKey = user.email ? String(user.email).toLowerCase() : null;
+      const mobileKey = user.mobile ? String(user.mobile) : null;
+      const dashMatch = (emailKey && dashByEmail[emailKey]) || (mobileKey && dashByMobile[mobileKey]) || null;
+      const resolvedRole = user.role || (dashMatch && dashMatch.role) || null;
+
+      return {
+        userId: user.userId,
+        uid: user.uid,
+        name: user.userName,
+        email: user.email,
+        mobile: user.mobile,
+        address: user.address,
+        avatar: user.images,
+        role: resolvedRole,
+        joinedAt: user.createdAt,
+        bookings: {
+          hotel: hotelBkByUser[uid] || [],
+          tour: tourBkByUser[uid] || [],
+          taxi: taxiBkByUser[uid] || [],
+        },
+        coupons: couponsByUser[uid] || [],
+        complaints: complaintsByUser[uid] || [],
+        reviews: reviewsByUser[uid] || [],
+      };
+    });
+
+    return res.status(200).json({ message: 'User data fetched successfully', data });
   } catch (error) {
-    console.error("Error fetching user data:", error);
-    return res.status(500).json({
-      message: "Something went wrong",
-      error: error.message,
-    });
+    console.error('Error fetching user data:', error);
+    return res.status(500).json({ message: 'Something went wrong', error: error.message });
   }
 };
 

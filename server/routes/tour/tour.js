@@ -3,6 +3,7 @@ const {
   createTour,
   getTourById,
   filterTours,
+  getAllTours,
   updateTour,
   getRequestedTour,
   getTourByOwner,
@@ -29,6 +30,7 @@ const router = express.Router();
 router.post("/create-tour", upload, createTour);
 router.get("/get-tour/:id", getTourById);
 router.get("/filter-tour/by-query", filterTours);
+router.get("/get-all-tours", getAllTours);
 router.get("/get-requests", getRequestedTour);
 router.get("/get-tour/by-owner/query", getTourByOwner);
 router.patch("/update-tour/data/:id", updateTour);

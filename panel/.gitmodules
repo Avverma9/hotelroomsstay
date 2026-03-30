@@ -1,0 +1,6 @@
+[submodule "public/assets/icons/chpl-crm-frontend"]
+    path = public/assets/icons/chpl-crm-frontend
+    url = https://github.com/avverma9/hradmin.git
+[submodule "public/assets/icons/hradmin"]
+    path = public/assets/icons/hradmin
+    url = https://github.com/avverma9/hradmin.git
