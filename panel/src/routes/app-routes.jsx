@@ -33,12 +33,15 @@ import AllTourBookings from '../pages/admin/all-tour-bookings'
 import TourListPage from '../pages/admin/tour-list'
 import TourRequestPage from '../pages/tour-request'
 import Complaints from '../pages/admin/complaints'
+import FileComplaint from '../pages/admin/file-complaint'
 import CreateComplaint from '../components/complaints/create-complaint'
 import ComplaintChat from '../components/complaints/complaint-chat'
-import MyComplaints from '../pages/complaints/my-complaints'
-import UserComplaintsPage from '../pages/complaints/user-complaints'
+import MyComplaints from '../pages/user/complaints/my-complaints'
+import UserComplaintsPage from '../pages/user/complaints/user-complaints'
+import UserFileComplaint from '../pages/user/complaints/file-complaint'
 import Availability from '../pages/admin/availability'
 import MonthlyPrice from '../pages/admin/monthlyPrice'
+import PmsMonthly from '../pages/pms/pms-monthly'
 import AllHotels from '../pages/admin/hotel/all-hotel'
 import HotelDetails from '../pages/admin/hotel/hotel-details'
 import HotelEditPage from '../pages/admin/hotel/hotel-edit'
@@ -93,12 +96,15 @@ export const APP_ROUTES = [
   { path: "/tour-list", Component: TourListPage },
   { path: "/tour-request", Component: TourRequestPage },
   { path: "/complaints", Component: Complaints },
+  { path: "/file-complaint", Component: FileComplaint },
   { path: "/complaint/create", Component: CreateComplaint },
   { path: "/complaint/chat/:id", Component: ComplaintChat },
   { path: "/your-complaints", Component: MyComplaints },
   { path: "/user-complaint", Component: UserComplaintsPage },
+  { path: "/user/file-complaint", Component: UserFileComplaint },
   { path: "/hotels/availability", Component: Availability },
   { path: "/hotels/monthly-price", Component: MonthlyPrice },
+  { path: "/hotels/monthly-price-pms", Component: PmsMonthly },
   { path: "/hotels/bulk-management", Component: BulkManagement },
   { path: "/hotels/bulk-coupon-manage", Component: BulkCouponManage },
   { path: "/travel-locations", Component: ListLocations },
