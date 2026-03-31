@@ -1,14 +1,14 @@
-const normalizeIdList = (values) => {
-  if (!Array.isArray(values)) {
-    return [];
+const normalizeIdList = (value) => {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v).trim());
   }
 
-  const normalized = values
-    .map((value) => String(value || "").trim())
-    .filter(Boolean);
-
-  return [...new Set(normalized)];
+  return [String(value).trim()];
 };
+
+const toSafeNumber = (val) => Number(val) || 0;
 
 const getUsageLimit = (coupon) => {
   const fromMaxUsage = Number(coupon?.maxUsage);
