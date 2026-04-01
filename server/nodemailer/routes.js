@@ -127,57 +127,7 @@ router.post('/verify-otp', async (req, res) => {
         return res.status(500).json({ message: 'Internal server error' });
     }
 });
-router.post('/verify-otp/site', async (req, res) => {
-    const { email, otp } = req.body;
 
-    if (!email || !otp) {
-        return res.status(400).json({ message: 'Email and OTP are required' });
-    }
-
-    const stored = otpStore.get(email);
-
-    if (!stored) {
-        return res.status(400).json({ message: 'OTP not found for this email. Please request a new one.' });
-    }
-
-    if (Date.now() > stored.expiresAt) {
-        otpStore.delete(email);
-        return res.status(400).json({ message: 'OTP has expired' });
-    }
-
-    if (stored.otp !== otp) {
-        return res.status(400).json({ message: 'Invalid OTP' });
-    }
-
-    otpStore.delete(email);
-    const emailRegex = new RegExp('^' + email + '$', 'i');
-
-    try {
-        const foundUser = await user.findOne({ email: emailRegex });
-
-        if (!foundUser) {
-            return res.status(400).json({ message: 'No user account found with this email' });
-        }
-
-        const rsToken = jwt.sign(
-            { id: foundUser._id }, // removed role
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-
-        return res.status(200).json({
-            message: 'Logged in successfully',
-            userId: foundUser.userId, 
-            rsToken,
-            email: foundUser.email,
-            mobile: foundUser.mobile,
-        });
-
-    } catch (error) {
-        console.error('Error during login after OTP verification:', error);
-        return res.status(500).json({ message: 'Internal server error' });
-    }
-});
 
 router.post('/send-booking-mail', async (req, res) => {
     const { email, subject, bookingData, link } = req.body;

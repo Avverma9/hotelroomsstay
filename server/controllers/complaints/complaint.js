@@ -1,3 +1,5 @@
+const mongoose = require('mongoose');
+const User = require('../../models/user');
 const Complaint = require('../../models/complaints/complaint');
 const chat = require('../../models/complaints/chat');
 const {
@@ -11,9 +13,22 @@ const createComplaint = async (req, res) => {
         if (!userId || !regarding || !issue) {
             return res.status(400).json({ message: 'Missing required fields.' });
         }
+
+        // Resolve numeric userId OR _id string to the user's MongoDB ObjectId
+        let resolvedObjectId;
+        if (mongoose.Types.ObjectId.isValid(userId) && String(userId).length === 24) {
+            const userDoc = await User.findOne({ $or: [{ _id: userId }, { userId }] }).select('_id').lean();
+            if (!userDoc) return res.status(404).json({ message: 'User not found.' });
+            resolvedObjectId = userDoc._id;
+        } else {
+            const userDoc = await User.findOne({ userId }).select('_id').lean();
+            if (!userDoc) return res.status(404).json({ message: 'User not found.' });
+            resolvedObjectId = userDoc._id;
+        }
+
         // Check for existing pending complaints
         const pendingComplaints = await Complaint.countDocuments({
-            userId,
+            userId: resolvedObjectId,
             status: 'Pending',
         });
 
@@ -25,7 +40,7 @@ const createComplaint = async (req, res) => {
 
         // Create new complaint
         const newComplaint = new Complaint({
-            userId,
+            userId: resolvedObjectId,
             hotelId,
             regarding,
             hotelEmail,
@@ -138,9 +153,19 @@ const getComplaintsByUserId = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const complaints = await Complaint.find({
-      $expr: { $eq: [{ $toString: "$userId" }, userId] },
-    }).lean();
+    // Resolve numeric userId OR _id string to the stored ObjectId
+    let objectId;
+    if (mongoose.Types.ObjectId.isValid(userId) && String(userId).length === 24) {
+      const userDoc = await User.findOne({ $or: [{ _id: userId }, { userId }] }).select('_id').lean();
+      if (!userDoc) return res.status(404).json({ message: 'No complaints found for this user.' });
+      objectId = userDoc._id;
+    } else {
+      const userDoc = await User.findOne({ userId }).select('_id').lean();
+      if (!userDoc) return res.status(404).json({ message: 'No complaints found for this user.' });
+      objectId = userDoc._id;
+    }
+
+    const complaints = await Complaint.find({ userId: objectId }).lean();
 
     if (!complaints.length) {
       return res.status(404).json({ message: "No complaints found for this user." });

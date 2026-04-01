@@ -4,6 +4,7 @@ const TourModel = require("../../models/tour/tour");
 const {
   createUserNotificationSafe,
 } = require("../notification/helpers");
+const { resolveToUserId } = require("../../utils/resolveUserId");
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
 
@@ -46,6 +47,9 @@ exports.createBooking = async (req, res) => {
         message: "userId, tourId and vehicleId are required"
       });
     }
+
+    // Resolve _id → numeric userId for consistent storage
+    const resolvedUserId = await resolveToUserId(userId) || userId;
 
     const totalPassengers = numberOfAdults + numberOfChildren;
 
@@ -156,7 +160,7 @@ exports.createBooking = async (req, res) => {
     const [booking] = await TourBooking.create(
       [
         {
-          userId,
+          userId: resolvedUserId,
           tourId,
           vehicleId,
 
@@ -403,7 +407,9 @@ exports.getBookingsByBookingId = async (req, res) => {
 };
 
 exports.getBookingByUser = async (req, res) => {
-  const bookings = await TourBooking.find({ userId: req.query.userId }).sort({ createdAt: -1 });
+  const rawUserId = req.query.userId;
+  const resolvedUserId = await resolveToUserId(rawUserId) || rawUserId;
+  const bookings = await TourBooking.find({ userId: resolvedUserId }).sort({ createdAt: -1 });
   res.json({ success: true, data: bookings });
 };
 

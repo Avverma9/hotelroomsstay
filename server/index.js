@@ -10,6 +10,8 @@ const routes = require("./routes/index");
 const connectDB = require("./config/db");
 const mailerRoutes = require("./nodemailer/routes");
 const setupChatRoutes = require("./routes/chatApp/chatAppRoutes");
+const requireAuth = require("./authentication/requireAuth");
+const routeAccess = require("./authentication/routeAccess");
 
 const numCPUs = os.cpus().length;
 const USE_CLUSTER = false;
@@ -37,6 +39,9 @@ const startServer = () => {
   app.options("*", cors());
   
   app.use(express.json());
+  // Global authentication and route-access control
+  app.use(requireAuth);
+  app.use(routeAccess);
 
   app.use("/mail", mailerRoutes);
 

@@ -2,6 +2,8 @@ const crypto = require("crypto");
 const mongoose = require("mongoose");
 const CarBooking = require("../../models/travel/carBooking");
 const Car = require("../../models/travel/cars");
+const User = require("../../models/user");
+const { resolveToUserId } = require("../../utils/resolveUserId");
 const { getGSTData } = require("../GST/gst");
 const { sendCustomEmail } = require("../../nodemailer/nodemailer");
 const {
@@ -261,10 +263,12 @@ exports.bookCar = async (req, res) => {
       assignedDriverName,
     } = req.body;
 
-    const normalizedUserId = String(userId || "").trim();
+    let normalizedUserId = String(userId || "").trim();
     if (!normalizedUserId) {
       return res.status(400).json({ message: "userId is required" });
     }
+    // Resolve _id → numeric userId for consistent booking storage
+    normalizedUserId = (await resolveToUserId(normalizedUserId)) || normalizedUserId;
     if (!carId || !isValidObjectId(carId)) {
       return res.status(400).json({ message: "Valid carId is required" });
     }
@@ -1051,7 +1055,10 @@ exports.getCarBookingByUserId = async (req, res) => {
       return res.status(400).json({ message: "userId is required" });
     }
 
-    const bookings = await CarBooking.find({ userId }).lean();
+    // Resolve _id → numeric userId so we match stored bookings
+    const resolvedUserId = (await resolveToUserId(userId)) || userId;
+
+    const bookings = await CarBooking.find({ userId: resolvedUserId }).lean();
     if (!bookings || bookings.length === 0) {
       return res.status(404).json({ message: "No bookings found for this user" });
     }

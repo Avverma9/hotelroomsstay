@@ -392,6 +392,7 @@ exports.getAllTours = async (req, res) => {
       limit = 10,
       sortBy = "createdAt",
       sortOrder = "desc",
+      
     } = req.query;
 
     const allowedSort = new Set(["createdAt", "price", "starRating", "nights", "tourStartDate"]);
