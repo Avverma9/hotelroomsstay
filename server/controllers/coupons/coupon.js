@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Coupon = require("../../models/coupons/coupon");
 const hotelModel = require("../../models/hotel/basicDetails");
 const userModel = require("../../models/user");
@@ -317,6 +318,12 @@ const applyUserCoupon = async (req, res, coupon) => {
 
     if (!hotelId || !roomId || !userId) {
       return res.status(400).json({ message: "hotelId, roomId, userId required" });
+    }
+
+    // Resolve _id → numeric userId for coupon ownership comparison
+    if (mongoose.Types.ObjectId.isValid(userId) && userId.length === 24) {
+      const userDoc = await userModel.findOne({ $or: [{ _id: userId }, { userId }] }).select("userId").lean();
+      if (userDoc) userId = String(userDoc.userId);
     }
 
     const targetUserId = String(coupon.targetUserId || coupon.userId || "");

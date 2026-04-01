@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { upload } = require('../aws/upload');
 const userController = require('../controllers/user');
-const auth = require('../authentication/auth');
 
 router.post('/Signup', upload, userController.createSignup);
 router.get('/get/:userId', userController.getUserById);

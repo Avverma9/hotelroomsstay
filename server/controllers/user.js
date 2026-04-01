@@ -1,5 +1,7 @@
+const mongoose = require("mongoose");
 const booking = require("../models/booking/booking");
 const userModel = require("../models/user");
+const { resolveToUserId } = require("../utils/resolveUserId");
 const Coupon = require("../models/coupons/coupon");
 const Complaint = require("../models/complaints/complaint");
 const CarBooking = require("../models/travel/carBooking");
@@ -277,7 +279,9 @@ const getUserById = async function (req, res) {
   try {
     const { userId } = req.params;
 
-    const checkData = await userModel.findOne({ userId });
+    const isObjId = mongoose.Types.ObjectId.isValid(userId) && String(userId).length === 24;
+    const userQuery = isObjId ? { $or: [{ userId }, { _id: userId }] } : { userId };
+    const checkData = await userModel.findOne(userQuery);
 
     if (!checkData) {
       return res.status(404).json({
@@ -313,15 +317,20 @@ const update = async (req, res) => {
       return res.status(400).json({ message: "userId is required" });
     }
 
-    const existingUser = await userModel.findOne({ userId });
+    const isObjId = mongoose.Types.ObjectId.isValid(userId) && String(userId).length === 24;
+    const userLookupQuery = isObjId ? { $or: [{ userId }, { _id: userId }] } : { userId };
+    const existingUser = await userModel.findOne(userLookupQuery);
     if (!existingUser) {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Use the canonical numeric userId for all subsequent queries
+    const canonicalUserId = existingUser.userId;
+
     if (email) {
       const findWithEmail = await userModel.findOne({
         email: { $regex: `^${email}$`, $options: "i" },
-        userId: { $ne: userId },
+        userId: { $ne: canonicalUserId },
       });
       if (findWithEmail) {
         return res
@@ -333,7 +342,7 @@ const update = async (req, res) => {
     if (mobile) {
       const findWithMobile = await userModel.findOne({
         mobile,
-        userId: { $ne: userId },
+        userId: { $ne: canonicalUserId },
       });
       if (findWithMobile) {
         return res
@@ -362,7 +371,7 @@ const update = async (req, res) => {
     if (password !== undefined) updateData.password = password;
 
     const updatedUser = await userModel.findOneAndUpdate(
-      { userId },
+      { userId: canonicalUserId },
       { $set: updateData },
       { new: true }
     );

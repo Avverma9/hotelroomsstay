@@ -1,6 +1,8 @@
+const mongoose = require("mongoose");
 const bookingModel = require("../../models/booking/booking");
 const hotelModel = require("../../models/hotel/basicDetails");
 const userModel = require("../../models/user");
+const { resolveToUserId } = require("../../utils/resolveUserId");
 const dashboardUserModel = require("../../models/dashboardUser");
 const {
   sendBookingConfirmationMail,
@@ -220,7 +222,8 @@ const createBooking = async (req, res) => {
     hotelOwnerName = hotelOwnerName || payloadHotelDetails.hotelOwnerName;
     destination = destination || payloadHotelDetails.destination || payloadHotelDetails.hotelCity;
 
-    const user = await userModel.findOne({ userId });
+    const isObjId = mongoose.Types.ObjectId.isValid(userId) && String(userId).length === 24;
+    const user = await userModel.findOne(isObjId ? { $or: [{ userId }, { _id: userId }] } : { userId });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
@@ -594,7 +597,9 @@ const getAllFilterBookings = async (req, res) => {
       });
     }
 
-    const filter = { "user.userId": userId };
+    // Resolve _id → numeric userId so the booking filter always uses the canonical form
+    const resolvedUserId = await resolveToUserId(userId) || userId;
+    const filter = { "user.userId": resolvedUserId };
 
     const statusParam = bookingStatus || selectedStatus;
 
