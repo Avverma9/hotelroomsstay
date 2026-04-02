@@ -5,6 +5,7 @@
     "main": "index.js",
     "scripts": {
         "start": "node index.js",
+        "dev": "powershell -Command \"$p=Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue; if($p){Stop-Process -Id $p.OwningProcess -Force}; node index.js\"",
         "migrate:coupons": "node scripts/migrateCouponsToUnified.js",
         "migrate:travel-bookings": "node scripts/migrateTravelBookingsLifecycle.js",
         "seed:hotels": "node scripts/seedFullHotels.js",

@@ -54,6 +54,7 @@ createRoute('/admin-cabs', 'All Cabs', 'Admin view of all cars in TMS', 'admin',
 createRoute('/apply-pms-coupon', 'Apply PMS Coupon', 'Apply a coupon in PMS', 'admin', false, true),
 createRoute('/admin-notification', 'Push Notifications', 'Admin view of all notifications', 'admin', false, true),
   createRoute('/all-hotel-reviews', 'All Hotel Reviews', 'View and manage all hotel reviews submitted by users', 'admin', false, true),
+  createRoute('/admin-new-hotel', 'Add New Hotel', 'Create a new hotel entry', 'admin', false, true),
 ]
 
 /* ── PMS — Bookings ────────────────────────────────────── */

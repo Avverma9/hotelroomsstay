@@ -16,6 +16,7 @@ import PartnerPage from './pages/tour/partnerPage';
 
 // Partner Pages
 import HotelPartnerForm from './pages/partner/hotel-partner';
+import HotelAdd from './pages/partner/hotel-add';
 import PolicyForm from './pages/partner/hotel-policy';
 import AmenitiesPage from './pages/partner/hotel-amenities';
 import PartnerFoods from './pages/partner/hotel-foods';
@@ -130,6 +131,7 @@ function App() {
 
           {/* Partner Routes */}
           <Route path="/partner" element={<HotelPartnerForm />} />
+          <Route path="/partner/add-hotel" element={<HotelAdd />} />
           <Route path="/partner/second-step" element={<PolicyForm />} />
           <Route path="/partner/third-step" element={<AmenitiesPage />} />
           <Route path="/partner/fourth-step" element={<PartnerFoods />} />
