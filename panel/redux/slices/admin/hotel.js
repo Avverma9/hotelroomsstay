@@ -77,6 +77,20 @@ export const getAllHotelReviews = createAsyncThunk(
   },
 )
 
+export const createHotel = createAsyncThunk(
+  'admin/createHotel',
+  async (formData, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/data/hotels-new/post/upload/data', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      return response.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to create hotel.')
+    }
+  },
+)
+
 export const getAllHotels = createAsyncThunk(
   'admin/getAllHotels',
   async (_, { rejectWithValue }) => {
@@ -229,6 +243,19 @@ const hotelSlice = createSlice({
         }
       })
       .addCase(updateHotelInfo.rejected, (state, action) => {
+        state.updating = false
+        state.error = action.payload
+      })
+      .addCase(createHotel.pending, (state) => {
+        state.updating = true
+        state.error = null
+        state.updateSuccess = null
+      })
+      .addCase(createHotel.fulfilled, (state, action) => {
+        state.updating = false
+        state.updateSuccess = action.payload?.message || 'Hotel created successfully.'
+      })
+      .addCase(createHotel.rejected, (state, action) => {
         state.updating = false
         state.error = action.payload
       })

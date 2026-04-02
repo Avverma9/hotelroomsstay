@@ -47,6 +47,7 @@ import HotelDetails from '../pages/admin/hotel/hotel-details'
 import HotelEditPage from '../pages/admin/hotel/hotel-edit'
 import BulkManagement from '../pages/admin/hotel/bulk-management'
 import BulkCouponManage from '../pages/admin/hotel/bulk-coupon-manage'
+import AddNewHotel from '../pages/admin/hotel/add-new'
 import AddLocations from '../pages/admin/locations/add-locations'
 import ListLocations from '../pages/admin/locations/list-locations'
 import { AllUsers } from '../pages/admin/alluser/AllUser'
@@ -110,6 +111,7 @@ export const APP_ROUTES = [
   { path: "/travel-locations", Component: ListLocations },
   { path: "/travel-locations/add", Component: AddLocations },
   { path: "/hotels/", Component: AllHotels },
+  { path: "/admin-new-hotel", Component: AddNewHotel },
   { path: "/hotels/:id", Component: HotelDetails },
   { path: "/hotels/:id/edit", Component: HotelEditPage },
   { path: "/all-users", Component: AllUsers },
