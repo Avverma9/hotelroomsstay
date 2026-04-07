@@ -1,7 +1,8 @@
-const crypto = require("crypto");
+       const crypto = require("crypto");
 const mongoose = require("mongoose");
 const CarBooking = require("../../models/travel/carBooking");
 const Car = require("../../models/travel/cars");
+const CarOwner = require("../../models/travel/carOwner");
 const User = require("../../models/user");
 const { resolveToUserId } = require("../../utils/resolveUserId");
 const { getGSTData } = require("../GST/gst");
@@ -278,10 +279,19 @@ exports.bookCar = async (req, res) => {
         .json({ message: "customerMobile and customerEmail are required" });
     }
 
-    const carSnapshot = await Car.findById(carId).lean();
+    const carSnapshot = await Car.findById(carId).populate("ownerId").lean();
     if (!carSnapshot) {
       return res.status(404).json({ message: "Car not found" });
     }
+
+    // Auto-fill driver from car's owner — frontend ko bhejna nahi padega
+    const carOwner = carSnapshot.ownerId;
+    const resolvedDriverId =
+      String(assignedDriverId || "").trim() ||
+      (carOwner?._id ? String(carOwner._id) : "");
+    const resolvedDriverName =
+      String(assignedDriverName || "").trim() ||
+      String(carOwner?.name || "").trim();
 
     if (sharingType && sharingType !== carSnapshot.sharingType) {
       return res.status(400).json({
@@ -477,8 +487,8 @@ exports.bookCar = async (req, res) => {
         bookingStatus: initialBookingStatus,
         rideStatus: initialRideStatus,
         confirmedAt: initialBookingStatus === "Confirmed" ? now : undefined,
-        assignedDriverId: String(assignedDriverId || "").trim(),
-        assignedDriverName: String(assignedDriverName || "").trim(),
+        assignedDriverId: resolvedDriverId,
+        assignedDriverName: resolvedDriverName,
         pickupCode,
         dropCode,
       });

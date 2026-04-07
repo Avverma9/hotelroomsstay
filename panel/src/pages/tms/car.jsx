@@ -18,8 +18,7 @@ import {
   Image as ImageIcon,
   ClipboardList,
 } from 'lucide-react';
-import { addCar, updateCar, getCarById, getSeatsData, getOwnerById, clearCarError, clearSelectedCar, clearSelectedOwner } from '../../../redux/slices/tms/travel/car';
-import { getAllPartners } from '../../../redux/slices/partner';
+import { addCar, updateCar, getCarById, getSeatsData, getOwnerById, getAllOwners, filterOwners, clearCarError, clearSelectedCar, clearSelectedOwner } from '../../../redux/slices/tms/travel/car';
 import Breadcrumb from '../../components/breadcrumb';
 
 const VEHICLE_TYPES = ['Bike', 'Car', 'Bus'];
@@ -106,8 +105,7 @@ export default function AddCarForm({ isEditMode = false }) {
   const navigate = useNavigate();
   const { id: carId } = useParams();
 
-  const { selectedCar, selectedOwner, seatsData, loading, error } = useSelector((state) => state.car || {});
-  const { partners = [], loading: partnersLoading } = useSelector((state) => state.partner || {});
+  const { selectedCar, selectedOwner, owners = [], seatsData, loading, error } = useSelector((state) => state.car || {});
 
   const [step, setStep] = useState(1);
   const [maxReachable, setMaxReachable] = useState(1);
@@ -116,7 +114,10 @@ export default function AddCarForm({ isEditMode = false }) {
   const [carImages, setCarImages] = useState([]);
   const [dlImages, setDlImages] = useState([]);
   const [successMsg, setSuccessMsg] = useState('');
-  const [selectedPartnerId, setSelectedPartnerId] = useState('');
+  const [selectedOwnerId, setSelectedOwnerId] = useState('');
+  const [ownerSearchMobile, setOwnerSearchMobile] = useState('');
+  const [ownerSearching, setOwnerSearching] = useState(false);
+  const [ownerSearchMsg, setOwnerSearchMsg] = useState('');
   const [seatConfig, setSeatConfig] = useState([]);
   const [seatCountInput, setSeatCountInput] = useState('');
 
@@ -186,22 +187,52 @@ export default function AddCarForm({ isEditMode = false }) {
     setFormData((prev) => ({ ...prev, [name]: checked }));
   };
 
-  const handlePartnerSelect = (e) => {
-    const partnerId = e.target.value;
-    setSelectedPartnerId(partnerId);
-    if (!partnerId) {
-      setFormData((prev) => ({ ...prev, ownerId: '', ownerName: '', ownerEmail: '', ownerMobile: '' }));
+  const fillOwnerForm = (owner) => {
+    setFormData((prev) => ({
+      ...prev,
+      ownerId: owner._id || '',
+      ownerName: owner.name || '',
+      ownerEmail: owner.email || '',
+      ownerMobile: String(owner.mobile || ''),
+      ownerDrivingLicence: owner.dl || '',
+      ownerAddress: owner.address || '',
+      ownerCity: owner.city || '',
+      ownerState: owner.state || '',
+      ownerPinCode: String(owner.pinCode || ''),
+    }));
+  };
+
+  const handleOwnerSelect = (e) => {
+    const ownerId = e.target.value;
+    setSelectedOwnerId(ownerId);
+    setOwnerSearchMsg('');
+    if (!ownerId) {
+      setFormData((prev) => ({ ...prev, ownerId: '', ownerName: '', ownerEmail: '', ownerMobile: '', ownerDrivingLicence: '', ownerAddress: '', ownerCity: '', ownerState: '', ownerPinCode: '' }));
       return;
     }
-    const partner = partners.find((p) => p._id === partnerId);
-    if (partner) {
-      setFormData((prev) => ({
-        ...prev,
-        ownerId: partner._id,
-        ownerName: partner.name || partner.fullName || partner.username || '',
-        ownerEmail: partner.email || partner.ownerEmail || '',
-        ownerMobile: partner.mobile || partner.phone || '',
-      }));
+    const owner = owners.find((o) => o._id === ownerId);
+    if (owner) fillOwnerForm(owner);
+  };
+
+  const handleOwnerMobileLookup = async () => {
+    const mobile = ownerSearchMobile.trim();
+    if (!mobile) return;
+    setOwnerSearching(true);
+    setOwnerSearchMsg('');
+    try {
+      const result = await dispatch(filterOwners({ mobile })).unwrap();
+      const found = Array.isArray(result) ? result[0] : result?.data?.[0];
+      if (found) {
+        fillOwnerForm(found);
+        setSelectedOwnerId(found._id || '');
+        setOwnerSearchMsg('Owner found and details filled.');
+      } else {
+        setOwnerSearchMsg('No owner found with this mobile. Fill in details to create new.');
+      }
+    } catch {
+      setOwnerSearchMsg('Lookup failed. Please fill details manually.');
+    } finally {
+      setOwnerSearching(false);
     }
   };
 
@@ -217,7 +248,7 @@ export default function AddCarForm({ isEditMode = false }) {
 
   // ── Effects ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    dispatch(getAllPartners());
+    dispatch(getAllOwners());
     if (isEditMode && carId) {
       dispatch(getCarById(carId));
       dispatch(getSeatsData(carId));
@@ -271,10 +302,10 @@ export default function AddCarForm({ isEditMode = false }) {
         setSeatCountInput(String(sc.length));
       }
 
-      // Match partner dropdown to existing ownerId
+      // Match owner dropdown to existing ownerId
       if (resolvedOwnerId) {
-        const matched = partners.find((p) => p._id === resolvedOwnerId);
-        if (matched) setSelectedPartnerId(resolvedOwnerId);
+        const matched = owners.find((o) => o._id === resolvedOwnerId);
+        if (matched) setSelectedOwnerId(resolvedOwnerId);
         // Fetch owner doc to populate owner fields (for non-populated responses)
         dispatch(getOwnerById(resolvedOwnerId));
       }
@@ -284,10 +315,10 @@ export default function AddCarForm({ isEditMode = false }) {
     }
   }, [isEditMode, selectedCar]);
 
-  // Match partner dropdown once BOTH selectedCar and partners list are available
-  // (partners may load after selectedCar, so a separate effect is needed)
+  // Match owner dropdown once BOTH selectedCar and owners list are available
+  // (owners may load after selectedCar, so a separate effect is needed)
   useEffect(() => {
-    if (!isEditMode || !selectedCar || !partners.length || selectedPartnerId) return;
+    if (!isEditMode || !selectedCar || !owners.length || selectedOwnerId) return;
     const ownerRef = selectedCar.ownerId;
     const resolvedOwnerId =
       typeof ownerRef === 'object' && ownerRef?._id
@@ -295,10 +326,10 @@ export default function AddCarForm({ isEditMode = false }) {
         : typeof ownerRef === 'string'
         ? ownerRef
         : '';
-    if (resolvedOwnerId && partners.find((p) => p._id === resolvedOwnerId)) {
-      setSelectedPartnerId(resolvedOwnerId);
+    if (resolvedOwnerId && owners.find((o) => o._id === resolvedOwnerId)) {
+      setSelectedOwnerId(resolvedOwnerId);
     }
-  }, [isEditMode, selectedCar, partners]);
+  }, [isEditMode, selectedCar, owners]);
 
   // Populate seatConfig from getSeatsData response
   useEffect(() => {
@@ -371,8 +402,12 @@ export default function AddCarForm({ isEditMode = false }) {
         setDlImages([]);
         setSeatConfig([]);
         setSeatCountInput('');
+        setSelectedOwnerId('');
+        setOwnerSearchMobile('');
+        setOwnerSearchMsg('');
         setStep(1);
         setMaxReachable(1);
+        dispatch(getAllOwners());
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });
       setTimeout(() => navigate('/your-cars'), 2000);
@@ -634,21 +669,61 @@ export default function AddCarForm({ isEditMode = false }) {
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100"><UserCircle size={18} /></div>
                 <div>
                   <h2 className="text-base font-bold text-slate-900">Owner / Driver Profile</h2>
-                  <p className="text-xs text-slate-500 font-medium">Select an existing partner or enter new owner details.</p>
+                  <p className="text-xs text-slate-500 font-medium">Existing owner select karo ya naya owner ka form bharo — dono ek saath save honge.</p>
                 </div>
               </div>
               <div className="p-6 space-y-5">
+
+                {/* ── Section A: Select from existing Car Owners ── */}
                 <div>
-                  <label className={labelClass}>Select Owner (Partner)</label>
-                  <select value={selectedPartnerId} onChange={handlePartnerSelect} className={inputClass}>
-                    <option value="">Choose existing partner (optional)</option>
-                    {partners.map((p) => <option key={p._id} value={p._id}>{p.name || p.fullName || p.email || p._id}</option>)}
+                  <label className={labelClass}>Existing Car Owner Select Karo</label>
+                  <select value={selectedOwnerId} onChange={handleOwnerSelect} className={inputClass}>
+                    <option value="">— Naya owner create karna hai —</option>
+                    {owners.map((o) => (
+                      <option key={o._id} value={o._id}>
+                        {o.name || 'Unnamed'}{o.mobile ? ` · ${o.mobile}` : ''}{o.email ? ` · ${o.email}` : ''}
+                      </option>
+                    ))}
                   </select>
-                  {partnersLoading && <p className="mt-1 text-xs font-medium text-slate-500">Loading partners...</p>}
-                  {formData.ownerId && <p className="mt-1.5 text-[11px] font-semibold text-indigo-600">Owner ID: {formData.ownerId}</p>}
+                  {formData.ownerId && (
+                    <p className="mt-1.5 text-[11px] font-semibold text-indigo-600">Owner ID: {formData.ownerId}</p>
+                  )}
                 </div>
+
+                {/* ── Section B: Mobile number se lookup ── */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-500">Mobile se owner dhundo</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      value={ownerSearchMobile}
+                      onChange={(e) => setOwnerSearchMobile(e.target.value)}
+                      placeholder="9876543210"
+                      className={inputClass}
+                      onKeyDown={(e) => e.key === 'Enter' && handleOwnerMobileLookup()}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleOwnerMobileLookup}
+                      disabled={ownerSearching || !ownerSearchMobile.trim()}
+                      className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {ownerSearching ? <Loader2 size={14} className="animate-spin" /> : null}
+                      {ownerSearching ? 'Searching...' : 'Lookup'}
+                    </button>
+                  </div>
+                  {ownerSearchMsg && (
+                    <p className={`mt-2 text-xs font-semibold ${ownerSearchMsg.includes('found') ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {ownerSearchMsg}
+                    </p>
+                  )}
+                </div>
+
+                {/* ── Section C: Owner form (fills auto on select, or fill manually) ── */}
                 <div className="border-t border-slate-100 pt-5">
-                  <p className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">Or enter manually</p>
+                  <p className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
+                    {selectedOwnerId ? 'Owner Details (selected owner)' : 'Naya Owner — Details Bharo'}
+                  </p>
                   <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                     <div><label className={labelClass}>Full Name</label><input type="text" {...field('ownerName')} placeholder="Ramesh Kumar" /></div>
                     <div><label className={labelClass}>Email</label><input type="email" {...field('ownerEmail')} placeholder="ramesh@example.com" /></div>

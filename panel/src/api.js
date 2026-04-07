@@ -80,6 +80,10 @@ api.interceptors.request.use(
       config.headers.Authorization = config?.useRawAuthorization ? token : `Bearer ${token}`
     }
 
+    if (typeof window !== 'undefined' && window.location?.pathname) {
+      config.headers['x-page-route'] = window.location.pathname
+    }
+
     return config
   },
   (error) => Promise.reject(error),

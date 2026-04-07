@@ -1141,3 +1141,253 @@ If owner ke paas cars nahi hain to:
 6. Drop code verify hone ke baad booking aur ride dono `Completed` hote hain.
 7. Booking complete, cancel, ya fail hone par reserved seats release ho jati hain.
 8. `get-my-cars` aur `update-a-car` controller authenticated user context expect karte hain, isliye owner-side frontend se token bhejna chahiye.
+
+---
+
+## Mobile App — Complete Booking Interaction Flow
+
+Ye section mobile app developers ke liye hai. Step-by-step poora booking interaction yahan documented hai.
+
+### API Call Sequence
+
+```
+STEP 1 → GET  /travel/get-all-car                          (cars list)
+       → GET  /travel/filter-car/by-query?...              (filtered cars)
+STEP 2 → GET  /travel/get-a-car/:carId                     (car detail)
+       → GET  /travel/get-seat-data/by-id/:carId           (seats — Shared only)
+STEP 3 → POST /travel/create-travel/booking                (booking create)
+STEP 4 → POST /payment/create-order/travel/:bookingId      (payment initiate — Online only)
+STEP 5 → POST /payment/verify/travel/:bookingId            (payment verify — Online only)
+STEP 6 → GET  /travel/get-bookings-by/user/:userId         (my bookings)
+```
+
+---
+
+### STEP 1 — Cars List Screen
+
+**Saari available cars:**
+```
+GET /travel/get-all-car
+```
+Body: kuch nahi
+
+**Route/Date filter lagakar:**
+```
+GET /travel/filter-car/by-query?pickupP=Delhi&dropP=Agra&pickupD=2026-04-10T00:00:00.000Z&dropD=2026-04-10T23:59:59.000Z
+```
+
+Filter params (sab optional, kam se kam ek chahiye):
+
+| Param | Example |
+|---|---|
+| `pickupP` | `Delhi` |
+| `dropP` | `Agra` |
+| `pickupD` | `2026-04-10T00:00:00.000Z` |
+| `dropD` | `2026-04-10T23:59:59.000Z` |
+| `vehicleType` | `Car` |
+| `fuelType` | `Diesel` |
+| `seater` | `6` |
+
+---
+
+### STEP 2 — Car Detail Screen
+
+**Car ka pura detail:**
+```
+GET /travel/get-a-car/:carId
+```
+
+**Seat layout (sirf Shared car ke liye):**
+```
+GET /travel/get-seat-data/by-id/:carId
+```
+
+Response:
+```json
+{
+  "carId": "664f1a2b3c4d5e6f7a8b9c0d",
+  "seats": [
+    { "_id": "seat_id_1", "seatNumber": 1, "seatType": "Window", "seatPrice": 500, "isBooked": false },
+    { "_id": "seat_id_2", "seatNumber": 2, "seatType": "Aisle",  "seatPrice": 400, "isBooked": true }
+  ]
+}
+```
+
+> `isBooked: true` wali seats disabled dikhao — user select nahi kar sakta.
+
+---
+
+### STEP 3 — Booking Create
+
+```
+POST /travel/create-travel/booking
+Content-Type: application/json
+```
+
+#### Private Car — Online Payment
+
+```json
+{
+  "userId": "67abc1234567890def123456",
+  "carId": "664f1a2b3c4d5e6f7a8b9c0d",
+  "customerMobile": "9876543210",
+  "customerEmail": "customer@example.com",
+  "passengerName": "Rahul Sharma",
+  "bookedBy": "9876543210",
+  "paymentMethod": "Online",
+  "isPaid": false,
+  "confirmOnCreate": false
+}
+```
+
+#### Private Car — Cash/Offline
+
+```json
+{
+  "userId": "67abc1234567890def123456",
+  "carId": "664f1a2b3c4d5e6f7a8b9c0d",
+  "customerMobile": "9876543210",
+  "customerEmail": "customer@example.com",
+  "passengerName": "Rahul Sharma",
+  "bookedBy": "9876543210",
+  "paymentMethod": "Cash",
+  "isPaid": true,
+  "confirmOnCreate": true
+}
+```
+
+#### Shared Car — Online Payment
+
+```json
+{
+  "userId": "67abc1234567890def123456",
+  "carId": "664f1a2b3c4d5e6f7a8b9c0d",
+  "seats": [
+    "seat_id_1",
+    "seat_id_3"
+  ],
+  "customerMobile": "9876543210",
+  "customerEmail": "customer@example.com",
+  "passengerName": "Rahul Sharma",
+  "bookedBy": "9876543210",
+  "paymentMethod": "Online",
+  "isPaid": false,
+  "confirmOnCreate": false
+}
+```
+
+#### Shared Car — Cash/Offline
+
+```json
+{
+  "userId": "67abc1234567890def123456",
+  "carId": "664f1a2b3c4d5e6f7a8b9c0d",
+  "seats": [
+    "seat_id_1"
+  ],
+  "customerMobile": "9876543210",
+  "customerEmail": "customer@example.com",
+  "passengerName": "Rahul Sharma",
+  "bookedBy": "9876543210",
+  "paymentMethod": "Cash",
+  "isPaid": true,
+  "confirmOnCreate": true
+}
+```
+
+> **Note:** `assignedDriverId` aur `assignedDriverName` mat bhejo — server automatically car ke owner se fill kar deta hai.
+
+#### Success Response `201`
+
+```json
+{
+  "success": true,
+  "message": "Booking created successfully. Complete payment via /payment/create-order/travel/:id",
+  "data": {
+    "_id": "booking_mongo_id",
+    "bookingId": "A3FX7K2M",
+    "carId": "664f1a2b3c4d5e6f7a8b9c0d",
+    "userId": "67abc1234567890def123456",
+    "passengerName": "Rahul Sharma",
+    "customerMobile": "9876543210",
+    "customerEmail": "customer@example.com",
+    "bookedBy": "9876543210",
+    "vehicleType": "Car",
+    "sharingType": "Private",
+    "vehicleNumber": "DL01AB1234",
+    "make": "Maruti",
+    "model": "Swift",
+    "color": "White",
+    "pickupP": "Delhi",
+    "dropP": "Agra",
+    "pickupD": "2026-04-10T08:00:00.000Z",
+    "dropD": "2026-04-10T14:00:00.000Z",
+    "seats": [],
+    "totalSeatsBooked": 0,
+    "basePrice": 1000,
+    "gstRate": 5,
+    "gstPrice": 5,
+    "gstAmount": 50,
+    "price": 1050,
+    "paymentMode": "online",
+    "paymentMethod": "Online",
+    "phonepeOrderId": "",
+    "paymentId": "",
+    "isPaid": false,
+    "bookingStatus": "Pending",
+    "rideStatus": "AwaitingConfirmation",
+    "assignedDriverId": "owner_mongo_id",
+    "assignedDriverName": "Ramesh Kumar",
+    "pickupCode": "A1B2C3",
+    "dropCode": "X4Y5Z6",
+    "bookingDate": "2026-04-06T10:00:00.000Z",
+    "createdAt": "2026-04-06T10:00:00.000Z",
+    "updatedAt": "2026-04-06T10:00:00.000Z"
+  }
+}
+```
+
+> `data._id` save karo — STEP 4 mein lagega.
+
+---
+
+### STEP 4 — Payment Order Create (Online only)
+
+```
+POST /payment/create-order/travel/:bookingId
+```
+
+`:bookingId` = STEP 3 response ka `data._id`
+
+Body: kuch nahi — server booking se sab le lega.
+
+---
+
+### STEP 5 — Payment Verify (User PhonePe se wapas aaye)
+
+```
+POST /payment/verify/travel/:bookingId
+```
+
+Body: kuch nahi.
+
+---
+
+### STEP 6 — My Bookings Screen
+
+```
+GET /travel/get-bookings-by/user/:userId
+```
+
+---
+
+### bookingStatus → App Screen Mapping
+
+| `bookingStatus` | `rideStatus` | App mein kya dikhao |
+|---|---|---|
+| `Pending` | `AwaitingConfirmation` | "Payment pending" |
+| `Confirmed` | `AwaitingPickup` | "Booking confirmed — Driver aa raha hai" |
+| `Confirmed` | `InProgress` | "Trip chal rahi hai" |
+| `Completed` | `Completed` | "Trip completed" |
+| `Cancelled` | `Cancelled` | "Booking cancelled" |
+| `Failed` | `Failed` | "Booking failed" |
