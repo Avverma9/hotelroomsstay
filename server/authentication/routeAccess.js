@@ -12,6 +12,8 @@ const SKIP_PATH_PREFIXES = [
   "/forgot-password/dashboard/user",
   "/change-password/dashboard/user",
   "/create/dashboard/user",
+  "/additional/route-permissions/",
+  "/additional/sidebar-links/",
 ];
 
 const getRawToken = (headerValue) => {
@@ -41,8 +43,15 @@ const routeAccess = async (req, res, next) => {
       return next();
     }
 
-    const path = String(req.path || "");
-    if (shouldSkipPath(path)) {
+    const apiPath = String(req.path || "");
+    if (shouldSkipPath(apiPath)) {
+      return next();
+    }
+
+    // Use the panel page route sent by the frontend (x-page-route header).
+    // If header is absent (non-panel clients), skip the check entirely.
+    const pageRoute = req.headers["x-page-route"];
+    if (!pageRoute) {
       return next();
     }
 
@@ -72,14 +81,14 @@ const routeAccess = async (req, res, next) => {
 
     const access = getUserRouteAccess({
       user,
-      routePath: path,
+      routePath: pageRoute,
     });
 
     if (!access.hasAccess) {
       return res.status(403).json({
         message: "Access denied for this route",
         data: {
-          routePath: path,
+          routePath: pageRoute,
           matchedRuleType: access.matchedRuleType,
           matchedPattern: access.matchedPattern,
           mode: access.mode,

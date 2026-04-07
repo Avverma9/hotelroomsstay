@@ -1447,21 +1447,40 @@ const arrayContainsAnyText = (items = [], wantedValues = []) => {
     return true;
   }
 
-  const normalizedItems = items.map((item) => normalizeQueryValue(item).toLowerCase());
-  return wantedValues.some((value) => normalizedItems.includes(normalizeQueryValue(value).toLowerCase()));
+  // Use substring match (same as MongoDB $regex partial match) so results are consistent
+  return items.some((item) => {
+    const s = normalizeQueryValue(item).toLowerCase();
+    return wantedValues.some((v) => s.includes(normalizeQueryValue(v).toLowerCase()));
+  });
 };
+
+// Strip hyphens so "wi-fi" == "wifi", "wi fi" etc. for comparison
+const stripHyphens = (s) => s.replace(/[-\s]+/g, "");
 
 const objectArrayContainsAnyText = (items = [], wantedValues = []) => {
   if (!wantedValues.length) {
     return true;
   }
 
-  const normalizedValues = items
-    .flatMap((item) => Object.values(item || {}))
-    .map((item) => normalizeQueryValue(item).toLowerCase())
-    .filter(Boolean);
+  // Normalize both with and without hyphens for flexible matching
+  const normalizedWanted = wantedValues.map((v) => normalizeQueryValue(v).toLowerCase());
+  const strippedWanted = normalizedWanted.map(stripHyphens);
 
-  return wantedValues.some((value) => normalizedValues.includes(normalizeQueryValue(value).toLowerCase()));
+  const matchesItem = (s) => {
+    const sLower = normalizeQueryValue(s).toLowerCase();
+    const sStripped = stripHyphens(sLower);
+    return normalizedWanted.some((w, i) => sLower.includes(w) || sStripped.includes(strippedWanted[i]));
+  };
+
+  return items.some((item) => {
+    // Case 1: plain string element (e.g. amenities: ["Free WiFi", "Pool"])
+    if (typeof item !== "object" || item === null) {
+      return matchesItem(item);
+    }
+    // Case 2: object element — flatten all values including nested arrays
+    const flatValues = Object.values(item).flatMap((v) => (Array.isArray(v) ? v : [v]));
+    return flatValues.some((v) => matchesItem(v));
+  });
 };
 
 //============================================hotels by filter city,state,landmark=================================================
@@ -1623,11 +1642,29 @@ const getHotelsByFilters = async (req, res) => {
       };
     }
     if (amenityValues.length) {
-      filters.amenities = {
-        $elemMatch: {
-          amenities: { $in: amenityValues.map((item) => new RegExp(`^${escapeRegex(item)}$`, "i")) },
-        },
+      // Normalize hyphens/spaces so "Wi-Fi" matches "WiFi", "Wi Fi", "Wi-Fi" etc.
+      const amenityRegexes = amenityValues.map((item) => {
+        const pattern = escapeRegex(item).replace(/[-\s]+/g, "[\\s-]*");
+        return new RegExp(pattern, "i");
+      });
+      // Support all three amenity data structures stored in the DB:
+      //   1. Flat string array:  amenities: ["Free WiFi", "Pool"]
+      //   2. Object with nested amenities array: amenities: [{ hotelId, amenities: ["WiFi", "Fan"] }]
+      //   3. Object with name field: amenities: [{ name: "Private Beach", icon: "beach" }]
+      const amenityCondition = {
+        $or: [
+          { amenities: { $in: amenityRegexes } },
+          { amenities: { $elemMatch: { amenities: { $in: amenityRegexes } } } },
+          { amenities: { $elemMatch: { name: { $in: amenityRegexes } } } },
+        ],
       };
+      // Merge without overwriting an existing $or (e.g. from the search filter)
+      if (filters.$or) {
+        filters.$and = [...(filters.$and || []), { $or: filters.$or }, amenityCondition];
+        delete filters.$or;
+      } else {
+        Object.assign(filters, amenityCondition);
+      }
     }
     if (unmarriedCouplesAllowedTrim) {
       filters["policies.unmarriedCouplesAllowed"] = unmarriedCouplesAllowedTrim;

@@ -194,6 +194,11 @@ export default function Auth() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loginMethod === "otp" && otpSent}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && loginMethod === "password") {
+                      handlePasswordLogin(e);
+                    }
+                  }}
                   className={inputClass}
                 />
               </div>
