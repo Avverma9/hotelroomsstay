@@ -1,21 +1,30 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import api from '../../src/api'
-import { SESSION_STORAGE_KEY } from '../../util/util'
+import { LOCAL_STORAGE_KEY, SESSION_STORAGE_KEY } from '../../util/util'
 
 const getSavedAuthData = () => {
   if (typeof window === 'undefined') {
     return null
   }
 
-  const savedData = window.sessionStorage.getItem(SESSION_STORAGE_KEY)
+  const savedData =
+    window.localStorage.getItem(LOCAL_STORAGE_KEY) ||
+    window.sessionStorage.getItem(SESSION_STORAGE_KEY)
 
   if (!savedData) {
     return null
   }
 
   try {
-    return JSON.parse(savedData)
+    const parsedData = JSON.parse(savedData)
+
+    if (!window.localStorage.getItem(LOCAL_STORAGE_KEY)) {
+      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(parsedData))
+    }
+
+    return parsedData
   } catch {
+    window.localStorage.removeItem(LOCAL_STORAGE_KEY)
     window.sessionStorage.removeItem(SESSION_STORAGE_KEY)
     return null
   }
@@ -26,6 +35,7 @@ const saveAuthData = (authData) => {
     return
   }
 
+  window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(authData))
   window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(authData))
 }
 
@@ -34,6 +44,7 @@ const removeAuthData = () => {
     return
   }
 
+  window.localStorage.removeItem(LOCAL_STORAGE_KEY)
   window.sessionStorage.removeItem(SESSION_STORAGE_KEY)
 }
 

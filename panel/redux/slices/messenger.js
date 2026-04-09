@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
-import { baseURL, SESSION_STORAGE_KEY } from '../../util/util'
+import { baseURL, LOCAL_STORAGE_KEY, SESSION_STORAGE_KEY } from '../../util/util'
 
 const messengerApi = axios.create({
   baseURL,
@@ -12,15 +12,24 @@ const getStoredSession = () => {
     return null
   }
 
-  const rawSession = window.sessionStorage.getItem(SESSION_STORAGE_KEY)
+  const rawSession =
+    window.localStorage.getItem(LOCAL_STORAGE_KEY) ||
+    window.sessionStorage.getItem(SESSION_STORAGE_KEY)
 
   if (!rawSession) {
     return null
   }
 
   try {
-    return JSON.parse(rawSession)
+    const parsedSession = JSON.parse(rawSession)
+
+    if (!window.localStorage.getItem(LOCAL_STORAGE_KEY)) {
+      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(parsedSession))
+    }
+
+    return parsedSession
   } catch {
+    window.localStorage.removeItem(LOCAL_STORAGE_KEY)
     window.sessionStorage.removeItem(SESSION_STORAGE_KEY)
     return null
   }
