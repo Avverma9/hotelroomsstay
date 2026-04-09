@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const User = require('../../models/user');
 const Complaint = require('../../models/complaints/complaint');
 const chat = require('../../models/complaints/chat');
+const Hotel = require('../../models/hotel/basicDetails');
 const {
   createUserNotificationSafe,
 } = require("../notification/helpers");
@@ -10,7 +11,7 @@ const createComplaint = async (req, res) => {
     const { userId, regarding, hotelName, hotelEmail, bookingId, status, issue, hotelId } = req.body;
     const images = req.files ? req.files.map((file) => file.location) : [];
     try {
-        if (!userId || !regarding || !issue) {
+        if (!userId || !regarding || !issue || !hotelId) {
             return res.status(400).json({ message: 'Missing required fields.' });
         }
 
@@ -24,6 +25,18 @@ const createComplaint = async (req, res) => {
             const userDoc = await User.findOne({ userId }).select('_id').lean();
             if (!userDoc) return res.status(404).json({ message: 'User not found.' });
             resolvedObjectId = userDoc._id;
+        }
+
+        // Accept both Mongo _id and business hotelId strings from clients.
+        let resolvedHotelObjectId;
+        if (mongoose.Types.ObjectId.isValid(hotelId) && String(hotelId).length === 24) {
+            const hotelDoc = await Hotel.findOne({ _id: hotelId }).select('_id').lean();
+            if (!hotelDoc) return res.status(404).json({ message: 'Hotel not found.' });
+            resolvedHotelObjectId = hotelDoc._id;
+        } else {
+            const hotelDoc = await Hotel.findOne({ hotelId: String(hotelId) }).select('_id').lean();
+            if (!hotelDoc) return res.status(404).json({ message: 'Hotel not found.' });
+            resolvedHotelObjectId = hotelDoc._id;
         }
 
         // Check for existing pending complaints
@@ -41,7 +54,7 @@ const createComplaint = async (req, res) => {
         // Create new complaint
         const newComplaint = new Complaint({
             userId: resolvedObjectId,
-            hotelId,
+            hotelId: resolvedHotelObjectId,
             regarding,
             hotelEmail,
             hotelName,
