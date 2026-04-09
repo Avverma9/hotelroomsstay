@@ -55,7 +55,7 @@ const matchesAllowedRoute = (pathname, allowedRoutes) => {
 
 function ProtectedLayout({ isAuthenticated, isAccessAllowed, isAccessDeniedRoute }) {
   if (!isAuthenticated) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/login" replace />
   }
 
   if (!isAccessAllowed && !isAccessDeniedRoute) {
@@ -142,6 +142,10 @@ function App() {
       <Routes>
         <Route
           path="/"
+          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/login"
           element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Auth />}
         />
         <Route

@@ -6,7 +6,7 @@ import { ToastProvider } from './utils/toast';
 
 // Pages
 import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
+import LoginPage from './components/auth/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import HotelSearch from './pages/hotel/HotelSearch';
 
@@ -69,6 +69,14 @@ function Layout({ children }) {
   );
 }
 
+function ProtectedRoute({ isAuthenticated, children }) {
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
+
 function App() {
   const { isAuthenticated } = useSelector((state) => state.auth);
 
@@ -122,34 +130,69 @@ function App() {
           {/* Hotel Search Route */}
           <Route path="/hotel-search" element={<HotelSearch />} />
           <Route path="/search" element={<HotelSearch />} />
-          <Route path="/book-now" element={<BookNowPage />} />
+          <Route
+            path="/book-now"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <BookNowPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Tour/Holiday Routes */}
           <Route path="/holidays" element={<TourPackages />} />
-          <Route path="/travellers/booking/:id" element={<TourBookingPage />} />
-          <Route path="/travel-partner" element={<PartnerPage />} />
+          <Route
+            path="/travellers/booking/:id"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <TourBookingPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/travel-partner"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <PartnerPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Partner Routes */}
-          <Route path="/partner" element={<HotelPartnerForm />} />
-          <Route path="/partner/add-hotel" element={<HotelAdd />} />
-          <Route path="/partner/second-step" element={<PolicyForm />} />
-          <Route path="/partner/third-step" element={<AmenitiesPage />} />
-          <Route path="/partner/fourth-step" element={<PartnerFoods />} />
-          <Route path="/partner/last-step" element={<PartnerRooms />} />
+          <Route
+            path="/partner"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <HotelPartnerForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/partner/add-hotel" element={<ProtectedRoute isAuthenticated={isAuthenticated}><HotelAdd /></ProtectedRoute>} />
+          <Route path="/partner/second-step" element={<ProtectedRoute isAuthenticated={isAuthenticated}><PolicyForm /></ProtectedRoute>} />
+          <Route path="/partner/third-step" element={<ProtectedRoute isAuthenticated={isAuthenticated}><AmenitiesPage /></ProtectedRoute>} />
+          <Route path="/partner/fourth-step" element={<ProtectedRoute isAuthenticated={isAuthenticated}><PartnerFoods /></ProtectedRoute>} />
+          <Route path="/partner/last-step" element={<ProtectedRoute isAuthenticated={isAuthenticated}><PartnerRooms /></ProtectedRoute>} />
 
           {/* Cab Routes */}
           <Route path="/cabs" element={<CabsPage />} />
-          <Route path="/cab-booking/:id" element={<CabBooking />} />
+          <Route
+            path="/cab-booking/:id"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <CabBooking />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Profile Routes - ProfileSidebar renders on these paths and handles nested routes internally */}
-          <Route path="/profile" element={<ProfileSideBar />} />
-          <Route path="/profile-update/user-data/page" element={<ProfileSideBar />} />
-          <Route path="/bookings" element={<ProfileSideBar />} />
-          <Route path="/tour-bookings" element={<ProfileSideBar />} />
-          <Route path="/cab-bookings" element={<ProfileSideBar />} />
-          <Route path="/complaints" element={<ProfileSideBar />} />
-          <Route path="/reviews" element={<ProfileSideBar />} />
-          <Route path="/coupons" element={<CouponPage />} />
+          <Route path="/profile" element={<ProtectedRoute isAuthenticated={isAuthenticated}><ProfileSideBar /></ProtectedRoute>} />
+          <Route path="/profile-update/user-data/page" element={<ProtectedRoute isAuthenticated={isAuthenticated}><ProfileSideBar /></ProtectedRoute>} />
+          <Route path="/bookings" element={<ProtectedRoute isAuthenticated={isAuthenticated}><ProfileSideBar /></ProtectedRoute>} />
+          <Route path="/tour-bookings" element={<ProtectedRoute isAuthenticated={isAuthenticated}><ProfileSideBar /></ProtectedRoute>} />
+          <Route path="/cab-bookings" element={<ProtectedRoute isAuthenticated={isAuthenticated}><ProfileSideBar /></ProtectedRoute>} />
+          <Route path="/complaints" element={<ProtectedRoute isAuthenticated={isAuthenticated}><ProfileSideBar /></ProtectedRoute>} />
+          <Route path="/reviews" element={<ProtectedRoute isAuthenticated={isAuthenticated}><ProfileSideBar /></ProtectedRoute>} />
+          <Route path="/coupons" element={<ProtectedRoute isAuthenticated={isAuthenticated}><CouponPage /></ProtectedRoute>} />
 
           {/* Static Pages */}
           <Route path="/offered" element={<Offered />} />

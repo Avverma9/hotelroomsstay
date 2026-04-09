@@ -1,24 +1,40 @@
 import axios from 'axios'
 import store from '../redux/store'
+import { clearCredentials } from '../redux/slices/authSlice'
 import { requestFinished, requestStarted } from '../redux/slices/globalLoader'
-import { baseURL, HEALTH_POLL_INTERVAL, SESSION_STORAGE_KEY } from '../util/util'
+import {
+  baseURL,
+  HEALTH_POLL_INTERVAL,
+  LOCAL_STORAGE_KEY,
+  SESSION_STORAGE_KEY,
+} from '../util/util'
 
 export const SERVER_STATUS_EVENT = 'hrsadmin:server-status'
+const LOGIN_PATH = '/login'
 
 const getSavedSession = () => {
   if (typeof window === 'undefined') {
     return null
   }
 
-  const savedSession = window.sessionStorage.getItem(SESSION_STORAGE_KEY)
+  const savedSession =
+    window.localStorage.getItem(LOCAL_STORAGE_KEY) ||
+    window.sessionStorage.getItem(SESSION_STORAGE_KEY)
 
   if (!savedSession) {
     return null
   }
 
   try {
-    return JSON.parse(savedSession)
+    const parsedSession = JSON.parse(savedSession)
+
+    if (!window.localStorage.getItem(LOCAL_STORAGE_KEY)) {
+      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(parsedSession))
+    }
+
+    return parsedSession
   } catch {
+    window.localStorage.removeItem(LOCAL_STORAGE_KEY)
     window.sessionStorage.removeItem(SESSION_STORAGE_KEY)
     return null
   }
@@ -52,6 +68,33 @@ const emitServerStatus = (hasServerError) => {
     new CustomEvent(SERVER_STATUS_EVENT, {
       detail: { hasServerError },
     }),
+  )
+}
+
+const redirectToLogin = () => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const currentPath = window.location?.pathname || ''
+  if (currentPath !== LOGIN_PATH) {
+    window.location.replace(LOGIN_PATH)
+  }
+}
+
+const shouldForceLogin = (error) => {
+  const status = error?.response?.status
+  const message = String(error?.response?.data?.message || '').toLowerCase()
+
+  if (status === 401 || status === 403) {
+    return true
+  }
+
+  return (
+    message.includes('no token provided') ||
+    message.includes('invalid token') ||
+    message.includes('jwt malformed') ||
+    message.includes('jwt expired')
   )
 }
 
@@ -103,6 +146,12 @@ api.interceptors.response.use(
   (error) => {
     if (error.config?._trackedByGlobalLoader) {
       store.dispatch(requestFinished())
+    }
+
+    if (shouldForceLogin(error)) {
+      store.dispatch(clearCredentials())
+      redirectToLogin()
+      return Promise.reject(error)
     }
 
     const isServerDown =

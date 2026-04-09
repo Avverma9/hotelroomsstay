@@ -1,6 +1,92 @@
 import axios from 'axios';
 import baseURL from './baseURL';
 
+const LOGIN_PATH = '/login';
+const PUBLIC_PATH_PREFIXES = [
+  '/health',
+  '/auth/me',
+  '/signIn',
+  '/Signup',
+  '/signIn/google',
+  '/send-otp',
+  '/verify-otp',
+  '/mail/send-otp',
+  '/mail/verify-otp',
+  '/get/offers/main/hotels',
+  '/get-all/travel/location',
+  '/hotels/filters',
+  '/monthly-set-room-price/get/by/',
+  '/hotels/get-by-id/',
+  '/gst/get-single-gst',
+  '/get/all/users-filtered/booking/by',
+  '/getReviews/hotelId',
+  '/travel/get-all-car',
+  '/travel/get-a-car/',
+  '/travel/filter-car/by-query',
+  '/travel/get-seat-data/by-id/',
+  '/search-tours/from-to',
+  '/tours/visiting-places',
+  '/get-tour-list',
+  '/sort-tour/by-price',
+  '/sort-tour/by-duration',
+  '/sort-tour/by-themes',
+  '/sort-tour/by-order',
+  '/get-tour/',
+];
+
+const clearAuthStorage = () => {
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('isSignedIn');
+  localStorage.removeItem('rsUserId');
+  localStorage.removeItem('rsToken');
+  localStorage.removeItem('roomsstayUserEmail');
+  localStorage.removeItem('rsUserMobile');
+  localStorage.removeItem('rsUserName');
+};
+
+const redirectToLogin = () => {
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname !== LOGIN_PATH) {
+    window.location.replace(LOGIN_PATH);
+  }
+};
+
+const getRequestPath = (url = '') => {
+  const rawUrl = String(url || '').trim();
+  if (!rawUrl) return '';
+
+  const withoutOrigin = rawUrl.startsWith(baseURL)
+    ? rawUrl.slice(baseURL.length)
+    : rawUrl;
+
+  const normalized = withoutOrigin.startsWith('/') ? withoutOrigin : `/${withoutOrigin}`;
+  return normalized.split('?')[0].split('#')[0];
+};
+
+const isPublicRequest = (url) => {
+  const path = getRequestPath(url);
+  return PUBLIC_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+};
+
+const isProtectedRequest = (url) => !isPublicRequest(url);
+
+const shouldRedirectToLogin = (error) => {
+  const status = error?.response?.status;
+  const message = String(error?.response?.data?.message || '').toLowerCase();
+
+  if (status === 401 || status === 403) {
+    return true;
+  }
+
+  return (
+    message.includes('no token provided') ||
+    message.includes('access denied') ||
+    message.includes('invalid token') ||
+    message.includes('jwt malformed') ||
+    message.includes('jwt expired')
+  );
+};
+
 // Create axios instance with default config
 const apiClient = axios.create({
   baseURL: baseURL,
@@ -36,6 +122,10 @@ apiClient.interceptors.request.use(
     
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else if (isProtectedRequest(config.url)) {
+      clearAuthStorage();
+      redirectToLogin();
+      return Promise.reject(new axios.Cancel('Missing auth token for protected request'));
     }
 
     // Per-endpoint timeout tuning:
@@ -91,16 +181,16 @@ apiClient.interceptors.response.use(
       // Handle specific status codes
       switch (status) {
         case 401:
-          // Unauthorized - clear token and redirect to login
-          localStorage.removeItem('authToken');
+          clearAuthStorage();
           if (updateServerStatus) {
             updateServerStatus(true, 'Session expired. Please login again.');
           }
-          // You can dispatch a logout action here
           break;
         
         case 403:
-          // Forbidden
+          if (shouldRedirectToLogin(error)) {
+            clearAuthStorage();
+          }
           if (updateServerStatus) {
             updateServerStatus(true, 'Access denied. You do not have permission.');
           }
@@ -138,6 +228,11 @@ apiClient.interceptors.response.use(
       if (updateServerStatus) {
         updateServerStatus(false, error.message);
       }
+    }
+
+    if (shouldRedirectToLogin(error) && isProtectedRequest(error.config?.url)) {
+      clearAuthStorage();
+      redirectToLogin();
     }
 
     return Promise.reject(error);
