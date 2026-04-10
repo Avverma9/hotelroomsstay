@@ -3,6 +3,8 @@ const { addTravelAmenities, getTravelAmenities,deleteTravelAmenityById } = requi
 const { addBed, addBedBulk, getBed, deleteBedById } = require('../../controllers/addtionalSettings/bedList');
 const { addRoom, getRooms, addRoomBulk, deleteRoomById } = require('../../controllers/addtionalSettings/roomList');
 const { addAmenities, addBulkAmenities, getAmenities, deleteAmenityById } = require('../../controllers/addtionalSettings/hotelAmenities');
+const { addHotelCategory, getHotelCategories, deleteHotelCategoryById } = require('../../controllers/addtionalSettings/hotelCategories');
+const { addPropertyType, getPropertyTypes, deletePropertyTypeById } = require('../../controllers/addtionalSettings/propertyTypes');
 const { addRole, getRole, deleteRoleById } = require('../../controllers/addtionalSettings/role');
 const { getTourThemes, createTourTheme, deleteTourThemeById } = require('../../controllers/addtionalSettings/tourTheme');
 const {
@@ -55,6 +57,14 @@ router.post("/add-amenities", addAmenities)
 router.get("/get-amenities", getAmenities)
 router.post("/add-amenities-bulk", addBulkAmenities)
 router.delete("/delete-amenity/:id",deleteAmenityById)
+//==================================Hotel Categories===============================
+router.post("/add-hotel-category", addHotelCategory)
+router.get("/get-hotel-categories", getHotelCategories)
+router.delete("/delete-hotel-category/:id", deleteHotelCategoryById)
+//==================================Property Types=================================
+router.post("/add-property-type", addPropertyType)
+router.get("/get-property-types", getPropertyTypes)
+router.delete("/delete-property-type/:id", deletePropertyTypeById)
 //================================ role========================================
 router.post('/roles', addRole);
 router.get('/roles', getRole);

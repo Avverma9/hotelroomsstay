@@ -5,6 +5,33 @@ import {
 } from 'lucide-react';
 import { badgeForPolicy } from '../utils/bookingHelpers';
 
+// Renders stored policy text with bullet/number list formatting
+const FormattedPolicyText = ({ text, className = '' }) => {
+  if (!text) return null
+  const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean)
+  if (!lines.length) return null
+  const isBullet = l => /^[•\-–\*]\s/.test(l)
+  const isNum    = l => /^\d+\.\s/.test(l)
+  if (lines.length === 1 && !isBullet(lines[0]) && !isNum(lines[0]))
+    return <span className={className}>{text}</span>
+  return (
+    <ul className={className} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      {lines.map((line, i) => {
+        const bullet = isBullet(line)
+        const num    = isNum(line)
+        const pfx    = bullet ? '•' : num ? line.match(/^\d+\./)[0] : '›'
+        const body   = bullet ? line.replace(/^[•\-–\*]\s*/, '') : num ? line.replace(/^\d+\.\s*/, '') : line
+        return (
+          <li key={i} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', marginBottom: 3 }}>
+            <span style={{ color: '#888', minWidth: 16, flexShrink: 0, lineHeight: 1.55 }}>{pfx}</span>
+            <span style={{ lineHeight: 1.55 }}>{body}</span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 /**
  * Hotel Policies Modal
  */
@@ -73,7 +100,7 @@ const PoliciesModal = ({ policies, onClose }) => {
                 <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
                   <FileText size={18} className="text-gray-500" /> General Hotel Policy
                 </h4>
-                <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed pl-1">{policy.hotelsPolicy}</p>
+                <FormattedPolicyText text={policy.hotelsPolicy} className="text-sm text-gray-600 leading-relaxed pl-1" />
               </div>
             )}
 
@@ -82,7 +109,7 @@ const PoliciesModal = ({ policies, onClose }) => {
                 <h4 className="font-bold text-rose-800 mb-3 flex items-center gap-2">
                   <AlertCircle size={18} className="text-rose-600" /> Cancellation Policy
                 </h4>
-                <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed pl-1">{policy.cancellationPolicy}</p>
+                <FormattedPolicyText text={policy.cancellationPolicy} className="text-sm text-gray-700 leading-relaxed pl-1" />
               </div>
             )}
 
@@ -91,7 +118,7 @@ const PoliciesModal = ({ policies, onClose }) => {
                 <h4 className="font-bold text-emerald-800 mb-3 flex items-center gap-2">
                   <BadgePercent size={18} className="text-emerald-600" /> Refund Policy
                 </h4>
-                <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed pl-1">{policy.refundPolicy}</p>
+                <FormattedPolicyText text={policy.refundPolicy} className="text-sm text-gray-700 leading-relaxed pl-1" />
               </div>
             )}
 

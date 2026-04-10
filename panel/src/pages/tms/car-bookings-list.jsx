@@ -26,7 +26,7 @@ import {
 } from '../../../redux/slices/tms/travel/car'
 import { selectAuth } from '../../../redux/slices/authSlice'
 import Breadcrumb from '../../components/breadcrumb'
-import BookingStatusBadge, { cfgFor, NEXT_STATUSES, STATUS_CFG } from '../../components/tms/booking-status'
+import BookingStatusBadge, { cfgFor, NEXT_STATUSES, STATUS_CFG, RideStatusBadge } from '../../components/tms/booking-status'
 import { formatDate, formatDateTime, formatCurrency } from '../../utils/format'
 
 const getBookingsList = (payload) => {
@@ -43,10 +43,15 @@ const STATUS_CONFIG = STATUS_CFG
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function BookingEditModal({ booking, onClose, onSubmit, saving }) {
+  // Build initial passengers: prefer booking.passengers[], else fallback to root fields
+  const initPassengers = () => {
+    if (Array.isArray(booking.passengers) && booking.passengers.length > 0) {
+      return booking.passengers.map((p) => ({ name: p.name || '', mobile: p.mobile || '', email: p.email || '' }))
+    }
+    return [{ name: booking.passengerName || '', mobile: booking.customerMobile || '', email: booking.customerEmail || '' }]
+  }
+
   const [form, setForm] = useState({
-    passengerName:    booking.passengerName    || '',
-    customerMobile:   booking.customerMobile   || '',
-    customerEmail:    booking.customerEmail    || '',
     pickupP:          booking.pickupP          || '',
     dropP:            booking.dropP            || '',
     pickupD:          booking.pickupD ? booking.pickupD.slice(0, 16) : '',
@@ -56,12 +61,30 @@ function BookingEditModal({ booking, onClose, onSubmit, saving }) {
     isPaid:           booking.isPaid           ?? false,
     cancellationReason: booking.cancellationReason || '',
   })
+  const [passengers, setPassengers] = useState(initPassengers)
 
   const set = (key, val) => setForm((prev) => ({ ...prev, [key]: val }))
 
+  const setPassenger = (idx, field, val) =>
+    setPassengers((prev) => prev.map((p, i) => i === idx ? { ...p, [field]: val } : p))
+
+  const addPassenger = () =>
+    setPassengers((prev) => [...prev, { name: '', mobile: '', email: '' }])
+
+  const removePassenger = (idx) =>
+    setPassengers((prev) => prev.filter((_, i) => i !== idx))
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    onSubmit(booking._id, form)
+    // Sync primary passenger back into root fields for server backward-compat
+    const primary = passengers[0] || {}
+    onSubmit(booking._id, {
+      ...form,
+      passengerName:  primary.name   || '',
+      customerMobile: primary.mobile || '',
+      customerEmail:  primary.email  || '',
+      passengers,
+    })
   }
 
   return (
@@ -82,37 +105,76 @@ function BookingEditModal({ booking, onClose, onSubmit, saving }) {
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
 
-          {/* Passenger Info */}
-          <div className="rounded-xl border border-slate-200 p-4 space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">Passenger Info</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-500">Passenger Name</label>
-                <input
-                  type="text"
-                  value={form.passengerName}
-                  onChange={(e) => set('passengerName', e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-300 focus:bg-white"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-500">Mobile</label>
-                <input
-                  type="text"
-                  value={form.customerMobile}
-                  onChange={(e) => set('customerMobile', e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-300 focus:bg-white"
-                />
-              </div>
-              <div className="flex flex-col gap-1 sm:col-span-2">
-                <label className="text-xs font-semibold text-slate-500">Email</label>
-                <input
-                  type="email"
-                  value={form.customerEmail}
-                  onChange={(e) => set('customerEmail', e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-300 focus:bg-white"
-                />
-              </div>
+          {/* Passengers */}
+          <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Passengers</h3>
+              <button
+                type="button"
+                onClick={addPassenger}
+                className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-600 hover:bg-indigo-100 transition-colors"
+              >
+                <Plus size={11} /> Add Passenger
+              </button>
+            </div>
+            <div className="space-y-3">
+              {passengers.map((p, idx) => (
+                <div
+                  key={idx}
+                  className={`rounded-lg border p-3 ${
+                    idx === 0 ? 'border-indigo-100 bg-indigo-50/40' : 'border-slate-100 bg-slate-50/60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white ${
+                        idx === 0 ? 'bg-indigo-600' : 'bg-slate-400'
+                      }`}>{idx + 1}</span>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        {idx === 0 ? 'Primary Passenger' : `Passenger ${idx + 1}`}
+                      </span>
+                    </div>
+                    {idx > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => removePassenger(idx)}
+                        className="rounded-lg p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-semibold text-slate-500">Full Name</label>
+                      <input
+                        type="text"
+                        value={p.name}
+                        onChange={(e) => setPassenger(idx, 'name', e.target.value)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-300"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-semibold text-slate-500">Mobile</label>
+                      <input
+                        type="text"
+                        value={p.mobile}
+                        onChange={(e) => setPassenger(idx, 'mobile', e.target.value)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-300"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-semibold text-slate-500">Email</label>
+                      <input
+                        type="email"
+                        value={p.email}
+                        onChange={(e) => setPassenger(idx, 'email', e.target.value)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-300"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -267,11 +329,19 @@ function BookingDetailModal({ booking, onClose, onStatusChange, onEdit, updating
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
 
-          {/* Status + change */}
+          {/* Status row — bookingStatus + rideStatus */}
           <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Current Status</p>
-              <StatusBadge status={booking.status || booking.bookingStatus} />
+            <div className="flex flex-col gap-2">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Booking Status</p>
+                <StatusBadge status={booking.status || booking.bookingStatus} />
+              </div>
+              {booking.rideStatus && (
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Ride Status</p>
+                  <RideStatusBadge status={booking.rideStatus} />
+                </div>
+              )}
             </div>
             {nextOptions.length > 0 && (
               <div className="flex flex-col items-end gap-1">
@@ -300,10 +370,12 @@ function BookingDetailModal({ booking, onClose, onStatusChange, onEdit, updating
           <div className="rounded-xl border border-slate-200 p-4 space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">Car Details</h3>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-slate-500">Car Name</span><p className="font-semibold text-slate-900 mt-0.5">{booking.carName || booking.car?.name || 'N/A'}</p></div>
-              <div><span className="text-slate-500">Car Type</span><p className="font-semibold text-slate-900 mt-0.5">{booking.carType || booking.car?.type || 'N/A'}</p></div>
-              <div><span className="text-slate-500">Plate No.</span><p className="font-semibold text-slate-900 mt-0.5">{booking.plateNumber || booking.car?.plateNumber || 'N/A'}</p></div>
-              <div><span className="text-slate-500">Seats</span><p className="font-semibold text-slate-900 mt-0.5">{booking.seats || booking.car?.seats || 'N/A'}</p></div>
+              <div><span className="text-slate-500">Make / Model</span><p className="font-semibold text-slate-900 mt-0.5">{[booking.make, booking.model].filter(Boolean).join(' ') || 'N/A'}</p></div>
+              <div><span className="text-slate-500">Vehicle Type</span><p className="font-semibold text-slate-900 mt-0.5">{booking.vehicleType || 'N/A'}</p></div>
+              <div><span className="text-slate-500">Plate No.</span><p className="font-semibold text-slate-900 mt-0.5">{booking.vehicleNumber || 'N/A'}</p></div>
+              <div><span className="text-slate-500">Color</span><p className="font-semibold text-slate-900 mt-0.5">{booking.color || 'N/A'}</p></div>
+              <div><span className="text-slate-500">Sharing Type</span><p className="font-semibold text-slate-900 mt-0.5">{booking.sharingType || 'N/A'}</p></div>
+              <div><span className="text-slate-500">Seats Booked</span><p className="font-semibold text-slate-900 mt-0.5">{booking.totalSeatsBooked ?? (booking.seats?.length ?? 'N/A')}</p></div>
             </div>
           </div>
 
@@ -311,23 +383,72 @@ function BookingDetailModal({ booking, onClose, onStatusChange, onEdit, updating
           <div className="rounded-xl border border-slate-200 p-4 space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">Journey</h3>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-slate-500">From</span><p className="font-semibold text-slate-900 mt-0.5">{booking.from || booking.pickupLocation || 'N/A'}</p></div>
-              <div><span className="text-slate-500">To</span><p className="font-semibold text-slate-900 mt-0.5">{booking.to || booking.dropLocation || 'N/A'}</p></div>
-              <div><span className="text-slate-500">Travel Date</span><p className="font-semibold text-slate-900 mt-0.5">{formatDate(booking.travelDate || booking.journeyDate)}</p></div>
-              <div><span className="text-slate-500">Return Date</span><p className="font-semibold text-slate-900 mt-0.5">{formatDate(booking.returnDate) || '—'}</p></div>
-              <div><span className="text-slate-500">Passengers</span><p className="font-semibold text-slate-900 mt-0.5">{booking.passengers || booking.numPassengers || '—'}</p></div>
-              <div><span className="text-slate-500">Total Price</span><p className="font-bold text-indigo-700 mt-0.5">{formatCurrency(booking.totalPrice || booking.price)}</p></div>
+              <div><span className="text-slate-500">Pickup Point</span><p className="font-semibold text-slate-900 mt-0.5">{booking.pickupP || 'N/A'}</p></div>
+              <div><span className="text-slate-500">Drop Point</span><p className="font-semibold text-slate-900 mt-0.5">{booking.dropP || 'N/A'}</p></div>
+              <div><span className="text-slate-500">Pickup Date/Time</span><p className="font-semibold text-slate-900 mt-0.5">{formatDateTime(booking.pickupD) || '—'}</p></div>
+              <div><span className="text-slate-500">Drop Date/Time</span><p className="font-semibold text-slate-900 mt-0.5">{formatDateTime(booking.dropD) || '—'}</p></div>
+              <div><span className="text-slate-500">Total Price</span><p className="font-bold text-indigo-700 mt-0.5">{formatCurrency(booking.price)}</p></div>
+              <div><span className="text-slate-500">Payment</span><p className="font-semibold text-slate-900 mt-0.5">{booking.paymentMethod || '—'} {booking.isPaid ? '✓ Paid' : '✗ Unpaid'}</p></div>
             </div>
           </div>
+
+          {/* Pickup / Drop Codes */}
+          {(booking.pickupCode || booking.dropCode) && (
+            <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">Verification Codes</h3>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {booking.pickupCode && <div><span className="text-slate-500">Pickup Code</span><p className="font-mono font-bold text-emerald-700 mt-0.5 text-base tracking-widest">{booking.pickupCode}</p></div>}
+                {booking.dropCode && <div><span className="text-slate-500">Drop Code</span><p className="font-mono font-bold text-indigo-700 mt-0.5 text-base tracking-widest">{booking.dropCode}</p></div>}
+                {booking.pickupCodeVerifiedAt && <div><span className="text-slate-500">Pickup Verified</span><p className="font-semibold text-slate-900 mt-0.5">{formatDateTime(booking.pickupCodeVerifiedAt)}</p></div>}
+                {booking.dropCodeVerifiedAt && <div><span className="text-slate-500">Drop Verified</span><p className="font-semibold text-slate-900 mt-0.5">{formatDateTime(booking.dropCodeVerifiedAt)}</p></div>}
+              </div>
+            </div>
+          )}
 
           {/* Guest Info */}
           <div className="rounded-xl border border-slate-200 p-4 space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">Guest / Booked By</h3>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-slate-500">Name</span><p className="font-semibold text-slate-900 mt-0.5">{booking.guestName || booking.user?.name || booking.bookedBy?.name || 'N/A'}</p></div>
-              <div><span className="text-slate-500">Mobile</span><p className="font-semibold text-slate-900 mt-0.5">{booking.guestMobile || booking.user?.mobile || 'N/A'}</p></div>
-              <div><span className="text-slate-500">Email</span><p className="font-semibold text-slate-900 mt-0.5 truncate">{booking.guestEmail || booking.user?.email || 'N/A'}</p></div>
+
+            {/* Passengers from passengers[] array (multi-seat bookings) */}
+            {Array.isArray(booking.passengers) && booking.passengers.length > 0 ? (
+              <div className="space-y-2">
+                {booking.passengers.map((p, idx) => (
+                  <div
+                    key={idx}
+                    className={`rounded-lg border px-3 py-2.5 text-sm ${
+                      idx === 0
+                        ? 'border-indigo-100 bg-indigo-50/60'
+                        : 'border-slate-100 bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white ${
+                        idx === 0 ? 'bg-indigo-600' : 'bg-slate-400'
+                      }`}>{idx + 1}</span>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        {idx === 0 ? 'Primary Passenger' : `Passenger ${idx + 1}`}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div><span className="text-slate-400 text-[11px]">Name</span><p className="font-semibold text-slate-900 text-xs mt-0.5">{p.name || '—'}</p></div>
+                      <div><span className="text-slate-400 text-[11px]">Mobile</span><p className="font-semibold text-slate-900 text-xs mt-0.5">{p.mobile || '—'}</p></div>
+                      <div><span className="text-slate-400 text-[11px]">Email</span><p className="font-semibold text-slate-900 text-xs mt-0.5 truncate">{p.email || '—'}</p></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* Fallback: single-passenger fields */
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-slate-500">Passenger Name</span><p className="font-semibold text-slate-900 mt-0.5">{booking.passengerName || booking.bookedBy || 'N/A'}</p></div>
+                <div><span className="text-slate-500">Mobile</span><p className="font-semibold text-slate-900 mt-0.5">{booking.customerMobile || 'N/A'}</p></div>
+                <div className="col-span-2"><span className="text-slate-500">Email</span><p className="font-semibold text-slate-900 mt-0.5 truncate">{booking.customerEmail || 'N/A'}</p></div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 text-sm pt-1">
               <div><span className="text-slate-500">Booked On</span><p className="font-semibold text-slate-900 mt-0.5">{formatDateTime(booking.createdAt)}</p></div>
+              {booking.assignedDriverName && <div><span className="text-slate-500">Driver</span><p className="font-semibold text-slate-900 mt-0.5">{booking.assignedDriverName}</p></div>}
             </div>
           </div>
         </div>
@@ -365,11 +486,10 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
     return bookingsList.filter((b) => {
       const matchStatus = statusFilter === 'All' || (b.status || b.bookingStatus) === statusFilter
       const matchSearch = !q ||
-        (b.carName || b.car?.name || '').toLowerCase().includes(q) ||
-        (b.guestName || b.user?.name || '').toLowerCase().includes(q) ||
-        (b.from || b.pickupLocation || '').toLowerCase().includes(q) ||
-        (b.to || b.dropLocation || '').toLowerCase().includes(q) ||
-        String(b._id || '').toLowerCase().includes(q)
+        [b.make, b.model, b.vehicleType, b.vehicleNumber].some((f) => String(f || '').toLowerCase().includes(q)) ||
+        [b.passengerName, b.bookedBy, b.customerMobile].some((f) => String(f || '').toLowerCase().includes(q)) ||
+        [b.pickupP, b.dropP].some((f) => String(f || '').toLowerCase().includes(q)) ||
+        String(b.bookingId || b._id || '').toLowerCase().includes(q)
       return matchStatus && matchSearch
     })
   }, [bookingsList, search, statusFilter])
@@ -518,7 +638,7 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
               <table className="min-w-full divide-y divide-slate-100">
                 <thead className="bg-slate-50/80">
                   <tr>
-                    {['Booking', 'Car', 'Route', 'Guest', 'Travel Date', 'Price', 'Status', ''].map((h) => (
+                    {['Booking ID', 'Vehicle', 'Route', 'Passenger', 'Pickup Date', 'Price', 'Booking Status', 'Ride Status', ''].map((h) => (
                       <th key={h} className="px-5 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500 whitespace-nowrap">
                         {h}
                       </th>
@@ -528,11 +648,14 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {filtered.map((b) => {
                     const status = b.status || b.bookingStatus || 'Pending'
+                    const rideStatus = b.rideStatus || 'AwaitingConfirmation'
                     const cfg = getStatusConfig(status)
+                    const vehicleName = [b.make, b.model].filter(Boolean).join(' ') || b.vehicleType || 'N/A'
+                    const passengerName = b.passengerName || b.bookedBy || 'N/A'
                     return (
                       <tr key={b._id} className="group hover:bg-slate-50/60 transition-colors">
                         <td className="px-5 py-4 whitespace-nowrap">
-                          <p className="font-mono text-xs font-bold text-slate-700">{String(b._id || '').slice(-8).toUpperCase()}</p>
+                          <p className="font-mono text-xs font-bold text-slate-700">{b.bookingId || String(b._id || '').slice(-8).toUpperCase()}</p>
                           <p className="text-[11px] text-slate-400 mt-0.5">{formatDate(b.createdAt)}</p>
                         </td>
                         <td className="px-5 py-4">
@@ -541,8 +664,8 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
                               <Car size={14} />
                             </div>
                             <div>
-                              <p className="text-sm font-semibold text-slate-800">{b.carName || b.car?.name || 'N/A'}</p>
-                              <p className="text-[11px] text-slate-400">{b.carType || b.car?.type || ''}</p>
+                              <p className="text-sm font-semibold text-slate-800">{vehicleName}</p>
+                              <p className="text-[11px] text-slate-400">{b.vehicleNumber || b.sharingType || ''}</p>
                             </div>
                           </div>
                         </td>
@@ -550,25 +673,28 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
                           <div className="flex items-center gap-1.5 text-sm text-slate-600">
                             <MapPin size={12} className="text-slate-400 shrink-0" />
                             <span className="truncate max-w-[130px]">
-                              {[b.from || b.pickupLocation, b.to || b.dropLocation].filter(Boolean).join(' → ') || 'N/A'}
+                              {[b.pickupP, b.dropP].filter(Boolean).join(' → ') || 'N/A'}
                             </span>
                           </div>
                         </td>
                         <td className="px-5 py-4">
-                          <p className="text-sm font-semibold text-slate-800">{b.guestName || b.user?.name || b.bookedBy?.name || 'N/A'}</p>
-                          <p className="text-[11px] text-slate-400">{b.guestMobile || b.user?.mobile || ''}</p>
+                          <p className="text-sm font-semibold text-slate-800">{passengerName}</p>
+                          <p className="text-[11px] text-slate-400">{b.customerMobile || ''}</p>
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-1.5 text-sm text-slate-600">
                             <CalendarDays size={13} className="text-slate-400" />
-                            {formatDate(b.travelDate || b.journeyDate)}
+                            {formatDate(b.pickupD)}
                           </div>
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap">
-                          <p className="text-sm font-bold text-slate-900">{formatCurrency(b.totalPrice || b.price)}</p>
+                          <p className="text-sm font-bold text-slate-900">{formatCurrency(b.price)}</p>
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap">
                           <StatusBadge status={status} />
+                        </td>
+                        <td className="px-5 py-4 whitespace-nowrap">
+                          <RideStatusBadge status={rideStatus} />
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap text-right">
                           <div className="flex items-center justify-end gap-2">

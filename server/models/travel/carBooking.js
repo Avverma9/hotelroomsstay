@@ -10,9 +10,9 @@ const BOOKING_STATUSES = [
 
 const RIDE_STATUSES = [
   "AwaitingConfirmation",
-  "AwaitingPickup",
-  "InProgress",
-  "Completed",
+  "Available",
+  "Ride in Progress",
+  "Ride Completed",
   "Cancelled",
   "Failed",
 ];
@@ -29,7 +29,7 @@ const travelBookingSchema = new mongoose.Schema(
       type: String,
       unique: true,
       default: generateBookingId,
-    },
+    }, 
     carId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Car",
@@ -96,6 +96,17 @@ const travelBookingSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+
+    // Additional passengers (for shared/multi-seat bookings)
+    // passengers[0] mirrors passengerName/customerMobile/customerEmail (primary)
+    // passengers[1..n] are extra passengers for additional seats
+    passengers: [
+      {
+        name:   { type: String, default: "" },
+        mobile: { type: String, default: "" },
+        email:  { type: String, default: "" },
+      },
+    ],
 
     // Pricing
     basePrice: { type: Number, default: 0 },   // price before GST

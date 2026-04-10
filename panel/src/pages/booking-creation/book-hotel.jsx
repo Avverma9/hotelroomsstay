@@ -23,6 +23,34 @@ import {
   BedDouble,
   RefreshCw
 } from 'lucide-react'
+
+// Renders stored policy text with bullet/number list formatting
+const FormattedPolicyText = ({ text, className = '' }) => {
+  if (!text) return null
+  const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean)
+  if (!lines.length) return null
+  const isBullet = l => /^[•\-–\*]\s/.test(l)
+  const isNum    = l => /^\d+\.\s/.test(l)
+  if (lines.length === 1 && !isBullet(lines[0]) && !isNum(lines[0]))
+    return <span className={className}>{text}</span>
+  return (
+    <ul className={className} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      {lines.map((line, i) => {
+        const bullet = isBullet(line)
+        const num    = isNum(line)
+        const pfx    = bullet ? '•' : num ? line.match(/^\d+\./)[0] : '›'
+        const body   = bullet ? line.replace(/^[•\-–\*]\s*/, '') : num ? line.replace(/^\d+\.\s*/, '') : line
+        return (
+          <li key={i} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', marginBottom: 3 }}>
+            <span style={{ color: '#888', minWidth: 16, flexShrink: 0, lineHeight: 1.55 }}>{pfx}</span>
+            <span style={{ lineHeight: 1.55 }}>{body}</span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 import { useNavigate } from 'react-router-dom'
 import Breadcrumb from '../../components/breadcrumb'
 import { getHotelById } from '../../../redux/slices/admin/hotel'
@@ -469,7 +497,9 @@ export default function BookHotel() {
               <h4 className="font-bold text-slate-900 mb-2 flex items-center gap-2">
                 <Clock className="w-4 h-4 text-indigo-600" /> Cancellation Policy
               </h4>
-              <p className="text-slate-600 text-sm leading-relaxed">{policies?.cancellationText || detailedPolicies?.cancellationPolicy || 'Standard cancellation policy applies.'}</p>
+              {policies?.cancellationText || detailedPolicies?.cancellationPolicy
+                ? <FormattedPolicyText text={policies?.cancellationText || detailedPolicies?.cancellationPolicy} className="text-slate-600 text-sm leading-relaxed" />
+                : <span className="text-slate-600 text-sm">Standard cancellation policy applies.</span>}
             </section>
             <section>
               <h4 className="font-bold text-slate-900 mb-2 flex items-center gap-2">

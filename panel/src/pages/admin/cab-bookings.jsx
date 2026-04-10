@@ -29,7 +29,7 @@ import {
   clearCarSuccess,
 } from '../../../redux/slices/tms/travel/car'
 import Breadcrumb from '../../components/breadcrumb'
-import BookingStatusBadge, { cfgFor, NEXT_STATUSES, STATUS_CFG } from '../../components/tms/booking-status'
+import BookingStatusBadge, { cfgFor, NEXT_STATUSES, STATUS_CFG, RideStatusBadge } from '../../components/tms/booking-status'
 import { formatDate as fmt, formatDateTime as fmtDT, formatCurrency as fmtCurrency } from '../../utils/format'
 
 const StatusBadge = BookingStatusBadge
@@ -70,8 +70,12 @@ function BookingModal({ booking, mode, onClose, onStatusChange, updating }) {
           {/* Status row */}
           <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Current Status</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Booking Status</p>
               <StatusBadge status={booking.bookingStatus} />
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Ride Status</p>
+              <RideStatusBadge status={booking.rideStatus} />
             </div>
             {mode === 'edit' && nextOpts.length === 0 && (
               <p className="text-xs font-semibold text-slate-400 italic">No further status changes allowed.</p>
@@ -114,6 +118,29 @@ function BookingModal({ booking, mode, onClose, onStatusChange, updating }) {
                   }
                 </button>
               )}
+            </div>
+          )}
+
+          {/* Verification Codes */}
+          {(booking.pickupCode || booking.dropCode) && (
+            <div className="rounded-xl border border-slate-200 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2 mb-3">Verification Codes</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600 mb-1">Pickup Code</p>
+                  <p className="font-mono text-2xl font-extrabold text-emerald-700 tracking-widest">{booking.pickupCode || '—'}</p>
+                  {booking.pickupCodeVerifiedAt && (
+                    <p className="text-[10px] text-slate-400 mt-1">Verified {fmtDT(booking.pickupCodeVerifiedAt)}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-600 mb-1">Drop Code</p>
+                  <p className="font-mono text-2xl font-extrabold text-indigo-700 tracking-widest">{booking.dropCode || '—'}</p>
+                  {booking.dropCodeVerifiedAt && (
+                    <p className="text-[10px] text-slate-400 mt-1">Verified {fmtDT(booking.dropCodeVerifiedAt)}</p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -462,7 +489,10 @@ export default function AllCarBookings() {
                       <p className="font-mono text-sm font-bold text-slate-900">{b.bookingId}</p>
                       <p className="text-[11px] text-slate-400 mt-0.5">{fmt(b.bookingDate)}</p>
                     </div>
-                    <StatusBadge status={b.bookingStatus} />
+                    <div className="flex flex-col items-end gap-1">
+                      <StatusBadge status={b.bookingStatus} />
+                      {b.rideStatus && <RideStatusBadge status={b.rideStatus} />}
+                    </div>
                   </div>
 
                   {/* Vehicle */}
@@ -517,7 +547,7 @@ export default function AllCarBookings() {
             <table className="min-w-full divide-y divide-slate-100">
               <thead className="bg-slate-50/80">
                 <tr>
-                  {['Booking ID', 'Vehicle', 'Route', 'Pickup Date', 'Booked By', 'Mobile', 'Total', 'Status', ''].map((h) => (
+                  {['Booking ID', 'Vehicle', 'Route', 'Pickup Date', 'Booked By', 'Mobile', 'Total', 'Status', 'Ride Status', ''].map((h) => (
                     <th key={h} className="px-5 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500 whitespace-nowrap">
                       {h}
                     </th>
@@ -527,7 +557,7 @@ export default function AllCarBookings() {
               <tbody className="divide-y divide-slate-100 bg-white">
 
                 {loading && bookingList.length === 0 && (
-                  <tr><td colSpan={9} className="px-6 py-16 text-center">
+                  <tr><td colSpan={10} className="px-6 py-16 text-center">
                     <div className="flex flex-col items-center gap-3 text-slate-500">
                       <Loader2 size={28} className="animate-spin text-indigo-500" />
                       <p className="text-sm font-medium">Loading bookings…</p>
@@ -536,7 +566,7 @@ export default function AllCarBookings() {
                 )}
 
                 {!loading && bookingList.length === 0 && (
-                  <tr><td colSpan={9} className="px-6 py-16 text-center">
+                  <tr><td colSpan={10} className="px-6 py-16 text-center">
                     <Car size={32} className="mx-auto mb-3 text-slate-300" />
                     <p className="text-sm font-medium text-slate-500">No bookings found. Try adjusting filters.</p>
                   </td></tr>
@@ -599,6 +629,11 @@ export default function AllCarBookings() {
                     {/* Status */}
                     <td className="px-5 py-4 whitespace-nowrap">
                       <StatusBadge status={b.bookingStatus} />
+                    </td>
+
+                    {/* Ride Status */}
+                    <td className="px-5 py-4 whitespace-nowrap">
+                      <RideStatusBadge status={b.rideStatus} />
                     </td>
 
                     {/* Actions */}

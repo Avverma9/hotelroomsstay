@@ -32,6 +32,13 @@ import Breadcrumb from '../../components/breadcrumb'
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?q=80&w=2070&auto=format&fit=crop'
 
+const validateEmail = (value) => {
+  const email = String(value || '').trim()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+const normalizeMobile = (value) => String(value || '').replace(/[^\d]/g, '').trim()
+
 const StatusBadge = ({ runningStatus, isAvailable }) => {
   const statusStr = runningStatus || (isAvailable ? 'Available' : 'Unavailable')
   const lower = statusStr.toLowerCase()
@@ -74,7 +81,7 @@ const SeatGrid = ({ seatsData, totalSeats, selectable = false, selectedSeatIds, 
     <div className="grid grid-cols-5 gap-1.5">
       {seats.map((seat, i) => {
         const seatNum = seat.seatNumber || seat.number || i + 1
-        const seatId  = seat._id || seat.id || String(seatNum)
+        const seatId  = String(seat._id || seat.id || seat.seatId || seatNum)
         const isBooked   = seat.isBooked  || seat.booked  || seat.status === 'booked'
         const isBlocked  = seat.isBlocked || seat.blocked || seat.status === 'blocked'
         const isSelected = selectedSeatIds?.has(seatId)
@@ -120,9 +127,10 @@ const CarDetailDrawer = ({ car, onClose }) => {
   const selectedSeatIds = new Set(selectedSeatMap.keys())
   const selectedSeatsArr = Array.from(selectedSeatMap.values())
   const selectedSeatTotal = selectedSeatsArr.reduce((sum, s) => sum + Number(s.seatPrice || 0), 0)
+  const maxPassengerCount = isShared ? Math.max(selectedSeatMap.size, 1) : 1
 
   const handleToggleSeat = (seat) => {
-    const id = seat._id || seat.id || String(seat.seatNumber)
+    const id = String(seat._id || seat.id || seat.seatId || seat.seatNumber)
     setSelectedSeatMap((prev) => {
       const next = new Map(prev)
       if (next.has(id)) next.delete(id)
@@ -131,9 +139,36 @@ const CarDetailDrawer = ({ car, onClose }) => {
     })
   }
 
-  // ── Customer form fields ───────────────────────────────────────────────────
-  const [form, setForm] = useState({ customerMobile: '', customerEmail: '' })
-  const handleFormField = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }))
+  // ── Passenger form fields ──────────────────────────────────────────────────
+  const makePassenger = (seed = {}) => ({
+    name: String(seed.name || '').trim(),
+    mobile: String(seed.mobile || '').trim(),
+    email: String(seed.email || '').trim(),
+  })
+
+  const [passengers, setPassengers] = useState(() => [
+    makePassenger({
+      name: user?.name || user?.userName || '',
+      mobile: user?.mobile || user?.phone || user?.phoneNumber || '',
+      email: user?.email || '',
+    }),
+  ])
+
+  const updatePassenger = (idx, field, value) => {
+    setPassengers((prev) => prev.map((p, i) => (i === idx ? { ...p, [field]: value } : p)))
+  }
+
+  const addPassenger = () => {
+    setPassengers((prev) => {
+      if (prev.length >= maxPassengerCount) return prev
+      return [...prev, makePassenger()]
+    })
+  }
+
+  const removePassenger = (idx) => {
+    if (idx === 0) return
+    setPassengers((prev) => prev.filter((_, i) => i !== idx))
+  }
 
   // ── Booking result ─────────────────────────────────────────────────────────
   const [bookingLoading, setBookingLoading] = useState(false)
@@ -144,36 +179,93 @@ const CarDetailDrawer = ({ car, onClose }) => {
     if (car?._id) dispatch(getSeatsData(car._id))
   }, [dispatch, car?._id])
 
+  useEffect(() => {
+    // Keep passenger list within allowed range based on selected seats
+    setPassengers((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) {
+        return [
+          makePassenger({
+            name: user?.name || user?.userName || '',
+            mobile: user?.mobile || user?.phone || user?.phoneNumber || '',
+            email: user?.email || '',
+          }),
+        ]
+      }
+      if (prev.length <= maxPassengerCount) return prev
+      return prev.slice(0, maxPassengerCount)
+    })
+  }, [maxPassengerCount, user])
+
   // ── Validate before submit ─────────────────────────────────────────────────
   const canBook = () => {
-    if (!form.customerMobile.trim()) return false
     if (isShared && selectedSeatMap.size === 0) return false
+    if (!passengers.length) return false
+    if (isShared && passengers.length !== selectedSeatMap.size) return false
+    for (const p of passengers) {
+      if (!String(p.name || '').trim()) return false
+      if (normalizeMobile(p.mobile).length < 10) return false
+      if (!validateEmail(p.email)) return false
+    }
     return true
   }
 
   // ── Submit booking ─────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!canBook()) {
-      setBookingError(isShared ? 'Please select at least one seat and enter mobile number.' : 'Mobile number is required.')
+    if (isShared && selectedSeatMap.size === 0) {
+      setBookingError('Please select at least one seat for shared booking.')
       return
     }
+    if (isShared && passengers.length !== selectedSeatMap.size) {
+      setBookingError(`Please add ${selectedSeatMap.size} passenger form(s) for selected seats.`)
+      return
+    }
+
+    for (let i = 0; i < passengers.length; i += 1) {
+      const p = passengers[i]
+      const label = passengers.length > 1 ? ` (Passenger ${i + 1})` : ''
+      if (!String(p.name || '').trim()) {
+        setBookingError(`Passenger name is required${label}.`)
+        return
+      }
+      if (normalizeMobile(p.mobile).length < 10) {
+        setBookingError(`Valid mobile number is required${label}.`)
+        return
+      }
+      if (!validateEmail(p.email)) {
+        setBookingError(`Valid email is required${label}.`)
+        return
+      }
+    }
+
+    const primary = passengers[0] || {}
+    const primaryMobile = normalizeMobile(primary.mobile)
+    const primaryEmail = String(primary.email || '').trim()
+    const primaryName = String(primary.name || '').trim()
+    if (!primaryName || !primaryMobile || !primaryEmail) {
+      setBookingError('Primary passenger details are incomplete.')
+      return
+    }
+
     setBookingLoading(true)
     setBookingError('')
     try {
       const payload = {
         userId:         user?._id || user?.id || user?.userId || '',
         carId:          car._id,
-        customerMobile: form.customerMobile.trim(),
+        passengerName:  primaryName,
+        customerMobile: primaryMobile,
+        customerEmail:  primaryEmail,
+        bookedBy:       primaryMobile,
+        passengers:     passengers.map((p) => ({
+          name: String(p.name || '').trim(),
+          mobile: normalizeMobile(p.mobile),
+          email: String(p.email || '').trim(),
+        })),
         sharingType:    car.sharingType,
         vehicleType:    car.vehicleType,
       }
-      if (form.customerEmail.trim()) {
-        payload.customerEmail = form.customerEmail.trim()
-        payload.bookedBy      = form.customerEmail.trim()
-      } else {
-        payload.bookedBy = form.customerMobile.trim()
-      }
+
       // Shared: send selected seat _ids
       if (isShared && selectedSeatMap.size > 0) {
         payload.seats = Array.from(selectedSeatMap.keys())
@@ -404,40 +496,100 @@ const CarDetailDrawer = ({ car, onClose }) => {
                     </div>
                   )}
 
-                  {/* Customer info */}
+                  {/* Passenger info */}
                   <div className="space-y-3">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Customer Details</p>
-
-                    <div>
-                      <label className="mb-1 block text-[11px] font-bold text-slate-700">Mobile Number <span className="text-rose-500">*</span></label>
-                      <div className="relative">
-                        <Phone size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                          required
-                          type="tel"
-                          name="customerMobile"
-                          value={form.customerMobile}
-                          onChange={handleFormField}
-                          placeholder="9876543210"
-                          className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-8 pr-3 text-xs font-medium text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200"
-                        />
-                      </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Passenger Details</p>
+                      {isShared && (
+                        <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                          Added {passengers.length}/{Math.max(selectedSeatMap.size, 1)}
+                        </span>
+                      )}
                     </div>
 
-                    <div>
-                      <label className="mb-1 block text-[11px] font-bold text-slate-700">Email <span className="text-slate-400 font-normal">(optional)</span></label>
-                      <div className="relative">
-                        <Mail size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                          type="email"
-                          name="customerEmail"
-                          value={form.customerEmail}
-                          onChange={handleFormField}
-                          placeholder="customer@example.com"
-                          className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-8 pr-3 text-xs font-medium text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200"
-                        />
+                    {passengers.map((p, idx) => (
+                      <div
+                        key={idx}
+                        className={`rounded-xl border p-3 space-y-2.5 ${
+                          idx === 0 ? 'border-indigo-100 bg-indigo-50/50' : 'border-slate-200 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white ${idx === 0 ? 'bg-indigo-600' : 'bg-slate-500'}`}>
+                              {idx + 1}
+                            </span>
+                            <p className="text-[11px] font-bold text-slate-700">
+                              {idx === 0 ? 'Primary Passenger' : `Passenger ${idx + 1}`}
+                            </p>
+                          </div>
+                          {idx > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => removePassenger(idx)}
+                              className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                              title="Remove passenger"
+                            >
+                              <X size={13} />
+                            </button>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-[11px] font-bold text-slate-700">Full Name <span className="text-rose-500">*</span></label>
+                          <div className="relative">
+                            <User size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                              type="text"
+                              value={p.name}
+                              onChange={(e) => updatePassenger(idx, 'name', e.target.value)}
+                              placeholder="Passenger full name"
+                              className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-8 pr-3 text-xs font-medium text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="mb-1 block text-[11px] font-bold text-slate-700">Mobile <span className="text-rose-500">*</span></label>
+                            <div className="relative">
+                              <Phone size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                              <input
+                                type="tel"
+                                value={p.mobile}
+                                onChange={(e) => updatePassenger(idx, 'mobile', e.target.value)}
+                                placeholder="9876543210"
+                                className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-8 pr-3 text-xs font-medium text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-[11px] font-bold text-slate-700">Email <span className="text-rose-500">*</span></label>
+                            <div className="relative">
+                              <Mail size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                              <input
+                                type="email"
+                                value={p.email}
+                                onChange={(e) => updatePassenger(idx, 'email', e.target.value)}
+                                placeholder="passenger@example.com"
+                                className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-8 pr-3 text-xs font-medium text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200"
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    ))}
+
+                    {isShared && passengers.length < selectedSeatMap.size && (
+                      <button
+                        type="button"
+                        onClick={addPassenger}
+                        className="w-full rounded-xl border border-dashed border-indigo-300 bg-indigo-50 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                      >
+                        + Add Passenger ({passengers.length + 1} of {selectedSeatMap.size})
+                      </button>
+                    )}
                   </div>
 
                   {/* GST note */}

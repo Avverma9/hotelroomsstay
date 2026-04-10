@@ -23,6 +23,33 @@ import {
 import Breadcrumb from '../../../components/breadcrumb'
 import { clearHotelUpdateStatus, getHotelById, updateHotelInfo } from '../../../../redux/slices/admin/hotel'
 
+// Renders stored policy text with bullet/number list formatting
+const FormattedPolicyText = ({ text, className = '' }) => {
+  if (!text) return null
+  const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean)
+  if (!lines.length) return null
+  const isBullet = l => /^[•\-–\*]\s/.test(l)
+  const isNum    = l => /^\d+\.\s/.test(l)
+  if (lines.length === 1 && !isBullet(lines[0]) && !isNum(lines[0]))
+    return <span className={className}>{text}</span>
+  return (
+    <ul className={className} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      {lines.map((line, i) => {
+        const bullet = isBullet(line)
+        const num    = isNum(line)
+        const pfx    = bullet ? '•' : num ? line.match(/^\d+\./)[0] : '›'
+        const body   = bullet ? line.replace(/^[•\-–\*]\s*/, '') : num ? line.replace(/^\d+\.\s*/, '') : line
+        return (
+          <li key={i} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', marginBottom: 3 }}>
+            <span style={{ color: '#888', minWidth: 16, flexShrink: 0, lineHeight: 1.55 }}>{pfx}</span>
+            <span style={{ lineHeight: 1.55 }}>{body}</span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 const createHotelEditForm = (hotel) => {
   const basicInfo = hotel?.basicInfo || {}
   const location = basicInfo?.location || {}
@@ -364,7 +391,7 @@ function HotelDetails({ listPath, listLabel }) {
 
             {detailedPolicies.hotelsPolicy && (
               <div className="rounded-lg bg-blue-50 p-4 text-sm font-medium text-blue-800">
-                {detailedPolicies.hotelsPolicy}
+                <FormattedPolicyText text={detailedPolicies.hotelsPolicy} />
               </div>
             )}
 
@@ -523,14 +550,16 @@ function HotelDetails({ listPath, listLabel }) {
                 <ShieldAlert size={18} className="mt-0.5 shrink-0 text-slate-400" />
                 <div>
                   <p className="font-bold text-slate-900">Cancellation Policy</p>
-                  <p>{policies.cancellationText || detailedPolicies.cancellationPolicy || 'Not available'}</p>
+                  <FormattedPolicyText text={policies.cancellationText || detailedPolicies.cancellationPolicy} className="text-slate-700" />
+                  {!policies.cancellationText && !detailedPolicies.cancellationPolicy && <span className="text-slate-700">Not available</span>}
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <UserCheck size={18} className="mt-0.5 shrink-0 text-slate-400" />
                 <div>
                   <p className="font-bold text-slate-900">General Rules</p>
-                  <p>{detailedPolicies.hotelsPolicy || 'Not available'}</p>
+                  <FormattedPolicyText text={detailedPolicies.hotelsPolicy} className="text-slate-700" />
+                  {!detailedPolicies.hotelsPolicy && <span className="text-slate-700">Not available</span>}
                   <ul className="mt-2 space-y-1">
                     {policies.rules?.map((rule, index) => (
                       <li key={`${rule}-${index}`} className="flex items-center gap-2 text-slate-600">
@@ -544,7 +573,8 @@ function HotelDetails({ listPath, listLabel }) {
                 <Utensils size={18} className="mt-0.5 shrink-0 text-slate-400" />
                 <div>
                   <p className="font-bold text-slate-900">Outside Food</p>
-                  <p>{detailedPolicies.outsideFoodPolicy || 'Not available'}</p>
+                  <FormattedPolicyText text={detailedPolicies.outsideFoodPolicy} className="text-slate-700" />
+                  {!detailedPolicies.outsideFoodPolicy && <span className="text-slate-700">Not available</span>}
                 </div>
               </div>
             </div>

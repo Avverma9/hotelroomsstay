@@ -14,7 +14,6 @@ const dashboardUser = new mongoose.Schema(
     role: {
       type: String,
       required: true,
-      enum: ["Admin", "PMS", "Developer", "TMS", "SALES CA","SERVICE CA", "Rider", ], //TMS - Travel Management , CA - Company Agent, PMS - Partner management system
     },
     address: String,
     pinCode: Number,

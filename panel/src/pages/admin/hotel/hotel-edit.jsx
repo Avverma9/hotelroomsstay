@@ -1,17 +1,10 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft,
-  BedDouble,
-  Building2,
-  CheckCircle2,
-  Loader2,
-  MapPin,
-  PencilLine,
-  Plus,
-  Save,
-  Trash2,
+  ArrowLeft, ArrowRight, BedDouble, Building2, Check,
+  CheckCircle2, Loader2, MapPin, PencilLine, Plus,
+  Save, ShieldCheck, Trash2, X, ChevronRight,
 } from 'lucide-react'
 import Breadcrumb from '../../../components/breadcrumb'
 import {
@@ -19,79 +12,233 @@ import {
   getHotelById,
   updateHotelInfo,
 } from '../../../../redux/slices/admin/hotel'
+import api from '../../../api'
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+/* ─── Google Fonts injection ─────────────────────────────────── */
+const FontInjector = () => (
+  <>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </>
+)
 
+/* ─── Step config ────────────────────────────────────────────── */
+const STEPS = [
+  { id: 1, key: 'basic',    label: 'Basic Info',      sub: 'Name, location & contacts' },
+  { id: 2, key: 'property', label: 'Property Details', sub: 'Type, rating & description' },
+  { id: 3, key: 'rooms',    label: 'Rooms',            sub: 'Inventory management' },
+  { id: 4, key: 'policies', label: 'Policies',         sub: 'Rules & terms' },
+]
+
+/* ─── Policy config ──────────────────────────────────────────── */
+const POLICY_LABELS = [
+  { label: 'Check-In Policy',     key: 'checkInPolicy' },
+  { label: 'Check-Out Policy',    key: 'checkOutPolicy' },
+  { label: 'Hotel Policy',        key: 'hotelsPolicy' },
+  { label: 'Outside Food',        key: 'outsideFoodPolicy' },
+  { label: 'Cancellation Policy', key: 'cancellationPolicy' },
+  { label: 'Refund Policy',       key: 'refundPolicy' },
+  { label: 'Payment Mode',        key: 'paymentMode' },
+]
+
+const GUEST_RULES = [
+  { label: 'Pets',                  key: 'petsAllowed' },
+  { label: 'Bachelors',             key: 'bachelorAllowed' },
+  { label: 'Smoking',               key: 'smokingAllowed' },
+  { label: 'Alcohol',               key: 'alcoholAllowed' },
+  { label: 'Unmarried Couples',     key: 'unmarriedCouplesAllowed' },
+  { label: 'International Guests',  key: 'internationalGuestAllowed' },
+]
+
+const YES_NO = ['Allowed', 'Not Allowed', 'Yes', 'No']
+
+const SEASONAL_SECTIONS = [
+  { label: 'On Season — CP (Breakfast)',            prefix: 'on',  suffix: '' },
+  { label: 'Off Season — CP (Breakfast)',           prefix: 'off', suffix: '' },
+  { label: 'On Season — AP (All Meals)',            prefix: 'on',  suffix: 'Ap' },
+  { label: 'Off Season — AP (All Meals)',           prefix: 'off', suffix: 'Ap' },
+  { label: 'On Season — MAP (Breakfast + Dinner)',  prefix: 'on',  suffix: 'MAp' },
+  { label: 'Off Season — MAP (Breakfast + Dinner)', prefix: 'off', suffix: 'MAp' },
+]
+
+const SEASONAL_COLS = [
+  { col: 'Double',  keySuffix: 'DoubleSharing' },
+  { col: 'Triple',  keySuffix: 'TrippleSharing' },
+  { col: 'Quad',    keySuffix: 'QuadSharing' },
+  { col: 'Bulk',    keySuffix: 'BulkBooking' },
+  { col: '>4',      keySuffix: 'MoreThanFour' },
+]
+
+const createEmptyPolicies = () => ({
+  checkInPolicy: '', checkOutPolicy: '', hotelsPolicy: '',
+  outsideFoodPolicy: '', cancellationPolicy: '', refundPolicy: '', paymentMode: '',
+  petsAllowed: '', bachelorAllowed: '', smokingAllowed: '',
+  alcoholAllowed: '', unmarriedCouplesAllowed: '', internationalGuestAllowed: '',
+  onDoubleSharing: '', onTrippleSharing: '', onQuadSharing: '', onBulkBooking: '', onMoreThanFour: '',
+  offDoubleSharing: '', offTrippleSharing: '', offQuadSharing: '', offBulkBooking: '', offMoreThanFour: '',
+  onDoubleSharingAp: '', onTrippleSharingAp: '', onQuadSharingAp: '', onBulkBookingAp: '', onMoreThanFourAp: '',
+  offDoubleSharingAp: '', offTrippleSharingAp: '', offQuadSharingAp: '', offBulkBookingAp: '', offMoreThanFourAp: '',
+  onDoubleSharingMAp: '', onTrippleSharingMAp: '', onQuadSharingMAp: '', onBulkBookingMAp: '', onMoreThanFourMAp: '',
+  offDoubleSharingMAp: '', offTrippleSharingMAp: '', offQuadSharingMAp: '', offBulkBookingMAp: '', offMoreThanFourMAp: '',
+})
+
+/* ─── PolicyEditor ───────────────────────────────────────────── */
+const PolicyEditor = ({ label, value, onChange }) => {
+  const [fmt, setFmt] = useState(() => {
+    if (!value) return 'bullet'
+    if (/^\d+\.\s/m.test(value)) return 'number'
+    if (/^[•\-]\s/m.test(value)) return 'bullet'
+    return 'plain'
+  })
+  const taRef = useRef(null)
+
+  const applyFormat = (newFmt) => {
+    setFmt(newFmt)
+    if (!value && newFmt !== 'plain') {
+      onChange(newFmt === 'bullet' ? '• ' : '1. ')
+      requestAnimationFrame(() => {
+        if (taRef.current) {
+          taRef.current.focus()
+          taRef.current.selectionStart = taRef.current.selectionEnd = taRef.current.value.length
+        }
+      })
+    }
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key !== 'Enter' || fmt === 'plain') return
+    e.preventDefault()
+    const ta = taRef.current
+    const pos = ta.selectionStart
+    const before = value.slice(0, pos)
+    const after  = value.slice(pos)
+    const lines  = before.split('\n')
+    const last   = lines[lines.length - 1]
+    let prefix = fmt === 'bullet' ? '• ' : (() => {
+      const m = last.match(/^(\d+)\./)
+      return m ? `${Number(m[1]) + 1}. ` : '1. '
+    })()
+    const newVal = before + '\n' + prefix + after
+    onChange(newVal)
+    requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = pos + 1 + prefix.length })
+  }
+
+  const handleChange = (e) => {
+    let v = e.target.value
+    if (fmt === 'bullet' && !v) v = '• '
+    if (fmt === 'number' && !v) v = '1. '
+    onChange(v)
+  }
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#64748b', fontFamily: "'DM Sans', sans-serif" }}>
+          {label}
+        </label>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {['bullet', 'number', 'plain'].map((f) => (
+            <button
+              key={f} type="button"
+              onClick={() => applyFormat(f)}
+              style={{
+                padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+                border: '1px solid',
+                borderColor: fmt === f ? '#0f172a' : '#e2e8f0',
+                background: fmt === f ? '#0f172a' : 'transparent',
+                color: fmt === f ? '#fff' : '#94a3b8',
+                transition: 'all .14s',
+              }}
+            >
+              {f === 'bullet' ? '• Bullet' : f === 'number' ? '1. Number' : 'Plain'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <textarea
+        ref={taRef}
+        value={value || ''}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        placeholder={`Enter ${label.toLowerCase()}...`}
+        rows={4}
+        style={{
+          width: '100%', boxSizing: 'border-box', padding: '12px 16px',
+          fontSize: 13, fontFamily: "'DM Sans', sans-serif", fontWeight: 400,
+          color: '#0f172a', background: '#f8fafc',
+          border: '1.5px solid #e2e8f0', borderRadius: 10,
+          outline: 'none', resize: 'vertical', lineHeight: 1.7,
+          transition: 'border-color .15s',
+        }}
+        onFocus={(e) => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff' }}
+        onBlur={(e) => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc' }}
+      />
+    </div>
+  )
+}
+
+/* ─── Helpers ────────────────────────────────────────────────── */
 const s = (v) => String(v ?? '').trim()
 
 const createHotelForm = (hotel) => {
   const basicInfo = hotel?.basicInfo || {}
   const location  = basicInfo?.location  || {}
   const contacts  = basicInfo?.contacts  || {}
-
   const propertyType = Array.isArray(basicInfo?.propertyType)
     ? basicInfo.propertyType
     : basicInfo?.propertyType
       ? [basicInfo.propertyType]
       : Array.isArray(hotel?.propertyType)
         ? hotel.propertyType
-        : hotel?.propertyType
-          ? [hotel.propertyType]
-          : []
-
+        : hotel?.propertyType ? [hotel.propertyType] : []
   return {
     hotelName:    basicInfo?.name   || hotel?.hotelName || '',
     city:         location?.city    || hotel?.city      || '',
     state:        location?.state   || hotel?.state     || '',
-    address:      location?.address || hotel?.address   || '',
+    address:      location?.address || hotel?.address   || hotel?.landmark || '',
     pinCode:      location?.pinCode || hotel?.pinCode   || '',
     starRating:   String(basicInfo?.starRating || hotel?.starRating || ''),
     propertyType: propertyType.join(', '),
     hotelEmail:   contacts?.email   || hotel?.hotelEmail || hotel?.email || '',
     phone:        contacts?.phone   || hotel?.phone      || '',
-    owner:        basicInfo?.owner  || hotel?.owner      || '',
+    owner:        basicInfo?.owner  || hotel?.hotelOwnerName || hotel?.owner || '',
     description:  basicInfo?.description || hotel?.description || '',
     onFront:      Boolean(hotel?.onFront),
     isAccepted:   Boolean(hotel?.isAccepted),
+    destination:  hotel?.destination  || '',
+    hotelCategory:hotel?.hotelCategory || '',
+    latitude:     hotel?.latitude      || '',
+    longitude:    hotel?.longitude     || '',
+    customerWelcomeNote:    hotel?.customerWelcomeNote    || '',
+    generalManagerContact:  hotel?.generalManagerContact  || '',
+    salesManagerContact:    hotel?.salesManagerContact    || '',
+    localId:      hotel?.localId       || 'Accepted',
   }
 }
 
-/**
- * Normalize a raw room document into a flat form-friendly shape.
- */
 const normalizeRoom = (room, index = 0) => {
-  // Handle amenities - convert to comma-separated string for form display
-  let amenitiesStr = ''
-  if (Array.isArray(room?.amenities)) {
-    amenitiesStr = room.amenities.join(', ')
-  } else if (typeof room?.amenities === 'string') {
-    amenitiesStr = room.amenities
-  }
-
-  // Handle images - convert to comma-separated string for form display
-  let imagesStr = ''
-  if (Array.isArray(room?.images)) {
-    imagesStr = room.images.join(', ')
-  } else if (typeof room?.images === 'string') {
-    imagesStr = room.images
-  }
-
-  // Handle nested API response structure (getHotelsById) vs flat DB structure
+  let amenitiesStr = Array.isArray(room?.amenities) ? room.amenities.join(', ') : (room?.amenities || '')
+  let imagesStr    = Array.isArray(room?.images)    ? room.images.join(', ')    : (room?.images    || '')
   const price      = room?.pricing?.basePrice ?? room?.price      ?? room?.originalPrice ?? 0
   const countRooms = room?.inventory?.total   ?? room?.countRooms ?? room?.totalRooms    ?? 0
-  const isOffer    = room?.features?.isOffer  ?? room?.isOffer    ?? false
-  const offerName  = room?.features?.offerText ?? room?.offerName ?? room?.offerText     ?? ''
-  // roomId: prefer roomId field, then id from API mapping (server sets id = roomId)
-  const roomId     = room?.roomId || room?.id || ''
-
+  const isOffer      = room?.features?.isOffer    ?? room?.isOffer      ?? false
+  const offerName    = room?.features?.offerText  ?? room?.offerName    ?? room?.offerText     ?? ''
+  const roomId       = room?.roomId || room?.id || ''
+  const origPrice    = room?.pricing?.originalPrice ?? room?.originalPrice ?? price
+  const offerPLess   = room?.offerPriceLess ?? 0
+  const offerExp     = room?.offerExp || room?.features?.offerExp || ''
   return {
-    // Use _id as the stable key for edit/delete operations
-    _id:            room?._id || room?.id || `room-${index}`,
+    _id: room?._id || room?.id || `room-${index}`,
     roomId,
     name:           room?.name  || room?.type || `Room ${index + 1}`,
     type:           room?.type  || room?.name || `Room ${index + 1}`,
     bedType:        room?.bedType || room?.bedTypes || '',
     price:          String(price),
+    originalPrice:  String(origPrice),
     countRooms:     String(countRooms),
     totalRooms:     String(countRooms),
     description:    room?.description || '',
@@ -99,25 +246,17 @@ const normalizeRoom = (room, index = 0) => {
     images:         imagesStr,
     isOffer,
     offerName,
+    offerPriceLess: String(offerPLess),
+    offerExp,
   }
 }
 
 const createEmptyRoomForm = () => ({
-  // roomId intentionally absent for new rooms — backend generates it
-  type:           '',
-  bedType:        '',
-  price:          '',
-  countRooms:     '',
-  description:    '',
-  amenities:      '',
-  images:         '',
-  isOffer:        false,
-  offerName:      '',
+  type: '', bedType: '', price: '', originalPrice: '', countRooms: '',
+  description: '', amenities: '', images: '', isOffer: false, offerName: '',
+  offerPriceLess: '', offerExp: '',
 })
 
-/**
- * Build the hotel-level basic info payload (no rooms key).
- */
 const buildHotelPayload = (form) => ({
   hotelName:    s(form.hotelName),
   city:         s(form.city),
@@ -132,140 +271,357 @@ const buildHotelPayload = (form) => ({
   description:  s(form.description),
   onFront:      form.onFront,
   isAccepted:   form.isAccepted,
+  destination:  s(form.destination),
+  hotelCategory:s(form.hotelCategory),
+  latitude:     s(form.latitude),
+  longitude:    s(form.longitude),
+  customerWelcomeNote:   s(form.customerWelcomeNote),
+  generalManagerContact: s(form.generalManagerContact),
+  salesManagerContact:   s(form.salesManagerContact),
+  localId:      s(form.localId) || 'Accepted',
 })
 
-/**
- * Build a single-room entry for the `rooms` array in the master payload.
- * Pass roomId only when updating an existing room.
- */
 const buildRoomEntry = (form, existingRoomId = null) => {
-  // Handle amenities - could be string or array
-  let amenitiesArr = []
-  if (Array.isArray(form.amenities)) {
-    amenitiesArr = form.amenities
-  } else if (typeof form.amenities === 'string' && form.amenities.trim()) {
-    amenitiesArr = form.amenities.split(',').map((v) => v.trim()).filter(Boolean)
-  }
-
-  // Handle images - could be string or array
-  let imagesArr = []
-  if (Array.isArray(form.images)) {
-    imagesArr = form.images
-  } else if (typeof form.images === 'string' && form.images.trim()) {
-    imagesArr = form.images.split(',').map((v) => v.trim()).filter(Boolean)
-  }
-
+  const amenitiesArr = Array.isArray(form.amenities)
+    ? form.amenities
+    : (typeof form.amenities === 'string' && form.amenities.trim()
+        ? form.amenities.split(',').map((v) => v.trim()).filter(Boolean)
+        : [])
+  const imagesArr = Array.isArray(form.images)
+    ? form.images
+    : (typeof form.images === 'string' && form.images.trim()
+        ? form.images.split(',').map((v) => v.trim()).filter(Boolean)
+        : [])
   const entry = {
-    type:        s(form.type),
-    name:        s(form.type) || s(form.name),
-    bedType:     s(form.bedType),
-    bedTypes:    s(form.bedType),
-    price:       Number(form.price) || 0,
-    countRooms:  Number(form.countRooms) || 1,
-    totalRooms:  Number(form.countRooms) || 1,
-    description: s(form.description),
-    amenities:   amenitiesArr,
-    images:      imagesArr,
-    isOffer:     Boolean(form.isOffer),
-    offerName:   s(form.offerName),
+    type: s(form.type), name: s(form.type) || s(form.name),
+    bedType: s(form.bedType), bedTypes: s(form.bedType),
+    price: Number(form.price) || 0,
+    originalPrice: Number(form.originalPrice) || Number(form.price) || 0,
+    countRooms: Number(form.countRooms) || 1,
+    totalRooms: Number(form.countRooms) || 1, description: s(form.description),
+    amenities: amenitiesArr, images: imagesArr,
+    isOffer: Boolean(form.isOffer), offerName: s(form.offerName),
+    offerPriceLess: Number(form.offerPriceLess) || 0,
+    ...(s(form.offerExp) ? { offerExp: s(form.offerExp) } : {}),
   }
   if (existingRoomId) entry.roomId = existingRoomId
   return entry
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+/* ─── Shared input style ─────────────────────────────────────── */
+const inputCls = {
+  width: '100%', boxSizing: 'border-box',
+  padding: '11px 14px', fontSize: 13,
+  fontFamily: "'DM Sans', sans-serif", fontWeight: 500,
+  color: '#0f172a', background: '#f8fafc',
+  border: '1.5px solid #e2e8f0', borderRadius: 10,
+  outline: 'none', transition: 'all .15s',
+}
 
+const FieldInput = ({ label, type = 'text', value, onChange, placeholder, required, min, max }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8', fontFamily: "'DM Sans', sans-serif" }}>
+      {label}{required && <span style={{ color: '#f43f5e', marginLeft: 3 }}>*</span>}
+    </label>
+    <input
+      type={type} required={required} min={min} max={max}
+      value={value} onChange={onChange} placeholder={placeholder || ''}
+      style={inputCls}
+      onFocus={(e) => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.08)' }}
+      onBlur={(e)  => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc'; e.target.style.boxShadow = 'none' }}
+    />
+  </div>
+)
+
+/* ─── Step Sidebar ───────────────────────────────────────────── */
+const StepSidebar = ({ currentStep, completedSteps, hotelName, hotelImage, onStepClick }) => (
+  <div style={{
+    width: 260, flexShrink: 0, background: '#0f172a', borderRadius: 20,
+    padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: 8,
+    position: 'sticky', top: 24, alignSelf: 'flex-start',
+    fontFamily: "'DM Sans', sans-serif",
+  }}>
+    {/* Hotel identity */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28, paddingBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+      {hotelImage ? (
+        <img src={hotelImage} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover' }} />
+      ) : (
+        <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Building2 size={20} color="rgba(255,255,255,0.3)" />
+        </div>
+      )}
+      <div style={{ overflow: 'hidden' }}>
+        <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 3 }}>Editing</p>
+        <p style={{ fontSize: 13, fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {hotelName || 'Hotel'}
+        </p>
+      </div>
+    </div>
+
+    {/* Steps */}
+    {STEPS.map((step, i) => {
+      const done    = completedSteps.includes(step.id)
+      const active  = currentStep === step.id
+      return (
+        <button
+          key={step.id} type="button"
+          onClick={() => onStepClick(step.id)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '11px 14px', borderRadius: 12, border: 'none', cursor: 'pointer',
+            background: active ? 'rgba(99,102,241,0.18)' : 'transparent',
+            transition: 'background .15s', textAlign: 'left', width: '100%',
+          }}
+          onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+          onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent' }}
+        >
+          {/* Circle */}
+          <div style={{
+            width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: done ? '#6366f1' : active ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.06)',
+            border: active && !done ? '1.5px solid rgba(99,102,241,0.6)' : 'none',
+            fontSize: 11, fontWeight: 700, color: done || active ? '#fff' : 'rgba(255,255,255,0.3)',
+          }}>
+            {done ? <Check size={13} /> : step.id}
+          </div>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: active ? 600 : 400, color: active ? '#fff' : done ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.35)', margin: 0 }}>
+              {step.label}
+            </p>
+            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', margin: 0, marginTop: 1 }}>
+              {step.sub}
+            </p>
+          </div>
+        </button>
+      )
+    })}
+
+    {/* Progress bar */}
+    <div style={{ marginTop: 'auto', paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Progress</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)' }}>{completedSteps.length}/{STEPS.length}</span>
+      </div>
+      <div style={{ height: 3, background: 'rgba(255,255,255,0.07)', borderRadius: 3 }}>
+        <div style={{ height: '100%', borderRadius: 3, background: '#6366f1', width: `${(completedSteps.length / STEPS.length) * 100}%`, transition: 'width .4s ease' }} />
+      </div>
+    </div>
+  </div>
+)
+
+/* ─── Step Header ────────────────────────────────────────────── */
+const StepHeader = ({ step, total }) => (
+  <div style={{ marginBottom: 28 }}>
+    <p style={{ fontSize: 10, color: '#94a3b8', letterSpacing: '0.16em', textTransform: 'uppercase', fontFamily: "'DM Sans', sans-serif", marginBottom: 6 }}>
+      Step {step.id} of {total}
+    </p>
+    <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 26, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+      {step.label}
+    </h2>
+    <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: '#64748b', marginTop: 6 }}>
+      {step.sub}
+    </p>
+    <div style={{ width: 40, height: 3, background: '#6366f1', borderRadius: 2, marginTop: 14 }} />
+  </div>
+)
+
+/* ─── Nav buttons ────────────────────────────────────────────── */
+const NavRow = ({ currentStep, totalSteps, onPrev, onNext, onSave, saving }) => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 32, paddingTop: 20, borderTop: '1.5px solid #f1f5f9' }}>
+    <button
+      type="button" onClick={onPrev} disabled={currentStep === 1}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px',
+        borderRadius: 10, border: '1.5px solid #e2e8f0', background: 'transparent',
+        fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 600,
+        color: currentStep === 1 ? '#cbd5e1' : '#64748b', cursor: currentStep === 1 ? 'not-allowed' : 'pointer',
+        transition: 'all .15s',
+      }}
+    >
+      <ArrowLeft size={15} /> Back
+    </button>
+
+    <div style={{ display: 'flex', gap: 10 }}>
+      {/* Always show save hotel */}
+      <button
+        type="button" onClick={onSave} disabled={saving}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px',
+          borderRadius: 10, border: '1.5px solid #e2e8f0', background: '#fff',
+          fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 600,
+          color: '#0f172a', cursor: saving ? 'not-allowed' : 'pointer', transition: 'all .15s',
+        }}
+      >
+        {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+        Save
+      </button>
+
+      {currentStep < totalSteps && (
+        <button
+          type="button" onClick={onNext}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px',
+            borderRadius: 10, border: 'none', background: '#6366f1',
+            fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 600,
+            color: '#fff', cursor: 'pointer', transition: 'all .15s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = '#4f46e5' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = '#6366f1' }}
+        >
+          Continue <ArrowRight size={15} />
+        </button>
+      )}
+    </div>
+  </div>
+)
+
+/* ════════════════════════════════════════════════════════════════
+   MAIN COMPONENT
+══════════════════════════════════════════════════════════════════ */
 function HotelEditPage() {
-  const dispatch  = useDispatch()
-  const navigate  = useNavigate()
-  const location  = useLocation()
-  const { id }    = useParams()
+  const dispatch = useDispatch()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { id }   = useParams()
 
-  const {
-    selectedHotel,
-    loading,
-    updating,
-    error,
-    updateSuccess,
-  } = useSelector((state) => state.hotel)
+  const { selectedHotel, loading, updating, error, updateSuccess } =
+    useSelector((state) => state.hotel)
 
-  const [hotelForm,     setHotelForm]     = useState(() => createHotelForm(null))
-  const [roomForm,      setRoomForm]      = useState(createEmptyRoomForm)
-  const [editingRoomId, setEditingRoomId] = useState(null) // _id (local key) of room being edited
-  const [rooms,         setRooms]         = useState(() => [])
-  const [deletedRoomIds, setDeletedRoomIds] = useState(() => [])
+  const [currentStep,     setCurrentStep]     = useState(1)
+  const [completedSteps,  setCompletedSteps]  = useState([])
+  const [hotelForm,       setHotelForm]       = useState(() => createHotelForm(null))
+  const [roomForm,        setRoomForm]        = useState(createEmptyRoomForm)
+  const [editingRoomId,   setEditingRoomId]   = useState(null)
+  const [rooms,           setRooms]           = useState([])
+  const [deletedRoomIds,  setDeletedRoomIds]  = useState([])
+  const [policies,        setPolicies]        = useState(createEmptyPolicies)
+  const [policyLoading,   setPolicyLoading]   = useState(false)
+  const [policyMsg,       setPolicyMsg]       = useState(null)
 
-  const hotel           = selectedHotel?.data || selectedHotel
-  const displayHotelId  = id || hotel?.hotelId || hotel?._id
-  const hotelImage      = hotel?.basicInfo?.images?.[0] || hotel?.images?.[0] || ''
-  const listPath        =
-    location.state?.from ||
+  const hotel          = selectedHotel?.data || selectedHotel
+  const displayHotelId = id || hotel?.hotelId || hotel?._id
+  const hotelImage     = hotel?.basicInfo?.images?.[0] || hotel?.images?.[0] || ''
+  const listPath       = location.state?.from ||
     (location.pathname.startsWith('/your-hotels') ? '/your-hotels' : '/hotels')
 
-  // Derive rooms straight from the hotel document — no separate rooms state needed
   const normalizedRooms = useMemo(
     () => (Array.isArray(hotel?.rooms) ? hotel.rooms.map(normalizeRoom) : []),
     [hotel?.rooms],
   )
 
-  // Local staging area for rooms — initialize from normalizedRooms when hotel loads
+  useEffect(() => { setRooms(normalizedRooms) }, [normalizedRooms])
+  useEffect(() => { if (id) dispatch(getHotelById(id)) }, [dispatch, id])
+  useEffect(() => { if (hotel) setHotelForm(createHotelForm(hotel)) }, [hotel])
   useEffect(() => {
-    setRooms(normalizedRooms)
-  }, [normalizedRooms])
-
-  // ── Load hotel ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (id) dispatch(getHotelById(id))
-  }, [dispatch, id])
-
-  // ── Sync form when hotel loads ──────────────────────────────────────────
-  useEffect(() => {
-    if (hotel) setHotelForm(createHotelForm(hotel))
+    if (!hotel) return
+    const dp = hotel?.policies?.[0]?.detailed || hotel?.policies?.[0] || {}
+    setPolicies({
+      checkInPolicy:     dp.checkInPolicy     || '',
+      checkOutPolicy:    dp.checkOutPolicy    || '',
+      hotelsPolicy:      dp.hotelsPolicy      || '',
+      outsideFoodPolicy: dp.outsideFoodPolicy || '',
+      cancellationPolicy:dp.cancellationPolicy|| '',
+      refundPolicy:      dp.refundPolicy      || '',
+      paymentMode:       dp.paymentMode       || '',
+      petsAllowed:             dp.petsAllowed             || '',
+      bachelorAllowed:         dp.bachelorAllowed         || '',
+      smokingAllowed:          dp.smokingAllowed          || '',
+      alcoholAllowed:          dp.alcoholAllowed          || '',
+      unmarriedCouplesAllowed: dp.unmarriedCouplesAllowed || '',
+      internationalGuestAllowed: dp.internationalGuestAllowed || '',
+      onDoubleSharing:    dp.onDoubleSharing    || '',
+      onTrippleSharing:   dp.onTrippleSharing   || '',
+      onQuadSharing:      dp.onQuadSharing      || '',
+      onBulkBooking:      dp.onBulkBooking      || '',
+      onMoreThanFour:     dp.onMoreThanFour     || '',
+      offDoubleSharing:   dp.offDoubleSharing   || '',
+      offTrippleSharing:  dp.offTrippleSharing  || '',
+      offQuadSharing:     dp.offQuadSharing     || '',
+      offBulkBooking:     dp.offBulkBooking     || '',
+      offMoreThanFour:    dp.offMoreThanFour    || '',
+      onDoubleSharingAp:  dp.onDoubleSharingAp  || '',
+      onTrippleSharingAp: dp.onTrippleSharingAp || '',
+      onQuadSharingAp:    dp.onQuadSharingAp    || '',
+      onBulkBookingAp:    dp.onBulkBookingAp    || '',
+      onMoreThanFourAp:   dp.onMoreThanFourAp   || '',
+      offDoubleSharingAp: dp.offDoubleSharingAp || '',
+      offTrippleSharingAp:dp.offTrippleSharingAp|| '',
+      offQuadSharingAp:   dp.offQuadSharingAp   || '',
+      offBulkBookingAp:   dp.offBulkBookingAp   || '',
+      offMoreThanFourAp:  dp.offMoreThanFourAp  || '',
+      onDoubleSharingMAp:  dp.onDoubleSharingMAp  || '',
+      onTrippleSharingMAp: dp.onTrippleSharingMAp || '',
+      onQuadSharingMAp:    dp.onQuadSharingMAp    || '',
+      onBulkBookingMAp:    dp.onBulkBookingMAp    || '',
+      onMoreThanFourMAp:   dp.onMoreThanFourMAp   || '',
+      offDoubleSharingMAp: dp.offDoubleSharingMAp || '',
+      offTrippleSharingMAp:dp.offTrippleSharingMAp|| '',
+      offQuadSharingMAp:   dp.offQuadSharingMAp   || '',
+      offBulkBookingMAp:   dp.offBulkBookingMAp   || '',
+      offMoreThanFourMAp:  dp.offMoreThanFourMAp  || '',
+    })
   }, [hotel])
 
-  // ── Auto-clear success banner ───────────────────────────────────────────
   useEffect(() => {
     if (!updateSuccess) return
     const t = setTimeout(() => dispatch(clearHotelUpdateStatus()), 2800)
     return () => clearTimeout(t)
   }, [dispatch, updateSuccess])
 
-  // ── Field setters ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!policyMsg) return
+    const t = setTimeout(() => setPolicyMsg(null), 3000)
+    return () => clearTimeout(t)
+  }, [policyMsg])
+
   const setHotelField = (key) => (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value
-    setHotelForm((prev) => ({ ...prev, [key]: value }))
+    setHotelForm((p) => ({ ...p, [key]: value }))
   }
-
   const setRoomField = (key) => (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value
-    setRoomForm((prev) => ({ ...prev, [key]: value }))
+    setRoomForm((p) => ({ ...p, [key]: value }))
   }
 
-  // ── Reset room editor ───────────────────────────────────────────────────
-  const resetRoomEditor = () => {
-    setEditingRoomId(null)
-    setRoomForm(createEmptyRoomForm())
+  const markComplete = (step) => {
+    setCompletedSteps((p) => p.includes(step) ? p : [...p, step])
   }
 
-  // ── Save hotel basic info ───────────────────────────────────────────────
-  const saveHotel = async (event) => {
-    if (event?.preventDefault) event.preventDefault()
+  const goNext = () => {
+    markComplete(currentStep)
+    setCurrentStep((s) => Math.min(s + 1, STEPS.length))
+  }
+  const goPrev = () => setCurrentStep((s) => Math.max(s - 1, 1))
+
+  const resetRoomEditor = () => { setEditingRoomId(null); setRoomForm(createEmptyRoomForm()) }
+
+  const savePolicies = async (e) => {
+    if (e?.preventDefault) e.preventDefault()
     if (!displayHotelId) return
-    const hotelPayload = buildHotelPayload(hotelForm)
-
-    // Build rooms payload from staged rooms and deletions
-    const roomsPayload = rooms.map((r) => buildRoomEntry(r, r.roomId || null))
-    const deletionPayload = deletedRoomIds.map((id) => ({ roomId: id, _delete: true }))
-    const hotelData = { ...hotelPayload, rooms: [...roomsPayload, ...deletionPayload] }
-
+    setPolicyLoading(true)
     try {
-      await dispatch(
-        updateHotelInfo({
-          hotelId:   displayHotelId,
-          hotelData,
-        }),
-      ).unwrap()
-      // clear staged deletions after successful sync
+      await api.patch('/patch-a-new/policy-to-your/hotel', { hotelId: displayHotelId, ...policies })
+      setPolicyMsg({ type: 'success', text: 'Policies saved!' })
+      dispatch(getHotelById(displayHotelId))
+    } catch (err) {
+      setPolicyMsg({ type: 'error', text: err?.response?.data?.message || 'Failed to save policies.' })
+    } finally {
+      setPolicyLoading(false)
+    }
+  }
+
+  const saveHotel = async (e) => {
+    if (e?.preventDefault) e.preventDefault()
+    if (!displayHotelId) return
+    const hotelPayload  = buildHotelPayload(hotelForm)
+    const roomsPayload  = rooms.map((r) => buildRoomEntry(r, r.roomId || null))
+    const deletionPayload = deletedRoomIds.map((rid) => ({ roomId: rid, _delete: true }))
+    try {
+      await dispatch(updateHotelInfo({
+        hotelId: displayHotelId,
+        hotelData: { ...hotelPayload, rooms: [...roomsPayload, ...deletionPayload] },
+      })).unwrap()
       setDeletedRoomIds([])
       dispatch(getHotelById(displayHotelId))
     } catch (err) {
@@ -273,458 +629,477 @@ function HotelEditPage() {
     }
   }
 
-  // ── Save room locally (add or update) — staging only, no API call ─────
-  const saveRoomLocal = (event) => {
-    if (event?.preventDefault) event.preventDefault()
-
-    const makeRoomObject = (existingId) => {
-      // When editing, preserve the original roomId from the existing room
-      const existingRoom = existingId ? rooms.find((r) => r._id === existingId) : null
+  const saveRoomLocal = (e) => {
+    if (e?.preventDefault) e.preventDefault()
+    const makeRoom = (existingId) => {
+      const existing = existingId ? rooms.find((r) => r._id === existingId) : null
       return {
         _id: existingId || `room-temp-${Date.now()}`,
-        roomId: existingRoom?.roomId || '', // Preserve existing roomId for updates
+        roomId: existing?.roomId || '',
         name: roomForm.type || `Room ${rooms.length + 1}`,
-        type: roomForm.type,
-        bedType: roomForm.bedType,
-        price: String(roomForm.price ?? ''),
-        countRooms: String(roomForm.countRooms ?? ''),
-        totalRooms: String(roomForm.countRooms ?? ''),
-        description: roomForm.description,
-        amenities: roomForm.amenities,
-        images: roomForm.images,
-        isOffer: roomForm.isOffer,
-        offerName: roomForm.offerName,
+        type: roomForm.type, bedType: roomForm.bedType,
+        price: String(roomForm.price ?? ''), countRooms: String(roomForm.countRooms ?? ''),
+        totalRooms: String(roomForm.countRooms ?? ''), description: roomForm.description,
+        amenities: roomForm.amenities, images: roomForm.images,
+        isOffer: roomForm.isOffer, offerName: roomForm.offerName,
       }
     }
-
     if (editingRoomId) {
-      const updated = rooms.map((r) => (r._id === editingRoomId ? { ...r, ...makeRoomObject(editingRoomId) } : r))
-      setRooms(updated)
+      setRooms(rooms.map((r) => r._id === editingRoomId ? { ...r, ...makeRoom(editingRoomId) } : r))
     } else {
-      setRooms((prev) => [...prev, makeRoomObject(null)])
+      setRooms((p) => [...p, makeRoom(null)])
     }
-
     resetRoomEditor()
   }
 
-  // ── Delete room locally (mark server-side ids for deletion on save) ────
   const handleRoomDelete = (room) => {
-    const { _id, roomId } = room || {}
-    if (!_id) return
-    if (!window.confirm('Delete this room from the hotel?')) return
-
-    if (roomId) setDeletedRoomIds((prev) => [...prev, roomId])
-    setRooms((prev) => prev.filter((r) => r._id !== _id))
-
-    if (editingRoomId === _id) resetRoomEditor()
+    if (!room?._id) return
+    if (!window.confirm('Delete this room?')) return
+    if (room.roomId) setDeletedRoomIds((p) => [...p, room.roomId])
+    setRooms((p) => p.filter((r) => r._id !== room._id))
+    if (editingRoomId === room._id) resetRoomEditor()
   }
 
-  // ── Open room in editor ─────────────────────────────────────────────────
   const handleRoomEdit = (room) => {
     setEditingRoomId(room._id)
     setRoomForm({
-      type:        room.type,
-      bedType:     room.bedType,
-      price:       room.price,
-      countRooms:  room.countRooms,
-      description: room.description,
-      amenities:   room.amenities,
-      images:      room.images,
-      isOffer:     room.isOffer,
-      offerName:   room.offerName,
+      type: room.type, bedType: room.bedType, price: room.price,
+      originalPrice: room.originalPrice || room.price,
+      countRooms: room.countRooms, description: room.description,
+      amenities: room.amenities, images: room.images,
+      isOffer: room.isOffer, offerName: room.offerName,
+      offerPriceLess: room.offerPriceLess || '',
+      offerExp: room.offerExp || '',
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // ── Loading / error screens ─────────────────────────────────────────────
-  if (loading && !hotel) {
-    return (
-      <div className="mx-auto max-w-7xl bg-stone-50 px-4 py-8 sm:px-6 lg:px-8">
-        <Breadcrumb />
-        <div className="rounded-[28px] border border-stone-200 bg-white px-6 py-16 text-center text-sm font-semibold text-stone-500">
-          Loading edit hotel workspace...
-        </div>
-      </div>
-    )
-  }
+  /* ── Loading / error states ──────────────────────────────── */
+  if (loading && !hotel) return (
+    <div style={{ padding: 40, textAlign: 'center', fontFamily: "'DM Sans', sans-serif", color: '#94a3b8' }}>
+      <FontInjector />
+      <Breadcrumb />
+      <Loader2 size={24} style={{ animation: 'spin 1s linear infinite', margin: '40px auto', display: 'block' }} />
+      <p style={{ fontSize: 13 }}>Loading hotel workspace…</p>
+    </div>
+  )
 
-  if (error && !hotel) {
-    return (
-      <div className="mx-auto max-w-7xl bg-stone-50 px-4 py-8 sm:px-6 lg:px-8">
-        <Breadcrumb />
-        <div className="rounded-[28px] border border-rose-200 bg-rose-50 px-6 py-16 text-center text-sm font-semibold text-rose-700">
-          {error}
-        </div>
-      </div>
-    )
-  }
+  if (error && !hotel) return (
+    <div style={{ padding: 40, fontFamily: "'DM Sans', sans-serif" }}>
+      <FontInjector />
+      <Breadcrumb />
+      <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 12, padding: '16px 20px', color: '#be123c', fontSize: 13, fontWeight: 600 }}>{error}</div>
+    </div>
+  )
 
-  if (!hotel) {
-    return (
-      <div className="mx-auto max-w-7xl bg-stone-50 px-4 py-8 sm:px-6 lg:px-8">
-        <Breadcrumb />
-        <div className="rounded-[28px] border border-stone-200 bg-white px-6 py-16 text-center text-sm font-semibold text-stone-500">
-          Hotel not found.
-        </div>
-      </div>
-    )
-  }
+  if (!hotel) return (
+    <div style={{ padding: 40, textAlign: 'center', fontFamily: "'DM Sans', sans-serif", color: '#94a3b8' }}>
+      <FontInjector />
+      <Breadcrumb />
+      <p style={{ fontSize: 13 }}>Hotel not found.</p>
+    </div>
+  )
 
-  // ── Main render ─────────────────────────────────────────────────────────
+  const currentStepObj = STEPS.find((s) => s.id === currentStep)
+
+  /* ── Main render ─────────────────────────────────────────── */
   return (
-    <div className="mx-auto max-w-7xl bg-stone-50 px-4 py-8 sm:px-6 lg:px-8">
+    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px 60px', fontFamily: "'DM Sans', sans-serif" }}>
+      <FontInjector />
       <Breadcrumb />
 
-      {/* ── Header ── */}
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex items-start gap-4">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="mt-1 inline-flex h-11 w-11 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-600 transition hover:border-stone-300 hover:text-stone-900"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">Hotel Workspace</p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight text-stone-900">Edit Hotel & Rooms</h1>
-            <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-stone-500">
-              Hotel profile, rooms, amenities aur policies — sab ek hi page se manage karo.
-            </p>
-          </div>
+      {/* Page title row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 28 }}>
+        <button
+          type="button" onClick={() => navigate(-1)}
+          style={{
+            width: 40, height: 40, borderRadius: '50%', border: '1.5px solid #e2e8f0',
+            background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', color: '#475569', flexShrink: 0,
+          }}
+        >
+          <ArrowLeft size={16} />
+        </button>
+        <div>
+          <p style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#6366f1', fontWeight: 700, margin: 0 }}>
+            Hotel Workspace
+          </p>
+          <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 700, color: '#0f172a', margin: '4px 0 0' }}>
+            Edit Hotel
+          </h1>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => navigate(`${listPath}/${displayHotelId}`, { state: { from: listPath } })}
-            className="rounded-2xl border border-stone-200 bg-white px-5 py-3 text-sm font-bold text-stone-700 transition hover:bg-stone-50"
-          >
-            View Details
-          </button>
-          <button
-            type="button"
-            onClick={saveHotel}
-            disabled={updating}
-            className="inline-flex items-center gap-2 rounded-2xl bg-stone-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-stone-900/10 transition hover:bg-stone-800 disabled:pointer-events-none disabled:opacity-50"
-          >
-            {updating ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            Save Hotel
-          </button>
-        </div>
-      </div>
-
-      {/* ── Banners ── */}
-      {(updateSuccess || error) && (
-        <div className="mb-6 grid gap-3">
+        {/* Banners */}
+        <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
           {updateSuccess && (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
-              {updateSuccess}
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 600, color: '#15803d', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <CheckCircle2 size={14} /> {updateSuccess}
             </div>
           )}
           {error && (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+            <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 600, color: '#be123c' }}>
               {error}
             </div>
           )}
         </div>
-      )}
-
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-
-        {/* ── Hotel basic info form ── */}
-        <form
-          id="hotel-edit-form"
-          onSubmit={saveHotel}
-          className="overflow-hidden rounded-[30px] border border-stone-200 bg-white shadow-xl shadow-stone-200/50"
-        >
-          <div className="border-b border-stone-100 bg-[linear-gradient(135deg,#f8fafc_0%,#ffffff_55%,#f5f5f4_100%)] px-6 py-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.26em] text-stone-400">Hotel Profile</p>
-                <h2 className="mt-2 text-2xl font-black text-stone-900">{hotelForm.hotelName || 'Unnamed Hotel'}</h2>
-                <p className="mt-2 text-sm font-semibold text-stone-500">
-                  ID: {displayHotelId} {hotelForm.city ? `• ${hotelForm.city}` : ''}
-                </p>
-              </div>
-              {hotelImage ? (
-                <img src={hotelImage} alt={hotelForm.hotelName || 'Hotel'} className="h-24 w-32 rounded-2xl object-cover shadow-sm" />
-              ) : (
-                <div className="flex h-24 w-32 items-center justify-center rounded-2xl bg-stone-100 text-stone-400">
-                  <Building2 size={28} />
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-5 px-6 py-6 md:grid-cols-2">
-            {[
-              { label: 'Hotel Name',  key: 'hotelName',  required: true },
-              { label: 'Hotel Email', key: 'hotelEmail', required: true, type: 'email' },
-              { label: 'City',        key: 'city',       required: true },
-              { label: 'State',       key: 'state',      required: true },
-            ].map(({ label, key, required, type = 'text' }) => (
-              <label key={key} className="space-y-2">
-                <span className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">{label}</span>
-                <input required={required} type={type} value={hotelForm[key]} onChange={setHotelField(key)} className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-              </label>
-            ))}
-
-            <label className="space-y-2 md:col-span-2">
-              <span className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">Address</span>
-              <input value={hotelForm.address} onChange={setHotelField('address')} className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-
-            {[
-              { label: 'Pin Code',    key: 'pinCode' },
-              { label: 'Star Rating', key: 'starRating', type: 'number', min: '0', max: '5' },
-              { label: 'Owner',       key: 'owner' },
-              { label: 'Phone',       key: 'phone' },
-            ].map(({ label, key, type = 'text', min, max }) => (
-              <label key={key} className="space-y-2">
-                <span className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">{label}</span>
-                <input type={type} min={min} max={max} value={hotelForm[key]} onChange={setHotelField(key)} className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-              </label>
-            ))}
-
-            <label className="space-y-2 md:col-span-2">
-              <span className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">Property Type</span>
-              <input value={hotelForm.propertyType} onChange={setHotelField('propertyType')} placeholder="Hotel, Resort" className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-
-            <label className="space-y-2 md:col-span-2">
-              <span className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">Description</span>
-              <textarea value={hotelForm.description} onChange={setHotelField('description')} rows={5} className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-          </div>
-
-          <div className="border-t border-stone-100 px-6 py-5">
-            <div className="flex flex-wrap gap-4 rounded-3xl bg-stone-50 px-4 py-4">
-              {[
-                { label: 'Show on front', key: 'onFront' },
-                { label: 'Accepted',      key: 'isAccepted' },
-              ].map(({ label, key }) => (
-                <label key={key} className="inline-flex items-center gap-3 text-sm font-bold text-stone-700">
-                  <input type="checkbox" checked={hotelForm[key]} onChange={setHotelField(key)} className="h-4 w-4 rounded border-stone-300 text-blue-600 focus:ring-blue-500" />
-                  {label}
-                </label>
-              ))}
-            </div>
-          </div>
-        </form>
-
-        {/* ── Right column: stats + room editor ── */}
-        <div className="space-y-6">
-
-          {/* Stats cards */}
-          <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-1">
-            <div className="rounded-[26px] border border-stone-200 bg-white p-5 shadow-lg shadow-stone-200/40">
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-stone-400">Location</p>
-              <div className="mt-3 flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><MapPin size={20} /></div>
-                <div>
-                  <p className="text-lg font-black text-stone-900">{hotelForm.city || 'Unknown City'}</p>
-                  <p className="text-sm font-medium text-stone-500">{hotelForm.state || 'State pending'}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[26px] border border-stone-200 bg-white p-5 shadow-lg shadow-stone-200/40">
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-stone-400">Rooms</p>
-              <div className="mt-3 flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><BedDouble size={20} /></div>
-                <div>
-                  <p className="text-lg font-black text-stone-900">{rooms.length}</p>
-                  <p className="text-sm font-medium text-stone-500">Managed room entries</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[26px] border border-stone-200 bg-white p-5 shadow-lg shadow-stone-200/40">
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-stone-400">Status</p>
-              <div className="mt-3 flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-stone-100 text-stone-700"><CheckCircle2 size={20} /></div>
-                <div>
-                  <p className="text-lg font-black text-stone-900">{hotelForm.isAccepted ? 'Accepted' : 'Pending'}</p>
-                  <p className="text-sm font-medium text-stone-500">{hotelForm.onFront ? 'Front listed' : 'Hidden from front'}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Room editor ── */}
-          <form
-            onSubmit={saveRoomLocal}
-            className="overflow-hidden rounded-[30px] border border-stone-200 bg-white shadow-xl shadow-stone-200/50"
-          >
-            <div className="border-b border-stone-100 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_55%,#f8fafc_100%)] px-6 py-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.26em] text-blue-600">Room Manager</p>
-                  <h2 className="mt-2 text-xl font-black text-stone-900">
-                    {editingRoomId ? 'Update Room' : 'Add New Room'}
-                  </h2>
-                  <p className="mt-1 text-sm font-medium text-stone-500">
-                    {editingRoomId
-                      ? `Editing room: ${editingRoomId}`
-                      : 'Naya room add karo — ID backend khud generate karega.'}
-                  </p>
-                </div>
-                {editingRoomId && (
-                  <button type="button" onClick={resetRoomEditor} className="rounded-2xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-bold text-stone-700 transition hover:bg-stone-50">
-                    Cancel Edit
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="grid gap-4 px-6 py-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-2">
-                  <span className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">Room Type</span>
-                  <input required value={roomForm.type} onChange={setRoomField('type')} placeholder="Deluxe Room" className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">Bed Type</span>
-                  <input value={roomForm.bedType} onChange={setRoomField('bedType')} placeholder="King Bed" className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">Price (₹)</span>
-                  <input type="number" min="0" value={roomForm.price} onChange={setRoomField('price')} placeholder="2999" className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">Total Rooms</span>
-                  <input type="number" min="1" value={roomForm.countRooms} onChange={setRoomField('countRooms')} placeholder="10" className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-                </label>
-                <label className="space-y-2 md:col-span-2">
-                  <span className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">Amenities</span>
-                  <input value={roomForm.amenities} onChange={setRoomField('amenities')} placeholder="WiFi, AC, Breakfast" className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-                </label>
-                <label className="space-y-2 md:col-span-2">
-                  <span className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">Image URLs</span>
-                  <input value={roomForm.images} onChange={setRoomField('images')} placeholder="https://..., https://..." className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-                </label>
-                <label className="space-y-2 md:col-span-2">
-                  <span className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">Description</span>
-                  <textarea value={roomForm.description} onChange={setRoomField('description')} rows={4} placeholder="Room summary for guests and ops team." className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-                </label>
-              </div>
-
-              {/* Offer toggle */}
-              <div className="rounded-3xl border border-stone-200 bg-stone-50 px-4 py-4">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <label className="inline-flex items-center gap-3 text-sm font-bold text-stone-700">
-                    <input type="checkbox" checked={roomForm.isOffer} onChange={setRoomField('isOffer')} className="h-4 w-4 rounded border-stone-300 text-blue-600 focus:ring-blue-500" />
-                    Offer active
-                  </label>
-                  <input value={roomForm.offerName} onChange={setRoomField('offerName')} placeholder="Flat 20% off" className="w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-semibold text-stone-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-50 sm:max-w-xs" />
-                </div>
-              </div>
-
-              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                <button type="button" onClick={resetRoomEditor} className="rounded-2xl border border-stone-200 bg-white px-5 py-3 text-sm font-bold text-stone-700 transition hover:bg-stone-50">
-                  Reset
-                </button>
-                <button
-                  type="submit"
-                  disabled={updating}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-50"
-                >
-                  {updating ? <Loader2 size={16} className="animate-spin" /> : editingRoomId ? <PencilLine size={16} /> : <Plus size={16} />}
-                  {editingRoomId ? 'Update (local)' : 'Add (local)'}
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
       </div>
 
-      {/* ── Room inventory list ── */}
-      <div className="mt-6 overflow-hidden rounded-[30px] border border-stone-200 bg-white shadow-xl shadow-stone-200/50">
-        <div className="flex flex-col gap-3 border-b border-stone-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.26em] text-stone-400">Room Inventory</p>
-            <h2 className="mt-2 text-2xl font-black text-stone-900">Existing Rooms</h2>
-          </div>
-          {updating && (
-            <div className="inline-flex items-center gap-2 rounded-full bg-stone-100 px-3 py-1.5 text-xs font-bold text-stone-600">
-              <Loader2 size={14} className="animate-spin" />
-              Syncing...
+      {/* Main layout */}
+      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+
+        {/* ── Sidebar ── */}
+        <StepSidebar
+          currentStep={currentStep}
+          completedSteps={completedSteps}
+          hotelName={hotelForm.hotelName}
+          hotelImage={hotelImage}
+          onStepClick={(id) => setCurrentStep(id)}
+        />
+
+        {/* ── Content panel ── */}
+        <div style={{
+          flex: 1, background: '#fff', borderRadius: 20,
+          border: '1.5px solid #f1f5f9', padding: '32px 32px 28px',
+          boxShadow: '0 4px 24px rgba(15,23,42,0.04)',
+        }}>
+          <StepHeader step={currentStepObj} total={STEPS.length} />
+
+          {/* ════ STEP 1: Basic Info ════════════════════════════════ */}
+          {currentStep === 1 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '18px 20px' }}>
+              <FieldInput label="Hotel Name" required value={hotelForm.hotelName} onChange={setHotelField('hotelName')} />
+              <FieldInput label="Hotel Email" type="email" required value={hotelForm.hotelEmail} onChange={setHotelField('hotelEmail')} />
+              <FieldInput label="Owner" value={hotelForm.owner} onChange={setHotelField('owner')} />
+              <FieldInput label="Phone" value={hotelForm.phone} onChange={setHotelField('phone')} />
+              <div style={{ gridColumn: '1 / -1' }}>
+                <FieldInput label="Address" value={hotelForm.address} onChange={setHotelField('address')} />
+              </div>
+              <FieldInput label="City" required value={hotelForm.city} onChange={setHotelField('city')} />
+              <FieldInput label="State" required value={hotelForm.state} onChange={setHotelField('state')} />
+              <FieldInput label="Pin Code" value={hotelForm.pinCode} onChange={setHotelField('pinCode')} />
+              <FieldInput label="Destination" value={hotelForm.destination} onChange={setHotelField('destination')} placeholder="e.g. Shimla" />
             </div>
           )}
-        </div>
 
-        {rooms.length === 0 ? (
-          <div className="px-6 py-20 text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-stone-100 text-stone-400">
-              <BedDouble size={28} />
+          {/* ════ STEP 2: Property Details ══════════════════════════ */}
+          {currentStep === 2 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '18px 20px' }}>
+                <FieldInput label="Star Rating" type="number" min="0" max="5" value={hotelForm.starRating} onChange={setHotelField('starRating')} placeholder="e.g. 4" />
+                <FieldInput label="Property Type" value={hotelForm.propertyType} onChange={setHotelField('propertyType')} placeholder="Hotel, Resort" />
+                <FieldInput label="Hotel Category" value={hotelForm.hotelCategory} onChange={setHotelField('hotelCategory')} placeholder="e.g. Luxury" />
+                <FieldInput label="Latitude" value={hotelForm.latitude} onChange={setHotelField('latitude')} placeholder="e.g. 31.1048" />
+                <FieldInput label="Longitude" value={hotelForm.longitude} onChange={setHotelField('longitude')} placeholder="e.g. 77.1734" />
+                <FieldInput label="General Manager Contact" value={hotelForm.generalManagerContact} onChange={setHotelField('generalManagerContact')} placeholder="+91 XXXXXXXXXX" />
+                <FieldInput label="Sales Manager Contact" value={hotelForm.salesManagerContact} onChange={setHotelField('salesManagerContact')} placeholder="+91 XXXXXXXXXX" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8' }}>Local ID</label>
+                  <select
+                    value={hotelForm.localId} onChange={setHotelField('localId')}
+                    style={{ ...inputCls }}
+                    onFocus={(e) => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff' }}
+                    onBlur={(e)  => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc' }}
+                  >
+                    <option value="Accepted">Accepted</option>
+                    <option value="Not Accepted">Not Accepted</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8' }}>
+                  Customer Welcome Note
+                </label>
+                <textarea
+                  value={hotelForm.customerWelcomeNote} onChange={setHotelField('customerWelcomeNote')} rows={3}
+                  placeholder="Welcome message for guests…"
+                  style={{ ...inputCls, resize: 'vertical', lineHeight: 1.7 }}
+                  onFocus={(e) => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.08)' }}
+                  onBlur={(e)  => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc'; e.target.style.boxShadow = 'none' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8' }}>
+                  Description
+                </label>
+                <textarea
+                  value={hotelForm.description} onChange={setHotelField('description')} rows={5}
+                  placeholder="Brief description of the property for guests and internal ops…"
+                  style={{ ...inputCls, resize: 'vertical', lineHeight: 1.7 }}
+                  onFocus={(e) => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.08)' }}
+                  onBlur={(e)  => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc'; e.target.style.boxShadow = 'none' }}
+                />
+              </div>
+
+              {/* Status toggles */}
+              <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px 20px', display: 'flex', flexWrap: 'wrap', gap: 20 }}>
+                <p style={{ width: '100%', margin: '0 0 8px', fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8' }}>
+                  Visibility Settings
+                </p>
+                {[
+                  { label: 'Show on Front Page', key: 'onFront' },
+                  { label: 'Mark as Accepted',   key: 'isAccepted' },
+                ].map(({ label, key }) => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 500, color: '#334155', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox" checked={hotelForm[key]} onChange={setHotelField(key)}
+                      style={{ width: 16, height: 16, accentColor: '#6366f1', cursor: 'pointer' }}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
             </div>
-            <h3 className="mt-5 text-lg font-black text-stone-900">No rooms found</h3>
-            <p className="mt-2 text-sm font-medium text-stone-500">
-              Is hotel ke liye abhi room list empty hai. Upar se pehla room add kar sakte ho.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-4 px-6 py-6">
-            {rooms.map((room) => (
-              <div
-                key={room._id}
-                className={`rounded-[26px] border px-5 py-5 transition ${
-                  editingRoomId === room._id
-                    ? 'border-blue-300 bg-blue-50/70 shadow-lg shadow-blue-100/60'
-                    : 'border-stone-200 bg-stone-50/50 hover:border-stone-300 hover:bg-white'
-                }`}
-              >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.2em] text-stone-500">
-                        {room.roomId || 'No ID'}
-                      </span>
-                      <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-stone-600">
-                        {room.type}
-                      </span>
-                      {room.isOffer && room.offerName && (
-                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
-                          {room.offerName}
-                        </span>
-                      )}
+          )}
+
+          {/* ════ STEP 3: Rooms ════════════════════════════════════ */}
+          {currentStep === 3 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+              {/* Room form */}
+              <div style={{ background: '#f8fafc', borderRadius: 14, padding: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                  <div>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: '#6366f1', letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 0 2px' }}>
+                      {editingRoomId ? 'Edit Room' : 'Add Room'}
+                    </p>
+                    <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+                      {editingRoomId ? 'Changes will save locally. Hit "Save" to push to server.' : 'Fill in room details and add to the list below.'}
+                    </p>
+                  </div>
+                  {editingRoomId && (
+                    <button type="button" onClick={resetRoomEditor}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#64748b', cursor: 'pointer' }}>
+                      <X size={13} /> Cancel
+                    </button>
+                  )}
+                </div>
+
+                <form onSubmit={saveRoomLocal}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px 16px' }}>
+                    <FieldInput label="Room Type" required value={roomForm.type} onChange={setRoomField('type')} placeholder="Deluxe Room" />
+                    <FieldInput label="Bed Type" value={roomForm.bedType} onChange={setRoomField('bedType')} placeholder="King Bed" />
+                    <FieldInput label="Price (₹)" type="number" min="0" value={roomForm.price} onChange={setRoomField('price')} placeholder="2999" />
+                    <FieldInput label="Total Rooms" type="number" min="1" value={roomForm.countRooms} onChange={setRoomField('countRooms')} placeholder="10" />
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <FieldInput label="Amenities (comma separated)" value={roomForm.amenities} onChange={setRoomField('amenities')} placeholder="WiFi, AC, Breakfast" />
                     </div>
-                    <div>
-                      <h3 className="text-xl font-black text-stone-900">{room.name}</h3>
-                      <p className="mt-1 text-sm font-medium text-stone-500">{room.bedType || 'Bed type not added'}</p>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <FieldInput label="Image URLs (comma separated)" value={roomForm.images} onChange={setRoomField('images')} placeholder="https://..." />
                     </div>
-                    <div className="flex flex-wrap gap-3 text-sm font-semibold text-stone-600">
-                      <span className="rounded-2xl bg-white px-3 py-2">₹ {room.price || '0'}</span>
-                      <span className="rounded-2xl bg-white px-3 py-2">Rooms: {room.countRooms || '0'}</span>
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8' }}>Description</label>
+                      <textarea
+                        value={roomForm.description} onChange={setRoomField('description')} rows={3}
+                        placeholder="Short room description…"
+                        style={{ ...inputCls, resize: 'vertical', lineHeight: 1.7 }}
+                        onFocus={(e) => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff' }}
+                        onBlur={(e)  => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc' }}
+                      />
                     </div>
-                    {room.description && (
-                      <p className="max-w-3xl text-sm leading-6 text-stone-600">{room.description}</p>
+                  </div>
+
+                  {/* Offer row */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14, padding: '14px 16px', background: '#fff', borderRadius: 10, border: '1.5px solid #e2e8f0' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#334155', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={roomForm.isOffer} onChange={setRoomField('isOffer')} style={{ width: 15, height: 15, accentColor: '#6366f1' }} />
+                      Active Offer
+                    </label>
+                    {roomForm.isOffer && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px 14px' }}>
+                        <input
+                          value={roomForm.offerName} onChange={setRoomField('offerName')} placeholder="Offer name e.g. Flat 20% off"
+                          style={{ ...inputCls }}
+                          onFocus={(e) => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff' }}
+                          onBlur={(e)  => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc' }}
+                        />
+                        <FieldInput label="Original Price (₹)" type="number" min="0" value={roomForm.originalPrice} onChange={setRoomField('originalPrice')} placeholder="3999" />
+                        <FieldInput label="Offer Price Less (₹)" type="number" min="0" value={roomForm.offerPriceLess} onChange={setRoomField('offerPriceLess')} placeholder="500" />
+                        <FieldInput label="Offer Expiry" type="date" value={roomForm.offerExp} onChange={setRoomField('offerExp')} />
+                      </div>
                     )}
                   </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleRoomEdit(room)}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-bold text-stone-700 shadow-sm transition hover:bg-stone-100"
-                      >
-                        <PencilLine size={15} /> Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRoomDelete(room)}
-                        disabled={updating}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-rose-50 px-4 py-2.5 text-sm font-bold text-rose-700 transition hover:bg-rose-100 disabled:pointer-events-none disabled:opacity-40"
-                      >
-                        <Trash2 size={15} /> Delete
-                      </button>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                    <button type="submit"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px',
+                        borderRadius: 10, border: 'none', background: '#6366f1',
+                        fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 600,
+                        color: '#fff', cursor: 'pointer',
+                      }}>
+                      {editingRoomId ? <><PencilLine size={14} /> Update Room</> : <><Plus size={14} /> Add Room</>}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Room list */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#94a3b8', margin: 0 }}>
+                    Saved Rooms ({rooms.length})
+                  </p>
+                  {updating && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6366f1' }}>
+                      <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Syncing…
                     </div>
+                  )}
+                </div>
+
+                {rooms.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', background: '#f8fafc', borderRadius: 12, border: '1.5px dashed #e2e8f0' }}>
+                    <BedDouble size={28} color="#cbd5e1" style={{ margin: '0 auto 10px', display: 'block' }} />
+                    <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>No rooms added yet. Use the form above to add the first room.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {rooms.map((room) => (
+                      <div key={room._id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px',
+                          borderRadius: 12, border: `1.5px solid ${editingRoomId === room._id ? '#6366f1' : '#f1f5f9'}`,
+                          background: editingRoomId === room._id ? '#eef2ff' : '#fafafa',
+                          transition: 'all .15s',
+                        }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 10, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <BedDouble size={18} color="#7c3aed" />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <p style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: 0 }}>{room.name}</p>
+                            {room.isOffer && room.offerName && (
+                              <span style={{ fontSize: 10, fontWeight: 700, background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: 20 }}>{room.offerName}</span>
+                            )}
+                          </div>
+                          <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0' }}>
+                            {room.bedType || '—'} &nbsp;·&nbsp; ₹{room.price} &nbsp;·&nbsp; {room.countRooms} rooms
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                          <button type="button" onClick={() => handleRoomEdit(room)}
+                            style={{ padding: '6px 12px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <PencilLine size={12} /> Edit
+                          </button>
+                          <button type="button" onClick={() => handleRoomDelete(room)}
+                            style={{ padding: '6px 12px', borderRadius: 8, border: '1.5px solid #fecdd3', background: '#fff1f2', fontSize: 12, fontWeight: 600, color: '#be123c', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <Trash2 size={12} /> Del
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ════ STEP 4: Policies ══════════════════════════════════ */}
+          {currentStep === 4 && (
+            <div>
+              {policyMsg && (
+                <div style={{
+                  marginBottom: 20, padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                  background: policyMsg.type === 'success' ? '#f0fdf4' : '#fff1f2',
+                  border: `1px solid ${policyMsg.type === 'success' ? '#bbf7d0' : '#fecdd3'}`,
+                  color: policyMsg.type === 'success' ? '#15803d' : '#be123c',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  {policyMsg.type === 'success' ? <CheckCircle2 size={14} /> : <X size={14} />}
+                  {policyMsg.text}
+                </div>
+              )}
+
+              {/* General Policies */}
+              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8', margin: '0 0 12px' }}>
+                General Policies
+              </p>
+              {POLICY_LABELS.map(({ label, key }) => (
+                <PolicyEditor
+                  key={key} label={label}
+                  value={policies[key]}
+                  onChange={(v) => setPolicies((p) => ({ ...p, [key]: v }))}
+                />
+              ))}
+
+              {/* Guest Rules */}
+              <div style={{ margin: '24px 0 12px' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8', margin: '0 0 12px' }}>
+                  Guest Rules
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px 16px' }}>
+                  {GUEST_RULES.map(({ label, key }) => (
+                    <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#94a3b8' }}>{label}</label>
+                      <select
+                        value={policies[key]} onChange={(e) => setPolicies((p) => ({ ...p, [key]: e.target.value }))}
+                        style={{ ...inputCls }}
+                        onFocus={(e) => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff' }}
+                        onBlur={(e)  => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc' }}
+                      >
+                        <option value="">-- Select --</option>
+                        {YES_NO.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+
+              {/* Seasonal Pricing */}
+              <div style={{ margin: '24px 0 12px' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8', margin: '0 0 16px' }}>
+                  Seasonal Pricing (per person per night)
+                </p>
+                {SEASONAL_SECTIONS.map(({ label, prefix, suffix }) => (
+                  <div key={`${prefix}${suffix}`} style={{ marginBottom: 18, background: '#f8fafc', borderRadius: 12, padding: '14px 16px' }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: '#6366f1', margin: '0 0 10px', letterSpacing: '0.06em' }}>{label}</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px 12px' }}>
+                      {SEASONAL_COLS.map(({ col, keySuffix }) => {
+                        const cap1 = (str) => str.charAt(0).toUpperCase() + str.slice(1)
+                        const fieldKey = `${prefix}${cap1(keySuffix)}${suffix}`
+                        return (
+                          <div key={fieldKey} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <label style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#94a3b8' }}>{col}</label>
+                            <input
+                              type="number" min="0"
+                              value={policies[fieldKey] ?? ''}
+                              onChange={(e) => setPolicies((p) => ({ ...p, [fieldKey]: e.target.value }))}
+                              placeholder="₹"
+                              style={{ ...inputCls, fontSize: 12 }}
+                              onFocus={(e) => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff' }}
+                              onBlur={(e)  => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc' }}
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button" onClick={savePolicies} disabled={policyLoading}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '11px 24px', borderRadius: 10, border: 'none',
+                  background: '#6366f1', fontFamily: "'DM Sans', sans-serif",
+                  fontSize: 13, fontWeight: 600, color: '#fff', cursor: policyLoading ? 'not-allowed' : 'pointer',
+                  opacity: policyLoading ? 0.7 : 1,
+                }}>
+                {policyLoading ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <ShieldCheck size={15} />}
+                Save Policies
+              </button>
+            </div>
+          )}
+
+          {/* ── Nav row ── */}
+          <NavRow
+            currentStep={currentStep} totalSteps={STEPS.length}
+            onPrev={goPrev} onNext={goNext}
+            onSave={saveHotel} saving={updating}
+          />
+        </div>
       </div>
     </div>
   )
