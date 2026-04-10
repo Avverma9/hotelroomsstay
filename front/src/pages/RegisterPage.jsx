@@ -321,6 +321,7 @@ export default function RegisterPage() {
               </button>
               <button
                 type="button"
+                onClick={() => navigate("/", { replace: true })}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-100 bg-white py-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 transition-all hover:bg-slate-50"
               >
                 <MapPin className="h-4 w-4 text-emerald-500" />

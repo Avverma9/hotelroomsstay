@@ -83,10 +83,35 @@ const formatTime = (dateString) =>
     hour12: true
   }).toUpperCase() : "N/A";
 
+// --- Robust helpers (ported from app) ---
+const toFiniteNumber = (value) => { const n = Number(value); return Number.isFinite(n) ? n : null; };
+
+const normalizeBool = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value > 0;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (v === "true" || v === "1" || v === "yes") return true;
+    if (v === "false" || v === "0" || v === "no") return false;
+  }
+  return null;
+};
+
+const isSeatBooked = (seat) => {
+  const direct = normalizeBool(seat?.isBooked ?? seat?.booked ?? seat?.isSeatBooked);
+  if (direct !== null) return direct;
+  const status = String(seat?.status || seat?.seatStatus || "").trim().toLowerCase();
+  if (status.includes("book")) return true;
+  if (status.includes("open") || status.includes("available") || status.includes("vacant")) return false;
+  return false;
+};
+
 // --- Enhanced Seat Component ---
 const Seat = ({ seat, onSelect, isSelected }) => {
+  const booked = isSeatBooked(seat);
+  const seatPrice = toFiniteNumber(seat?.seatPrice);
   const getSeatClass = () => {
-    if (seat.isBooked) {
+    if (booked) {
       return "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed";
     }
     if (isSelected) {
@@ -107,7 +132,7 @@ const Seat = ({ seat, onSelect, isSelected }) => {
     <button
       className={`relative flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all duration-200 ${getSeatClass()}`}
       onClick={() => onSelect(seat)}
-      disabled={seat.isBooked}
+      disabled={booked}
     >
       <div className="flex items-center justify-between w-full mb-2">
         <span className="text-xs font-bold">{seat.seatNumber}</span>
@@ -122,9 +147,9 @@ const Seat = ({ seat, onSelect, isSelected }) => {
         <ArmchairIcon />
       </div>
 
-      <span className="text-sm font-bold">₹{seat.seatPrice}</span>
+      <span className="text-sm font-bold">{seatPrice !== null ? `₹${seatPrice}` : "—"}</span>
 
-      {seat.isBooked && (
+      {booked && (
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="text-xs font-medium bg-gray-500 text-white px-2 py-1 rounded-full">
             Booked
@@ -194,24 +219,51 @@ const TripInfoCard = ({ selectedCab }) => (
     </div>
   </div>
 );
-const defaultPassenger = userName
-const defaultPhone = userMobile
-const defaultEmail = userEmail
+// --- Helpers for passenger state ---
+const makePassenger = (prefill = null) => ({
+  fullName: prefill?.fullName || "",
+  phone:    prefill?.phone    || "",
+  email:    prefill?.email    || "",
+});
+
+const defaultPrimary = makePassenger({
+  fullName: userName  || "",
+  phone:    userMobile || "",
+  email:    userEmail  || "",
+});
+
 // --- Main Component ---
 export default function CabsBooking() {
-  const [passengerDetails, setPassengerDetails] = useState({
-    fullName: defaultPassenger,
-    phone: defaultPhone,
-    email: defaultEmail
-  });
   const { id } = useParams();
   const [selectedSeats, setSelectedSeats] = useState([]);
+  const [passengers, setPassengers] = useState([{ ...defaultPrimary }]);
   const dispatch = useDispatch();
   const [selectedCab, setSelectedCab] = useState(null);
   const [isBooking, setIsBooking] = useState(false);
 
   const { showLoader, hideLoader } = useLoader();
   const popup = useToast();
+
+  const isShared = String(selectedCab?.sharingType || "").toLowerCase() === "shared";
+
+  // Keep passengers count in sync with selected seats (shared = 1 per seat, private = 1)
+  const syncPassengersToCount = (count) => {
+    setPassengers((prev) => {
+      const target = Math.max(count, 1);
+      if (target === prev.length) return prev;
+      if (target > prev.length)
+        return [...prev, ...Array(target - prev.length).fill(null).map(() => makePassenger())];
+      return prev.slice(0, target);
+    });
+  };
+
+  const updatePassenger = (idx, field, value) => {
+    setPassengers((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: value };
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (id) {
@@ -224,49 +276,69 @@ export default function CabsBooking() {
     }
   }, [id, dispatch]);
 
-  const handleSeatSelect = (seat) =>
-    setSelectedSeats((prev) =>
-      prev.find((s) => s.seatNumber === seat.seatNumber)
+  const handleSeatSelect = (seat) => {
+    setSelectedSeats((prev) => {
+      const exists = prev.find((s) => s.seatNumber === seat.seatNumber);
+      const next = exists
         ? prev.filter((s) => s.seatNumber !== seat.seatNumber)
-        : [...prev, seat]
-    );
+        : [...prev, seat];
+      // sync passenger forms: shared = 1 per seat, private = 1
+      if (isShared) syncPassengersToCount(next.length);
+      return next;
+    });
+  };
 
   const handleBooking = async () => {
-    if (!passengerDetails.fullName || !passengerDetails.phone) {
-      return popup.error("Please enter your full name and phone number");
-    }
-    if (selectedSeats.length === 0) {
+    if (isShared && selectedSeats.length === 0)
       return popup.error("Please select at least one seat");
+
+    // Validate every passenger
+    for (let i = 0; i < passengers.length; i++) {
+      const p = passengers[i];
+      const suffix = passengers.length > 1 ? ` (Passenger ${i + 1})` : "";
+      if (!p.fullName.trim())
+        return popup.error(`Please enter full name${suffix}`);
+      const mob = p.phone.replace(/[^\d]/g, "");
+      if (!mob || mob.length < 10)
+        return popup.error(`Enter valid 10-digit mobile${suffix}`);
     }
 
     setIsBooking(true);
     try {
+      const primary = passengers[0];
       const seatIds = selectedSeats.map((s) => s._id);
       const data = {
         seats: seatIds,
         carId: id,
-        bookedBy: passengerDetails.fullName,
+        bookedBy: primary.fullName.trim(),
         sharingType: selectedCab.sharingType,
         vehicleType: selectedCab.vehicleType,
-        customerMobile: passengerDetails.phone,
-        customerEmail: passengerDetails.email
+        customerMobile: primary.phone.replace(/[^\d]/g, ""),
+        customerEmail: primary.email.trim(),
+        passengerName: primary.fullName.trim(),
       };
-      const response = await dispatch(bookSeat(data)).unwrap();
-      const payload = response.payload;
-      console.log("Booking response:", payload);
-      if (payload && payload._id) {
-        const bookingId = payload._id.slice(-8).toUpperCase();
-        const totalAmount = selectedSeats.reduce((sum, seat) => sum + (seat.seatPrice || 0), 0) + Math.round(selectedSeats.reduce((sum, seat) => sum + (seat.seatPrice || 0), 0) * 0.05) + 25;
-        
-        popup.success(
-          `🎉 Booking Confirmed!\n\nBooking ID: ${bookingId}\nSeats: ${selectedSeats.map(s => s.seatNumber).join(', ')}\nTotal Paid: ₹${totalAmount}`
-        );
-
-        setSelectedSeats([]);
-        setPassengerDetails({ fullName: "", phone: "", email: "" });
-        // Refetch cab details to show updated seat status
-        dispatch(getCarById(id));
+      // attach full passengers array when >1
+      if (passengers.length > 1) {
+        data.passengers = passengers.map((p) => ({
+          name:   p.fullName.trim(),
+          mobile: p.phone.replace(/[^\d]/g, ""),
+          email:  p.email.trim(),
+        }));
       }
+      const response = await dispatch(bookSeat(data)).unwrap();
+      const bookingRecord = response?.data || response || {};
+      const bookingId =
+        bookingRecord?.bookingId ||
+        bookingRecord?._id ||
+        response?.bookingId ||
+        null;
+      const seatsLabel = selectedSeats.map((s) => s.seatNumber).join(", ");
+      popup.success(
+        `Booking Confirmed!\n${bookingId ? `Booking ID: ${bookingId}` : ""}${seatsLabel ? `\nSeats: ${seatsLabel}` : ""}`.trim()
+      );
+      setSelectedSeats([]);
+      setPassengers([{ ...defaultPrimary }]);
+      dispatch(getCarById(id));
     } catch (error) {
       popup.error(error?.message || "Booking failed. Please try again.");
     } finally {
@@ -285,7 +357,7 @@ export default function CabsBooking() {
     );
   }
 
-  const baseFare = selectedSeats.reduce((sum, seat) => sum + (seat.seatPrice || 0), 0);
+  const baseFare = selectedSeats.reduce((sum, seat) => sum + (toFiniteNumber(seat?.seatPrice) ?? 0), 0);
   const taxes = Math.round(baseFare * 0.05);
   const convenience = selectedSeats.length > 0 ? 25 : 0;
   const totalPrice = baseFare + taxes + convenience;
@@ -357,62 +429,102 @@ export default function CabsBooking() {
               </div>
             </div>
 
-            {/* Passenger Details */}
+            {/* Passenger Details — one form per selected seat (shared) or 1 for private */}
             <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
               <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b border-gray-200">
                 <h3 className="text-lg font-bold text-gray-900">Passenger Details</h3>
-                <p className="text-sm text-gray-600 mt-1">Enter your contact information</p>
+                <p className="text-sm text-gray-600 mt-1">
+                  {isShared && selectedSeats.length > 1
+                    ? `${passengers.length} passenger${passengers.length > 1 ? 's' : ''} — one per seat`
+                    : 'Enter your contact information'}
+                </p>
               </div>
-              <div className="p-6">
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Enter your full name"
-                      value={passengerDetails.fullName}
-                      onChange={(e) => setPassengerDetails({
-                        ...passengerDetails,
-                        fullName: e.target.value
-                      })}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 placeholder-gray-400"
-                    />
-                  </div>
+              <div className="p-6 space-y-4">
+                {passengers.map((p, idx) => (
+                  <div
+                    key={idx}
+                    className={`rounded-xl border p-4 ${
+                      idx === 0
+                        ? 'bg-blue-50/40 border-blue-200'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    {/* Passenger header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${
+                          idx === 0 ? 'bg-blue-600' : 'bg-gray-500'
+                        }`}>{idx + 1}</span>
+                        <span className="text-sm font-bold text-gray-700">
+                          {idx === 0 ? 'Primary Passenger' : `Passenger ${idx + 1}`}
+                          {isShared && selectedSeats[idx] && (
+                            <span className="text-gray-400 font-normal"> · Seat {selectedSeats[idx]?.seatNumber}</span>
+                          )}
+                        </span>
+                      </div>
+                      {idx > 0 && (
+                        <button
+                          onClick={() => setPassengers((prev) => prev.filter((_, i) => i !== idx))}
+                          className="text-gray-400 hover:text-rose-500 transition-colors text-lg leading-none"
+                          aria-label="Remove passenger"
+                        >&times;</button>
+                      )}
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Phone Number *
-                    </label>
-                    <input
-                      type="tel"
-                      placeholder="Enter your phone number"
-                      value={passengerDetails.phone}
-                      onChange={(e) => setPassengerDetails({
-                        ...passengerDetails,
-                        phone: e.target.value
-                      })}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 placeholder-gray-400"
-                    />
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                          Full Name *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Full name"
+                          value={p.fullName}
+                          onChange={(e) => updatePassenger(idx, 'fullName', e.target.value)}
+                          className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition placeholder-gray-300"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                            Mobile *
+                          </label>
+                          <input
+                            type="tel"
+                            placeholder="10-digit mobile"
+                            value={p.phone}
+                            maxLength={15}
+                            onChange={(e) => updatePassenger(idx, 'phone', e.target.value)}
+                            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition placeholder-gray-300"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                            Email
+                          </label>
+                          <input
+                            type="email"
+                            placeholder="email (optional)"
+                            value={p.email}
+                            onChange={(e) => updatePassenger(idx, 'email', e.target.value)}
+                            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition placeholder-gray-300"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
+                ))}
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email Address <span className="text-gray-400">(optional)</span>
-                    </label>
-                    <input
-                      type="email"
-                      placeholder="Enter your email address"
-                      value={passengerDetails.email}
-                      onChange={(e) => setPassengerDetails({
-                        ...passengerDetails,
-                        email: e.target.value
-                      })}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 placeholder-gray-400"
-                    />
-                  </div>
-                </div>
+                {/* Add passenger button — only when more seats selected than current passengers */}
+                {isShared && selectedSeats.length > 1 && passengers.length < selectedSeats.length && (
+                  <button
+                    onClick={() => setPassengers((prev) => [...prev, makePassenger()])}
+                    className="w-full py-2.5 border-2 border-dashed border-blue-300 rounded-xl text-sm font-bold text-blue-600 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                    Add Passenger {passengers.length + 1} of {selectedSeats.length}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -477,8 +589,8 @@ export default function CabsBooking() {
                     {/* Booking Button */}
                     <button
                       onClick={handleBooking}
-                      disabled={isBooking || !selectedSeats.length || !passengerDetails.fullName || !passengerDetails.phone}
-                      className={`w-full py-4 px-6 rounded-xl font-bold text-lg transition-all duration-200 ${isBooking || !selectedSeats.length || !passengerDetails.fullName || !passengerDetails.phone
+                      disabled={isBooking || (isShared && !selectedSeats.length) || !passengers[0]?.fullName || !passengers[0]?.phone}
+                      className={`w-full py-4 px-6 rounded-xl font-bold text-lg transition-all duration-200 ${isBooking || (isShared && !selectedSeats.length) || !passengers[0]?.fullName || !passengers[0]?.phone
                         ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                         : "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105"
                         }`}

@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "HRS",
+    "slug": "restra",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/app-thumb.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "We need your location to show nearby travel options and pickup points.",
+        "NSContactsUsageDescription": "We need contacts access to help with quick traveler details and emergency contact selection.",
+        "NSPhotoLibraryUsageDescription": "We need photo library access so you can upload profile and booking images.",
+        "NSPhotoLibraryAddUsageDescription": "We need permission to save travel-related images to your photo library."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "READ_CONTACTS",
+        "READ_PHONE_STATE",
+        "READ_PHONE_NUMBERS",
+        "POST_NOTIFICATIONS"
+      ],
+      "package": "com.hotelroomsstay.hrs"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      "expo-secure-store",
+      "expo-font",
+      "expo-notifications"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "078ffea3-666e-427e-8ffd-0831ac5ff054"
+      }
+    },
+    "owner": "avverma9"
+  }
+}

@@ -5,26 +5,37 @@ const CarBooking = require("../models/travel/carBooking");
 
 const VALID_RIDE_STATUSES = new Set([
   "AwaitingConfirmation",
-  "AwaitingPickup",
-  "InProgress",
-  "Completed",
+  "Available",
+  "Ride in Progress",
+  "Ride Completed",
   "Cancelled",
   "Failed",
 ]);
+
+// Map old enum values to new ones (migration compatibility)
+const LEGACY_RIDE_STATUS_MAP = {
+  "AwaitingPickup": "Available",
+  "InProgress":     "Ride in Progress",
+  "Completed":      "Ride Completed",
+};
 
 const generateVerificationCode = () =>
   crypto.randomInt(100000, 1000000).toString();
 
 const resolveRideStatus = (booking) => {
+  // Migrate legacy values
+  if (LEGACY_RIDE_STATUS_MAP[booking.rideStatus]) {
+    return LEGACY_RIDE_STATUS_MAP[booking.rideStatus];
+  }
   if (VALID_RIDE_STATUSES.has(booking.rideStatus)) {
     return booking.rideStatus;
   }
 
   switch (booking.bookingStatus) {
     case "Confirmed":
-      return "AwaitingPickup";
+      return "Available";
     case "Completed":
-      return "Completed";
+      return "Ride Completed";
     case "Cancelled":
       return "Cancelled";
     case "Failed":

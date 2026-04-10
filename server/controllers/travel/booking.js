@@ -20,9 +20,9 @@ const BOOKING_STATUS = new Set([
 ]);
 const RIDE_STATUS = new Set([
   "AwaitingConfirmation",
-  "AwaitingPickup",
-  "InProgress",
-  "Completed",
+  "Available",
+  "Ride in Progress",
+  "Ride Completed",
   "Cancelled",
   "Failed",
 ]);
@@ -35,10 +35,10 @@ const BOOKING_STATUS_TRANSITIONS = new Map([
   ["Failed", new Set()],
 ]);
 const RIDE_STATUS_TRANSITIONS = new Map([
-  ["AwaitingConfirmation", new Set(["AwaitingPickup", "Cancelled", "Failed"])],
-  ["AwaitingPickup", new Set(["InProgress", "Cancelled", "Failed"])],
-  ["InProgress", new Set(["Completed", "Failed"])],
-  ["Completed", new Set()],
+  ["AwaitingConfirmation", new Set(["Available", "Cancelled", "Failed"])],
+  ["Available", new Set(["Ride in Progress", "Cancelled", "Failed"])],
+  ["Ride in Progress", new Set(["Ride Completed", "Failed"])],
+  ["Ride Completed", new Set()],
   ["Cancelled", new Set()],
   ["Failed", new Set()],
 ]);
@@ -46,6 +46,8 @@ const ALLOWED_UPDATE_FIELDS = new Set([
   "customerMobile",
   "customerEmail",
   "bookedBy",
+  "passengerName",
+  "passengers",
   "bookingStatus",
   "cancellationReason",
   "assignedDriverId",
@@ -178,9 +180,9 @@ const ensureLifecycleFields = (booking) => {
 
   if (!booking.rideStatus || !RIDE_STATUS.has(booking.rideStatus)) {
     if (booking.bookingStatus === "Confirmed") {
-      booking.rideStatus = "AwaitingPickup";
+      booking.rideStatus = "Available";
     } else if (booking.bookingStatus === "Completed") {
-      booking.rideStatus = "Completed";
+      booking.rideStatus = "Ride Completed";
     } else if (booking.bookingStatus === "Cancelled") {
       booking.rideStatus = "Cancelled";
     } else if (booking.bookingStatus === "Failed") {
@@ -217,10 +219,10 @@ const applyBookingStatusChange = (booking, nextStatus, options = {}) => {
       canTransition(
         RIDE_STATUS_TRANSITIONS,
         booking.rideStatus,
-        "AwaitingPickup",
+        "Available",
       )
     ) {
-      booking.rideStatus = "AwaitingPickup";
+      booking.rideStatus = "Available";
     }
   }
 
@@ -237,7 +239,7 @@ const applyBookingStatusChange = (booking, nextStatus, options = {}) => {
   }
 
   if (nextStatus === "Completed") {
-    booking.rideStatus = "Completed";
+    booking.rideStatus = "Ride Completed";
     booking.rideCompletedAt = booking.rideCompletedAt || now;
   }
 
@@ -256,6 +258,7 @@ exports.bookCar = async (req, res) => {
       customerMobile,
       customerEmail,
       passengerName,
+      passengers,
       paymentMethod,
       paymentId,
       isPaid,
@@ -437,15 +440,19 @@ exports.bookCar = async (req, res) => {
     const resolvedIsPaid =
       resolvedPaymentMode === "offline" ? normalizeBoolean(isPaid) : false;
 
+    // If this is the user's first travel booking, auto-confirm it regardless of payment.
+    const isFirstTimeUser = !(await CarBooking.exists({ userId: normalizedUserId }));
+
     const pickupCode = generateVerificationCode();
     const dropCode = generateVerificationCode();
-    // Offline bookings can be confirmed at creation; online stays Pending until paid.
-    const initialBookingStatus =
-      shouldConfirmOnCreate || (resolvedPaymentMode === "offline" && resolvedIsPaid)
-        ? "Confirmed"
-        : "Pending";
+    // First-time users are auto-confirmed; otherwise follow existing payment/confirm rules.
+    const initialBookingStatus = isFirstTimeUser
+      ? "Confirmed"
+      : shouldConfirmOnCreate || (resolvedPaymentMode === "offline" && resolvedIsPaid)
+      ? "Confirmed"
+      : "Pending";
     const initialRideStatus =
-      initialBookingStatus === "Confirmed" ? "AwaitingPickup" : "AwaitingConfirmation";
+      initialBookingStatus === "Confirmed" ? "Available" : "AwaitingConfirmation";
     const now = new Date();
 
     let newBooking;
@@ -459,6 +466,23 @@ exports.bookCar = async (req, res) => {
         passengerName: String(passengerName || bookedBy || "").trim(),
         customerMobile,
         customerEmail,
+        // Multi-passenger support: build from passengers[] array if provided,
+        // otherwise fall back to single-passenger fields for backward compatibility
+        passengers: (() => {
+          if (Array.isArray(passengers) && passengers.length > 0) {
+            return passengers.map((p) => ({
+              name:   String(p.name   || "").trim(),
+              mobile: String(p.mobile || "").trim(),
+              email:  String(p.email  || "").trim(),
+            }));
+          }
+          // Backward compat: single passenger derived from root fields
+          return [{
+            name:   String(passengerName || bookedBy || "").trim(),
+            mobile: String(customerMobile || "").trim(),
+            email:  String(customerEmail  || "").trim(),
+          }];
+        })(),
         // Pricing
         basePrice: totalSeatPrice,
         gstRate,
@@ -719,7 +743,7 @@ exports.verifyPickupCode = async (req, res) => {
         message: "Only confirmed bookings can verify pickup code",
       });
     }
-    if (booking.rideStatus !== "AwaitingPickup") {
+    if (booking.rideStatus !== "Available") {
       return res.status(400).json({
         message: "Pickup code can only be verified before ride starts",
       });
@@ -728,7 +752,7 @@ exports.verifyPickupCode = async (req, res) => {
       return res.status(400).json({ message: "Invalid pickup code" });
     }
 
-    booking.rideStatus = "InProgress";
+    booking.rideStatus = "Ride in Progress";
     booking.pickupCodeVerifiedAt = new Date();
     booking.rideStartedAt = booking.rideStartedAt || new Date();
     await booking.save();
@@ -775,7 +799,7 @@ exports.verifyDropCode = async (req, res) => {
         message: "Only confirmed bookings can verify drop code",
       });
     }
-    if (booking.rideStatus !== "InProgress") {
+    if (booking.rideStatus !== "Ride in Progress") {
       return res.status(400).json({
         message: "Drop code can only be verified for in-progress rides",
       });
@@ -786,7 +810,7 @@ exports.verifyDropCode = async (req, res) => {
 
     booking.dropCodeVerifiedAt = new Date();
     booking.rideCompletedAt = new Date();
-    booking.rideStatus = "Completed";
+    booking.rideStatus = "Ride Completed";
     booking.bookingStatus = "Completed";
     await booking.save();
     await releaseSeatsForBooking(booking);
@@ -855,17 +879,43 @@ exports.getTravelBookings = async (req, res) => {
 
 exports.updateBooking = async (req, res) => {
   try {
-    const { id, data } = req.body;
-    if (!id) {
+    // Accept two formats:
+    // 1. Nested:  { id: bookingObjectId, data: { field: value, ... } }  (preferred)
+    // 2. Flat:    { bookingId: bookingObjectId, field: value, ... }      (panel legacy)
+    const resolvedId = req.body.id || req.body.bookingId;
+    let data;
+    if (req.body.data && typeof req.body.data === "object" && !Array.isArray(req.body.data)) {
+      data = req.body.data;
+    } else {
+      // Flat format — strip id/bookingId from the payload to get only update fields
+      const { id: _id, bookingId: _bid, ...rest } = req.body;
+      data = rest;
+    }
+
+    if (!resolvedId) {
       return res.status(400).json({ message: "Booking ID is required" });
     }
-    if (!isValidObjectId(id)) {
+    if (!isValidObjectId(resolvedId)) {
       return res.status(400).json({ message: "Invalid Booking ID" });
     }
-    if (!data || typeof data !== "object" || Array.isArray(data)) {
+    if (!data || typeof data !== "object" || Array.isArray(data) || Object.keys(data).length === 0) {
       return res.status(400).json({ message: "Update data is required" });
     }
 
+    // Sanitize passengers array if present
+    if (data.passengers !== undefined) {
+      if (Array.isArray(data.passengers)) {
+        data.passengers = data.passengers.map((p) => ({
+          name:   String(p.name   || "").trim(),
+          mobile: String(p.mobile || "").trim(),
+          email:  String(p.email  || "").trim(),
+        }));
+      } else {
+        delete data.passengers;
+      }
+    }
+
+    const id = resolvedId;
     const requestedFields = Object.keys(data);
     const invalidFields = requestedFields.filter(
       (field) => !ALLOWED_UPDATE_FIELDS.has(field),

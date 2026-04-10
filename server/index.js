@@ -4,6 +4,7 @@ const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const cors = require("cors");
+const path = require("path");
 
 const webSocketHandler = require("./controllers/chatApp/webSocket");
 const routes = require("./routes/index");
@@ -39,6 +40,7 @@ const startServer = () => {
   app.options("*", cors());
   
   app.use(express.json());
+  app.use("/uploads", express.static(path.join(__dirname, "uploads")));
   // Global authentication and route-access control
   app.use(requireAuth);
   app.use(routeAccess);

@@ -15,6 +15,68 @@ const Icons = {
   Users: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
 };
 
+// --- Robust cab helpers (ported from app) ---
+const toFiniteNumber = (value) => { const n = Number(value); return Number.isFinite(n) ? n : null; };
+
+const normalizeBool = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value > 0;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (v === "true" || v === "1" || v === "yes") return true;
+    if (v === "false" || v === "0" || v === "no") return false;
+  }
+  return null;
+};
+
+const isSeatBooked = (seat) => {
+  const direct = normalizeBool(seat?.isBooked ?? seat?.booked ?? seat?.isSeatBooked);
+  if (direct !== null) return direct;
+  const status = String(seat?.status || seat?.seatStatus || "").trim().toLowerCase();
+  if (status.includes("book")) return true;
+  if (status.includes("open") || status.includes("available") || status.includes("vacant")) return false;
+  return false;
+};
+
+const getTotalSeats = (cab) => {
+  const configured = Array.isArray(cab?.seatConfig) ? cab.seatConfig.length : 0;
+  const seater = Number(cab?.seater);
+  const declared = Number.isFinite(seater) && seater > 0 ? seater : 0;
+  return Math.max(declared, configured);
+};
+
+const getBookedSeats = (cab) =>
+  (Array.isArray(cab?.seatConfig) ? cab.seatConfig : []).filter((seat) => isSeatBooked(seat)).length;
+
+const resolveCabFare = (cab) => {
+  const isShared = String(cab?.sharingType || "").toLowerCase() === "shared";
+  const seatPrices = (Array.isArray(cab?.seatConfig) ? cab.seatConfig : [])
+    .map((seat) => toFiniteNumber(seat?.seatPrice))
+    .filter((n) => n !== null && n >= 0);
+  const seatDerivedFare = seatPrices.length ? Math.min(...seatPrices) : null;
+  const candidates = isShared
+    ? [cab?.perPersonCost, cab?.price, seatDerivedFare]
+    : [cab?.price, cab?.perPersonCost, seatDerivedFare];
+  for (const value of candidates) {
+    const numeric = toFiniteNumber(value);
+    if (numeric !== null && numeric >= 0) return numeric;
+  }
+  return null;
+};
+
+const resolveCabBookingState = (cab) => {
+  const isRunning = normalizeBool(cab?.isRunning);
+  if (isRunning === false) return { key: "unavailable", label: "Unavailable", canBook: false };
+  const totalSeats = getTotalSeats(cab);
+  const bookedSeats = getBookedSeats(cab);
+  if (totalSeats > 0 && bookedSeats >= totalSeats) return { key: "fullyBooked", label: "Full", canBook: false };
+  const isAvailable = normalizeBool(cab?.isAvailable);
+  if (isAvailable === false) return { key: "unavailable", label: "Unavailable", canBook: false };
+  const status = String(cab?.runningStatus || "").trim().toLowerCase();
+  if (status.includes("unavailable") || status.includes("not available")) return { key: "unavailable", label: "Unavailable", canBook: false };
+  return { key: "available", label: "Available", canBook: true };
+};
+
 // --- FILTER COMPONENT (All Filters restored) ---
 const FilterPanel = ({ filters, setFilters, options, isOpen, onClose, isMobile }) => {
   
@@ -228,11 +290,11 @@ export default function CarsPage() {
 
   // Derived Options
   const options = useMemo(() => {
-    const prices = cabs.map((c) => c.perPersonCost).filter((p) => p != null);
+    const prices = cabs.map((c) => resolveCabFare(c)).filter((p) => p !== null && p >= 0);
     return {
-      makes: [...new Set(cabs.map((cab) => cab.make))],
-      fuelTypes: [...new Set(cabs.map((cab) => cab.fuelType))],
-      sharingTypes: ["Shared", "Private"], // Hardcoded or derive from DB if available
+      makes: [...new Set(cabs.map((cab) => cab.make))].filter(Boolean),
+      fuelTypes: [...new Set(cabs.map((cab) => cab.fuelType))].filter(Boolean),
+      sharingTypes: ["Shared", "Private"],
       vehicleTypes: ["Car", "Bus", "Bike"],
       priceRange: { min: 0, max: prices.length ? Math.max(...prices) : 3000 },
     };
@@ -268,8 +330,8 @@ export default function CarsPage() {
       if (filters.vehicleType !== "All") result = result.filter(c => c.vehicleType === filters.vehicleType);
       
       // Numeric Filters
-      result = result.filter(c => (c.perPersonCost || 0) <= filters.price);
-      result = result.filter(c => c.seater >= filters.seats);
+      result = result.filter(c => (resolveCabFare(c) ?? 0) <= filters.price);
+      result = result.filter(c => getTotalSeats(c) >= filters.seats);
 
       setFilteredCabs(result);
     }, 300);
@@ -331,8 +393,13 @@ export default function CarsPage() {
              </div>
              
              <div className="space-y-4">
-               {filteredCabs.map(cab => (
-                 <div key={cab._id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex flex-col sm:flex-row gap-5 hover:shadow-xl hover:border-blue-100 transition-all group">
+               {filteredCabs.map(cab => {
+                 const fare = resolveCabFare(cab);
+                 const bookingState = resolveCabBookingState(cab);
+                 const isShared = String(cab.sharingType || "").toLowerCase() === "shared";
+                 const fareLabel = isShared ? "Per Person" : "Fare";
+                 return (
+                 <div key={cab._id} className={`bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex flex-col sm:flex-row gap-5 transition-all group ${bookingState.canBook ? "hover:shadow-xl hover:border-blue-100" : "opacity-75"}`}>
                     {/* Image */}
                     <div className="sm:w-60 h-48 sm:h-auto bg-gray-100 rounded-xl overflow-hidden flex-shrink-0 relative">
                        <img src={cab.images || `https://placehold.co/600x400?text=${cab.make}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Car" />
@@ -340,6 +407,11 @@ export default function CarsPage() {
                            <span className="bg-white/95 backdrop-blur px-2 py-1 rounded-md text-[10px] font-bold uppercase shadow-sm flex items-center gap-1"><Icons.Fuel /> {cab.fuelType}</span>
                            <span className="bg-gray-900 text-white px-2 py-1 rounded-md text-[10px] font-bold uppercase shadow-sm">{cab.vehicleType}</span>
                        </div>
+                       {!bookingState.canBook && (
+                         <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                           <span className="bg-white text-gray-800 text-xs font-bold px-3 py-1.5 rounded-full shadow">{bookingState.label}</span>
+                         </div>
+                       )}
                     </div>
 
                     {/* Content */}
@@ -348,13 +420,18 @@ export default function CarsPage() {
                           <div>
                              <h3 className="font-bold text-lg text-gray-900 group-hover:text-blue-600 transition-colors">{cab.make} {cab.model}</h3>
                              <div className="flex items-center text-xs text-gray-500 mt-1 space-x-2">
-                                <span className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-md"><Icons.Users /> {cab.seats || cab.seater} Seater</span>
+                                <span className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-md"><Icons.Users /> {getTotalSeats(cab)} Seater</span>
                                 <span className="bg-gray-50 px-2 py-1 rounded-md">{cab.sharingType}</span>
+                                {!bookingState.canBook && (
+                                  <span className="bg-rose-50 text-rose-700 border border-rose-100 px-2 py-1 rounded-md font-bold">{bookingState.label}</span>
+                                )}
                              </div>
                           </div>
                           <div className="text-right">
-                             <span className="block text-2xl font-bold text-gray-900">₹{cab.perPersonCost}</span>
-                             <span className="text-[10px] text-gray-400 font-medium uppercase">Per Person</span>
+                             <span className="block text-2xl font-bold text-gray-900">
+                               {fare !== null ? `₹${fare}` : "—"}
+                             </span>
+                             <span className="text-[10px] text-gray-400 font-medium uppercase">{fareLabel}</span>
                           </div>
                        </div>
 
@@ -371,16 +448,24 @@ export default function CarsPage() {
                           </div>
                        </div>
 
-                       <button 
-                         onClick={() => navigate(`/cab-booking/${cab._id}`)}
-                         className="mt-auto w-full bg-gray-900 text-white px-6 py-3 rounded-xl text-sm font-bold shadow-md hover:bg-blue-600 hover:shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+                       <button
+                         onClick={() => bookingState.canBook && navigate(`/cab-booking/${cab._id}`)}
+                         disabled={!bookingState.canBook}
+                         className={`mt-auto w-full px-6 py-3 rounded-xl text-sm font-bold shadow-md flex items-center justify-center gap-2 ${
+                           bookingState.canBook
+                             ? "bg-gray-900 text-white hover:bg-blue-600 hover:shadow-lg active:scale-95 transition-all"
+                             : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                         }`}
                        >
-                         Book This Ride
-                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                         {bookingState.canBook ? "Book This Ride" : bookingState.label}
+                         {bookingState.canBook && (
+                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                         )}
                        </button>
                     </div>
                  </div>
-               ))}
+                 );
+               })}
 
                {filteredCabs.length === 0 && !isLoading && (
                  <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">

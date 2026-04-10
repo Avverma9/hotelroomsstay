@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -10,6 +10,11 @@ import {
 import Breadcrumb from '../../../components/breadcrumb'
 import { clearHotelUpdateStatus, createHotel } from '../../../../redux/slices/admin/hotel'
 import api from '../../../api'
+import { useBedTypes } from '../../../../util/additional-fields/bedTypes'
+import { useHotelCategories } from '../../../../util/additional-fields/hotelCategories'
+import { useHotelAmenities } from '../../../../util/additional-fields/hotelAmenities'
+import { usePropertyTypes } from '../../../../util/additional-fields/propertyTypes'
+import { useRoomTypes } from '../../../../util/additional-fields/roomTypes'
 
 /* ── helpers ── */
 const s = (v) => String(v ?? '').trim()
@@ -150,6 +155,70 @@ function PanelCard({ children, style = {} }) {
   )
 }
 
+function PolicyEditor({ value = '', onChange, placeholder = '', style = {} }) {
+  const [format, setFormat] = useState('bulleted')
+  const taRef = useRef(null)
+
+  const ensurePrefill = (fmt) => {
+    if (!value || String(value).trim() === '') {
+      if (fmt === 'bulleted') onChange('• ')
+      else if (fmt === 'numbered') onChange('1. ')
+      else onChange('')
+      setTimeout(() => taRef.current?.focus(), 0)
+    }
+  }
+
+  useEffect(() => { if (!value || String(value).trim() === '') ensurePrefill(format) }, [])
+
+  const handleFormat = (e) => { const fmt = e.target.value; setFormat(fmt); ensurePrefill(fmt) }
+
+  const onKeyDown = (e) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    const ta = taRef.current
+    if (!ta) return
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    const before = String(value || '').slice(0, start)
+    const after = String(value || '').slice(end)
+
+    if (format === 'bulleted') {
+      const insert = (before.length === 0 || before.charAt(before.length - 1) === '\n') ? '• ' : '\n• '
+      const newVal = before + insert + after
+      onChange(newVal)
+      setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + insert.length }, 0)
+    } else if (format === 'numbered') {
+      const linesBefore = before.split('\n')
+      const prevLine = linesBefore[linesBefore.length - 1] || ''
+      const m = prevLine.match(/^\s*(\d+)[\.\)]\s*/)
+      const nextNum = m ? (parseInt(m[1], 10) + 1) : 1
+      const insert = (before.length === 0 || before.charAt(before.length - 1) === '\n') ? `${nextNum}. ` : `\n${nextNum}. `
+      const newVal = before + insert + after
+      onChange(newVal)
+      setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + insert.length }, 0)
+    } else {
+      const newVal = before + '\n' + after
+      onChange(newVal)
+      setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + 1 }, 0)
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+        <select value={format} onChange={handleFormat} style={{ padding: '6px 8px', fontSize: 12, borderRadius: 6 }}>
+          <option value="bulleted">Bulleted</option>
+          <option value="numbered">Numbered</option>
+          <option value="plain">Plain</option>
+        </select>
+        <span style={{ fontSize: 12, color: '#7a6e5e' }}>Press Enter to add next item</span>
+      </div>
+      <textarea ref={taRef} value={value || ''} placeholder={placeholder} style={{ ...style, minHeight: 80 }}
+        onChange={(e) => onChange(e.target.value)} onKeyDown={onKeyDown} onFocus={onFocus} onBlur={onBlur} />
+    </div>
+  )
+}
+
 /* ── Progress stepper in sidebar ── */
 function StepSidebar({ current, onJump, completedSteps }) {
   return (
@@ -242,6 +311,11 @@ export default function AddNewHotel() {
   const dispatch  = useDispatch()
   const navigate  = useNavigate()
   const { updating } = useSelector((st) => st.hotel)
+  const bedTypeOptions = useBedTypes()
+  const hotelCategoryOptions = useHotelCategories()
+  const roomTypeOptions = useRoomTypes()
+  const hotelAmenityOptions = useHotelAmenities()
+  const propertyTypeOptions = usePropertyTypes()
 
   const [step, setStep]             = useState(0)
   const [completedSteps, setCompletedSteps] = useState(new Set())
@@ -252,6 +326,7 @@ export default function AddNewHotel() {
   const [previews, setPreviews]     = useState([])
   const [amenities, setAmenities]   = useState([])
   const [amenityInput, setAmenityInput] = useState('')
+  const [selectedAmenity, setSelectedAmenity] = useState('')
   const [rooms, setRooms]           = useState([createEmptyRoom()])
   const [foods, setFoods]           = useState([createEmptyFood()])
   const [policies, setPolicies]     = useState(createEmptyPolicies)
@@ -300,6 +375,11 @@ export default function AddNewHotel() {
     const tags = raw.split(',').map((t) => t.trim()).filter(Boolean)
     const unique = tags.filter((t) => !amenities.includes(t))
     if (unique.length) setAmenities((p) => [...p, ...unique])
+  }
+  const addSelectedAmenity = () => {
+    if (!selectedAmenity || amenities.includes(selectedAmenity)) return
+    setAmenities((p) => [...p, selectedAmenity])
+    setSelectedAmenity('')
   }
   const handleAmenityKeyDown = (e) => {
     if (e.key === 'Enter' || e.key === ',') {
@@ -405,7 +485,7 @@ export default function AddNewHotel() {
       }
 
       setForm(createEmptyForm()); setImages([]); previews.forEach((u) => URL.revokeObjectURL(u))
-      setPreviews([]); setAmenities([]); setAmenityInput('')
+      setPreviews([]); setAmenities([]); setAmenityInput(''); setSelectedAmenity('')
       setFoods([createEmptyFood()]); setRooms([createEmptyRoom()]); setPolicies(createEmptyPolicies())
       setCompletedSteps(new Set(STEPS.map((s) => s.id)))
       setStatus({ type: 'success', msg: result?.message || `Hotel created! ID: ${hotelId}` })
@@ -443,10 +523,24 @@ export default function AddNewHotel() {
               <input value={form.hotelOwnerName} onChange={set('hotelOwnerName')} placeholder="Rahul Sharma" style={inp} onFocus={onFocus} onBlur={onBlur} />
             </Field>
             <Field label="Property Type">
-              <input value={form.propertyType} onChange={set('propertyType')} placeholder="Hotel · Resort · Villa · Boutique" style={inp} onFocus={onFocus} onBlur={onBlur} />
+              <select value={form.propertyType} onChange={set('propertyType')} style={{ ...inp, cursor: 'pointer' }} onFocus={onFocus} onBlur={onBlur}>
+                <option value="">Select property type</option>
+                {propertyTypeOptions.map((option, index) => (
+                  <option key={option?._id || option?.name || index} value={option?.name || ''}>
+                    {option?.name || 'Unnamed property type'}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Hotel Category">
-              <input value={form.hotelCategory} onChange={set('hotelCategory')} placeholder="Luxury · Business · Budget · Heritage" style={inp} onFocus={onFocus} onBlur={onBlur} />
+              <select value={form.hotelCategory} onChange={set('hotelCategory')} style={{ ...inp, cursor: 'pointer' }} onFocus={onFocus} onBlur={onBlur}>
+                <option value="">Select hotel category</option>
+                {hotelCategoryOptions.map((option, index) => (
+                  <option key={option?._id || option?.name || index} value={option?.name || ''}>
+                    {option?.name || 'Unnamed hotel category'}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Number of Rooms">
               <input type="number" value={form.numRooms} onChange={set('numRooms')} placeholder="50" style={inp} onFocus={onFocus} onBlur={onBlur} />
@@ -566,6 +660,44 @@ export default function AddNewHotel() {
           </div>
         )}
 
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+          <select
+            value={selectedAmenity}
+            onChange={(e) => setSelectedAmenity(e.target.value)}
+            style={{ ...inp, flex: 1, cursor: 'pointer' }}
+            onFocus={onFocus}
+            onBlur={onBlur}
+          >
+            <option value="">Select amenity from additional fields</option>
+            {hotelAmenityOptions
+              .filter((item) => item?.name && !amenities.includes(item.name))
+              .map((item) => (
+                <option key={item._id || item.name} value={item.name}>
+                  {item.name}
+                </option>
+              ))}
+          </select>
+          <button
+            type="button"
+            onClick={addSelectedAmenity}
+            disabled={!selectedAmenity}
+            style={{
+              padding: '11px 20px',
+              background: selectedAmenity ? '#0f172a' : '#cbd5e1',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              cursor: selectedAmenity ? 'pointer' : 'not-allowed',
+              fontFamily: "'Roboto', sans-serif",
+              fontSize: 11,
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            + Add Selected
+          </button>
+        </div>
+
         <div style={{ display: 'flex', gap: 10, marginBottom: 22 }}>
           <input value={amenityInput} onChange={(e) => setAmenityInput(e.target.value)}
             onKeyDown={handleAmenityKeyDown}
@@ -670,7 +802,8 @@ export default function AddNewHotel() {
               { label: 'Payment Mode', key: 'paymentMode' },
             ].map(({ label, key }) => (
               <Field key={key} label={label}>
-                <input value={policies[key]} onChange={setPolicy(key)} placeholder={label} style={inp} onFocus={onFocus} onBlur={onBlur} />
+                <PolicyEditor value={policies[key] || ''} onChange={(v) => setPolicies((p) => ({ ...p, [key]: v }))}
+                  placeholder={label} style={{ ...inp, padding: '12px' }} />
               </Field>
             ))}
           </div>
@@ -750,10 +883,36 @@ export default function AddNewHotel() {
             </div>
             <div style={g2}>
               <Field label="Room Type" required>
-                <input value={room.type} onChange={(e) => setRoomField(ri, 'type', e.target.value)} placeholder="Deluxe, Suite, Premium, Standard…" style={inp} onFocus={onFocus} onBlur={onBlur} />
+                <select
+                  value={room.type}
+                  onChange={(e) => setRoomField(ri, 'type', e.target.value)}
+                  style={{ ...inp, cursor: 'pointer' }}
+                  onFocus={onFocus}
+                  onBlur={onBlur}
+                >
+                  <option value="">Select room type</option>
+                  {roomTypeOptions.map((item, index) => (
+                    <option key={item?._id || item?.name || index} value={item?.name || ''}>
+                      {item?.name || 'Unnamed room type'}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="Bed Type">
-                <input value={room.bedTypes} onChange={(e) => setRoomField(ri, 'bedTypes', e.target.value)} placeholder="King, Twin, Double…" style={inp} onFocus={onFocus} onBlur={onBlur} />
+                <select
+                  value={room.bedTypes}
+                  onChange={(e) => setRoomField(ri, 'bedTypes', e.target.value)}
+                  style={{ ...inp, cursor: 'pointer' }}
+                  onFocus={onFocus}
+                  onBlur={onBlur}
+                >
+                  <option value="">Select bed type</option>
+                  {bedTypeOptions.map((item, index) => (
+                    <option key={item?._id || item?.name || index} value={item?.name || ''}>
+                      {item?.name || 'Unnamed bed type'}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="Price / Night (₹)" required>
                 <input type="number" value={room.price} onChange={(e) => setRoomField(ri, 'price', e.target.value)} placeholder="2999" style={inp} onFocus={onFocus} onBlur={onBlur} />

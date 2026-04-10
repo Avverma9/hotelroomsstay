@@ -8,6 +8,8 @@ import {
   ChevronRight, ChevronLeft, Eye,
 } from 'lucide-react'
 import baseURL from '../../utils/baseURL'
+import { useHotelCategories } from '../../utils/additional-fields/hotelCategories'
+import { usePropertyTypes } from '../../utils/additional-fields/propertyTypes'
 
 /* ── helpers ── */
 const s = (v) => String(v ?? '').trim()
@@ -235,6 +237,8 @@ function StepSidebar({ current, onJump, completedSteps }) {
 /* ── Main component ── */
 export default function HotelAdd() {
   const navigate = useNavigate()
+  const hotelCategoryOptions = useHotelCategories()
+  const propertyTypeOptions = usePropertyTypes()
 
   const [step, setStep]             = useState(0)
   const [completedSteps, setCompletedSteps] = useState(new Set())
@@ -431,10 +435,24 @@ export default function HotelAdd() {
               <input value={form.hotelOwnerName} onChange={set('hotelOwnerName')} placeholder="Rahul Sharma" style={inp} onFocus={onFocus} onBlur={onBlur} />
             </Field>
             <Field label="Property Type">
-              <input value={form.propertyType} onChange={set('propertyType')} placeholder="Hotel · Resort · Villa · Boutique" style={inp} onFocus={onFocus} onBlur={onBlur} />
+              <select value={form.propertyType} onChange={set('propertyType')} style={{ ...inp, cursor: 'pointer' }} onFocus={onFocus} onBlur={onBlur}>
+                <option value="">Select property type</option>
+                {propertyTypeOptions.map((option, index) => (
+                  <option key={option?._id || option?.name || index} value={option?.name || ''}>
+                    {option?.name || 'Unnamed property type'}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Hotel Category">
-              <input value={form.hotelCategory} onChange={set('hotelCategory')} placeholder="Luxury · Business · Budget · Heritage" style={inp} onFocus={onFocus} onBlur={onBlur} />
+              <select value={form.hotelCategory} onChange={set('hotelCategory')} style={{ ...inp, cursor: 'pointer' }} onFocus={onFocus} onBlur={onBlur}>
+                <option value="">Select hotel category</option>
+                {hotelCategoryOptions.map((option, index) => (
+                  <option key={option?._id || option?.name || index} value={option?.name || ''}>
+                    {option?.name || 'Unnamed hotel category'}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Number of Rooms">
               <input type="number" value={form.numRooms} onChange={set('numRooms')} placeholder="50" style={inp} onFocus={onFocus} onBlur={onBlur} />

@@ -157,7 +157,7 @@ async function markBookingPaid(type, booking, { transactionId } = {}) {
       booking.paymentId = transactionId || "";
       if (booking.bookingStatus === "Pending") {
         booking.bookingStatus = "Confirmed";
-        booking.rideStatus = "AwaitingPickup";
+        booking.rideStatus = "Available";
         booking.confirmedAt = now;
       }
       break;
@@ -195,7 +195,7 @@ async function markBookingOfflinePaid(type, booking, { collectedBy } = {}) {
       booking.paymentId = String(collectedBy || "offline").trim();
       if (booking.bookingStatus === "Pending") {
         booking.bookingStatus = "Confirmed";
-        booking.rideStatus = "AwaitingPickup";
+        booking.rideStatus = "Available";
         booking.confirmedAt = now;
       }
       break;

@@ -495,7 +495,6 @@ const getPartnersById = async (req, res) => {
       },
       {
         $project: {
-          password: 0,
           resetOtp: 0,
           otpExpiry: 0,
         },

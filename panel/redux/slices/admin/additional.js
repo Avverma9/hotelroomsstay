@@ -62,6 +62,8 @@ const initialState = {
   bedTypes: createCollectionState(),
   roomTypes: createCollectionState(),
   amenities: createCollectionState(),
+  hotelCategories: createCollectionState(),
+  propertyTypes: createCollectionState(),
   roles: createCollectionState(),
   tourThemes: createCollectionState(),
   feedback: '',
@@ -199,6 +201,78 @@ export const addAmenity = createAsyncThunk(
       return getSingleItem(response.data) || normalizeItem({ name })
     } catch (error) {
       return rejectWithValue(handleError(error, 'Failed to add amenity.'))
+    }
+  },
+)
+
+export const getHotelCategories = createAsyncThunk(
+  'additional/getHotelCategories',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/additional/get-hotel-categories')
+      return normalizeList(response.data)
+    } catch (error) {
+      return rejectWithValue(handleError(error, 'Failed to fetch hotel categories.'))
+    }
+  },
+)
+
+export const addHotelCategory = createAsyncThunk(
+  'additional/addHotelCategory',
+  async (name, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/additional/add-hotel-category', { name })
+      return getSingleItem(response.data) || normalizeItem({ name })
+    } catch (error) {
+      return rejectWithValue(handleError(error, 'Failed to add hotel category.'))
+    }
+  },
+)
+
+export const deleteHotelCategory = createAsyncThunk(
+  'additional/deleteHotelCategory',
+  async (id, { rejectWithValue }) => {
+    try {
+      await api.delete(`/additional/delete-hotel-category/${id}`)
+      return id
+    } catch (error) {
+      return rejectWithValue(handleError(error, 'Failed to delete hotel category.'))
+    }
+  },
+)
+
+export const getPropertyTypes = createAsyncThunk(
+  'additional/getPropertyTypes',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/additional/get-property-types')
+      return normalizeList(response.data)
+    } catch (error) {
+      return rejectWithValue(handleError(error, 'Failed to fetch property types.'))
+    }
+  },
+)
+
+export const addPropertyType = createAsyncThunk(
+  'additional/addPropertyType',
+  async (name, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/additional/add-property-type', { name })
+      return getSingleItem(response.data) || normalizeItem({ name })
+    } catch (error) {
+      return rejectWithValue(handleError(error, 'Failed to add property type.'))
+    }
+  },
+)
+
+export const deletePropertyType = createAsyncThunk(
+  'additional/deletePropertyType',
+  async (id, { rejectWithValue }) => {
+    try {
+      await api.delete(`/additional/delete-property-type/${id}`)
+      return id
+    } catch (error) {
+      return rejectWithValue(handleError(error, 'Failed to delete property type.'))
     }
   },
 )
@@ -471,6 +545,74 @@ const additionalSlice = createSlice({
       })
       .addCase(deleteAmenity.rejected, (state, action) => {
         setRejected(state, 'amenities', 'deleting', action)
+      })
+      .addCase(getHotelCategories.pending, (state) => {
+        setPending(state, 'hotelCategories', 'loading')
+      })
+      .addCase(getHotelCategories.fulfilled, (state, action) => {
+        state.hotelCategories.loading = false
+        state.hotelCategories.items = action.payload
+      })
+      .addCase(getHotelCategories.rejected, (state, action) => {
+        setRejected(state, 'hotelCategories', 'loading', action)
+      })
+      .addCase(addHotelCategory.pending, (state) => {
+        setPending(state, 'hotelCategories', 'saving')
+        state.feedback = ''
+      })
+      .addCase(addHotelCategory.fulfilled, (state, action) => {
+        state.hotelCategories.saving = false
+        state.hotelCategories.items = upsertItem(state.hotelCategories.items, action.payload)
+        state.feedback = 'Hotel category added successfully.'
+      })
+      .addCase(addHotelCategory.rejected, (state, action) => {
+        setRejected(state, 'hotelCategories', 'saving', action)
+      })
+      .addCase(deleteHotelCategory.pending, (state) => {
+        setPending(state, 'hotelCategories', 'deleting')
+        state.feedback = ''
+      })
+      .addCase(deleteHotelCategory.fulfilled, (state, action) => {
+        state.hotelCategories.deleting = false
+        state.hotelCategories.items = removeItem(state.hotelCategories.items, action.payload)
+        state.feedback = 'Hotel category deleted successfully.'
+      })
+      .addCase(deleteHotelCategory.rejected, (state, action) => {
+        setRejected(state, 'hotelCategories', 'deleting', action)
+      })
+      .addCase(getPropertyTypes.pending, (state) => {
+        setPending(state, 'propertyTypes', 'loading')
+      })
+      .addCase(getPropertyTypes.fulfilled, (state, action) => {
+        state.propertyTypes.loading = false
+        state.propertyTypes.items = action.payload
+      })
+      .addCase(getPropertyTypes.rejected, (state, action) => {
+        setRejected(state, 'propertyTypes', 'loading', action)
+      })
+      .addCase(addPropertyType.pending, (state) => {
+        setPending(state, 'propertyTypes', 'saving')
+        state.feedback = ''
+      })
+      .addCase(addPropertyType.fulfilled, (state, action) => {
+        state.propertyTypes.saving = false
+        state.propertyTypes.items = upsertItem(state.propertyTypes.items, action.payload)
+        state.feedback = 'Property type added successfully.'
+      })
+      .addCase(addPropertyType.rejected, (state, action) => {
+        setRejected(state, 'propertyTypes', 'saving', action)
+      })
+      .addCase(deletePropertyType.pending, (state) => {
+        setPending(state, 'propertyTypes', 'deleting')
+        state.feedback = ''
+      })
+      .addCase(deletePropertyType.fulfilled, (state, action) => {
+        state.propertyTypes.deleting = false
+        state.propertyTypes.items = removeItem(state.propertyTypes.items, action.payload)
+        state.feedback = 'Property type deleted successfully.'
+      })
+      .addCase(deletePropertyType.rejected, (state, action) => {
+        setRejected(state, 'propertyTypes', 'deleting', action)
       })
       .addCase(getRole.pending, (state) => {
         setPending(state, 'roles', 'loading')
