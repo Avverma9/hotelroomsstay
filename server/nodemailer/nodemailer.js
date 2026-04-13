@@ -234,6 +234,8 @@ const generateBookingHtml = (data) => {
   const numRooms = data.numRooms || 1;
   const checkIn = data.checkInDate ? format(new Date(data.checkInDate), "dd MMM yyyy") : "N/A";
   const checkOut = data.checkOutDate ? format(new Date(data.checkOutDate), "dd MMM yyyy") : "N/A";
+  const isPending = String(data.bookingStatus || "").toLowerCase() === "pending";
+  const pendingReason = data.pendingReason || null;
   
   const roomTypes = Array.isArray(data.roomDetails)
     ? data.roomDetails.map((room) => room.type || room.roomType || "Standard Room").join(", ")
@@ -242,8 +244,23 @@ const generateBookingHtml = (data) => {
   const bookingContent = `
     <p style="font-size: 15px; color: #333333; margin: 0 0 30px 0; line-height: 1.8;">
       Dear <strong>${userName}</strong>,<br><br>
-      We are delighted to confirm your upcoming reservation. We eagerly anticipate your arrival and remain at your disposal to ensure a truly memorable stay. Please review the details of your booking below.
+      ${isPending
+        ? `Thank you for your booking. Your reservation is currently <strong style="color:#b45309;">Pending Review</strong>. Our team will review and confirm shortly.`
+        : `We are delighted to confirm your upcoming reservation. We eagerly anticipate your arrival and remain at your disposal to ensure a truly memorable stay. Please review the details of your booking below.`
+      }
     </p>
+
+    ${isPending && pendingReason ? `
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 25px; border-radius: 4px; overflow: hidden;">
+      <tr>
+        <td style="background-color: #fffbeb; border: 1px solid #fde68a; padding: 16px 20px;">
+          <p style="margin: 0 0 6px 0; font-family: Georgia, 'Times New Roman', serif; font-size: 12px; color: #b45309; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;">⚠ Pending Reason</p>
+          <p style="margin: 0; font-size: 14px; color: #92400e; line-height: 1.6;">${pendingReason}</p>
+          <p style="margin: 8px 0 0 0; font-size: 12px; color: #b45309;">If your booking is not confirmed within 2 hours, it will be automatically cancelled.</p>
+        </td>
+      </tr>
+    </table>
+    ` : ""}
 
     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 35px; border-top: 1px solid #1a1a1a; border-bottom: 1px solid #1a1a1a;">
       <tr>
@@ -303,7 +320,7 @@ const generateBookingHtml = (data) => {
   `;
 
   return buildLuxuryEmailTemplate({
-    title: "Reservation Confirmation",
+    title: isPending ? "Booking Pending Review" : "Reservation Confirmation",
     content: bookingContent,
     hotelName,
   });

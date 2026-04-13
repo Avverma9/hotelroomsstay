@@ -9,6 +9,7 @@ const path = require("path");
 const webSocketHandler = require("./controllers/chatApp/webSocket");
 const routes = require("./routes/index");
 const connectDB = require("./config/db");
+const { startAutoCancelJob } = require("./jobs/autoCancelPendingBookings");
 const mailerRoutes = require("./nodemailer/routes");
 const setupChatRoutes = require("./routes/chatApp/chatAppRoutes");
 const requireAuth = require("./authentication/requireAuth");
@@ -48,7 +49,10 @@ const startServer = () => {
   app.use("/mail", mailerRoutes);
 
   connectDB()
-    .then(() => console.log(`Database connected - PID ${process.pid}`))
+    .then(() => {
+      console.log(`Database connected - PID ${process.pid}`);
+      startAutoCancelJob();
+    })
     .catch((err) => console.error("Database connection error:", err));
 
   webSocketHandler(io);

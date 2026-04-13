@@ -19,6 +19,7 @@ const users = new mongoose.Schema(
     email: { type: String, required: false },
     mobile: { type: String, required: false },
     password: { type: String, required: false },
+    refreshToken: { type: String, default: null },
   },
   { timestamps: true },
 );

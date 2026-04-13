@@ -73,6 +73,7 @@ const dashboardUser = new mongoose.Schema(
         default: [],
       },
     },
+    refreshToken: { type: String, default: null },
   },
   { timestamps: true },
 );

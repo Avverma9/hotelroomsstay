@@ -11,6 +11,7 @@ import {
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
@@ -21,10 +22,10 @@ import Header from "../components/Header";
 const FILTERS = ["All", "Car", "Bus", "Shared", "Private"];
 
 const FILTER_ICONS = {
-  All: "grid",
+  All: "view-grid",
   Car: "car",
   Bus: "bus",
-  Shared: "users",
+  Shared: "account-group",
   Private: "lock",
 };
 
@@ -174,9 +175,9 @@ const FilterPill = ({ label, active, onPress }) => (
       gap: 5,
     }}
   >
-    <Feather
-      name={FILTER_ICONS[label] || "circle"}
-      size={11}
+    <MaterialCommunityIcons
+      name={FILTER_ICONS[label] || "circle-outline"}
+      size={12}
       color={active ? "#f59e0b" : "#64748b"}
     />
     <Text
@@ -257,6 +258,7 @@ const FilterInput = ({ label, value, onChangeText, placeholder, keyboardType }) 
 
 export default function Cabs({ navigation }) {
   const dispatch = useDispatch();
+  const tabBarHeight = useBottomTabBarHeight();
   const { items: cabItems, status, error } = useSelector((s) => s.cab || {});
 
   const [route, setRoute] = useState({ pickup: "", drop: "" });
@@ -358,7 +360,7 @@ export default function Cabs({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#f8fafc" }} edges={["left", "right", "bottom"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#f8fafc" }} edges={["left", "right"]}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
       {/* ── HEADER ─────────────────────────────────────────── */}
@@ -375,7 +377,7 @@ export default function Cabs({ navigation }) {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: 36 }}
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 16 }}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[1]}
       >

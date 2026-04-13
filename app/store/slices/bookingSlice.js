@@ -178,6 +178,8 @@ const initialState = {
   bookingStatus: "idle",
   bookingError: null,
   bookingReference: null,
+  createdBookingStatus: null,
+  createdBookingPendingReason: null,
 
   couponStatus: "idle",
   couponError: null,
@@ -206,6 +208,8 @@ const bookingSlice = createSlice({
       state.bookingStatus = "idle";
       state.bookingError = null;
       state.bookingReference = null;
+      state.createdBookingStatus = null;
+      state.createdBookingPendingReason = null;
     },
     resetCoupon(state) {
       state.couponStatus = "idle";
@@ -250,7 +254,10 @@ const bookingSlice = createSlice({
       })
       .addCase(createBooking.fulfilled, (state, action) => {
         state.bookingStatus = "succeeded";
-        state.bookingReference = action.payload?.bookingId || action.payload?.data?.bookingId || null;
+        const payload = action.payload?.data || action.payload;
+        state.bookingReference = payload?.bookingId || null;
+        state.createdBookingStatus = payload?.bookingStatus || null;
+        state.createdBookingPendingReason = payload?.pendingReason || null;
       })
       .addCase(createBooking.rejected, (state, action) => {
         state.bookingStatus = "failed";

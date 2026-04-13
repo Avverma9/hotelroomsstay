@@ -39,6 +39,7 @@ const clearAuthStorage = () => {
   localStorage.removeItem('isSignedIn');
   localStorage.removeItem('rsUserId');
   localStorage.removeItem('rsToken');
+  localStorage.removeItem('rsRefreshToken');
   localStorage.removeItem('roomsstayUserEmail');
   localStorage.removeItem('rsUserMobile');
   localStorage.removeItem('rsUserName');
@@ -97,6 +98,16 @@ const apiClient = axios.create({
     'Accept': 'application/json',
   },
 });
+
+// Refresh token queue management
+let _isRefreshing = false;
+let _refreshSubscribers = [];
+
+const subscribeTokenRefresh = (cb) => _refreshSubscribers.push(cb);
+const onRefreshed = (token) => {
+  _refreshSubscribers.forEach((cb) => cb(token));
+  _refreshSubscribers = [];
+};
 
 // Store reference to update server status
 let updateServerStatus = null;
@@ -180,16 +191,77 @@ apiClient.interceptors.response.use(
 
       // Handle specific status codes
       switch (status) {
-        case 401:
-          clearAuthStorage();
-          if (updateServerStatus) {
-            updateServerStatus(true, 'Session expired. Please login again.');
+        case 401: {
+          const refreshToken = localStorage.getItem('rsRefreshToken');
+          if (!refreshToken || error.config?._retry) {
+            clearAuthStorage();
+            if (updateServerStatus) {
+              updateServerStatus(true, 'Session expired. Please login again.');
+            }
+            redirectToLogin();
+          } else if (_isRefreshing) {
+            return new Promise((resolve, reject) => {
+              subscribeTokenRefresh((newToken) => {
+                if (newToken) {
+                  const retryConfig = { ...error.config, _retry: true };
+                  retryConfig.headers = { ...retryConfig.headers, Authorization: `Bearer ${newToken}` };
+                  resolve(apiClient(retryConfig));
+                } else {
+                  reject(error);
+                }
+              });
+            });
+          } else {
+            _isRefreshing = true;
+            axios.post(`${baseURL}/auth/refresh`, { refreshToken })
+              .then((res) => {
+                const newToken = res.data.rsToken;
+                const newRefreshToken = res.data.refreshToken;
+                localStorage.setItem('authToken', newToken);
+                localStorage.setItem('rsRefreshToken', newRefreshToken);
+                _isRefreshing = false;
+                onRefreshed(newToken);
+                const retryConfig = { ...error.config, _retry: true };
+                retryConfig.headers = { ...retryConfig.headers, Authorization: `Bearer ${newToken}` };
+                return apiClient(retryConfig);
+              })
+              .catch(() => {
+                _isRefreshing = false;
+                onRefreshed(null);
+                clearAuthStorage();
+                redirectToLogin();
+              });
           }
           break;
+        }
         
         case 403:
-          if (shouldRedirectToLogin(error)) {
-            clearAuthStorage();
+          if (shouldRedirectToLogin(error) && !error.config?._retry) {
+            const refreshToken = localStorage.getItem('rsRefreshToken');
+            if (refreshToken && !_isRefreshing) {
+              _isRefreshing = true;
+              return axios.post(`${baseURL}/auth/refresh`, { refreshToken })
+                .then((res) => {
+                  const newToken = res.data.rsToken;
+                  const newRefreshToken = res.data.refreshToken;
+                  localStorage.setItem('authToken', newToken);
+                  localStorage.setItem('rsRefreshToken', newRefreshToken);
+                  _isRefreshing = false;
+                  onRefreshed(newToken);
+                  const retryConfig = { ...error.config, _retry: true };
+                  retryConfig.headers = { ...retryConfig.headers, Authorization: `Bearer ${newToken}` };
+                  return apiClient(retryConfig);
+                })
+                .catch(() => {
+                  _isRefreshing = false;
+                  onRefreshed(null);
+                  clearAuthStorage();
+                  redirectToLogin();
+                  return Promise.reject(error);
+                });
+            } else {
+              clearAuthStorage();
+            }
           }
           if (updateServerStatus) {
             updateServerStatus(true, 'Access denied. You do not have permission.');
@@ -230,7 +302,7 @@ apiClient.interceptors.response.use(
       }
     }
 
-    if (shouldRedirectToLogin(error) && isProtectedRequest(error.config?.url)) {
+    if (shouldRedirectToLogin(error) && isProtectedRequest(error.config?.url) && error.config?._retry) {
       clearAuthStorage();
       redirectToLogin();
     }

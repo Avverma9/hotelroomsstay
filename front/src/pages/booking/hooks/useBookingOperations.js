@@ -206,11 +206,11 @@ const useBookingOperations = ({
       contactName: resolvedContact.name,
       contactEmail: resolvedContact.email,
       contactNumber: resolvedContact.phone,
-      guestDetails: {
+      guestDetails: [{
         fullName: resolvedContact.name,
         email: resolvedContact.email,
         mobile: resolvedContact.phone,
-      },
+      }],
       ...overrides,
     }),
     [
@@ -372,7 +372,16 @@ const useBookingOperations = ({
       showLoader();
       const payload = buildBookingPayload({ pm: "Offline" });
       const response = await createBookingRequest(bookingUserId, hotelId, payload);
-      toast.success("Booking confirmed! Pay at hotel on arrival.");
+      const createdBooking = response?.data || response;
+      if (createdBooking?.bookingStatus === "Pending") {
+        const reason = createdBooking?.pendingReason || "Awaiting manual confirmation";
+        toast(
+          `⚠️ Booking is Pending — ${reason}. We will notify you once confirmed.`,
+          { duration: 6000, icon: "⏳", style: { background: "#fffbeb", color: "#92400e", border: "1px solid #fde68a" } }
+        );
+      } else {
+        toast.success("Booking confirmed! Pay at hotel on arrival.");
+      }
       localStorage.removeItem("discountPrice");
       return { success: true, data: response };
     } catch (error) {
@@ -430,7 +439,7 @@ const useBookingOperations = ({
           order_id: orderId,
           handler: async (response) => {
             try {
-              await createBookingRequest(
+              const onlineBookingRes = await createBookingRequest(
                 bookingUserId,
                 hotelId,
                 buildBookingPayload({
@@ -441,7 +450,16 @@ const useBookingOperations = ({
                   partialAmount: partial ? payableAmount : undefined,
                 })
               );
-              toast.success("Booking confirmed!");
+              const confirmedBooking = onlineBookingRes?.data || onlineBookingRes;
+              if (confirmedBooking?.bookingStatus === "Pending") {
+                const reason = confirmedBooking?.pendingReason || "Awaiting manual confirmation";
+                toast(
+                  `⚠️ Booking is Pending — ${reason}. We will notify you once confirmed.`,
+                  { duration: 6000, icon: "⏳", style: { background: "#fffbeb", color: "#92400e", border: "1px solid #fde68a" } }
+                );
+              } else {
+                toast.success("Booking confirmed!");
+              }
               localStorage.removeItem("discountPrice");
             } catch (bookingError) {
               console.error("Booking error after payment:", bookingError);

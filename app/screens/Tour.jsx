@@ -9,6 +9,7 @@ import {
   Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useDispatch, useSelector } from "react-redux";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -167,6 +168,7 @@ function TourCard({ tour, onPressDetails }) {
 export default function Tour({ navigation }) {
   const nav = navigation || router;
   const dispatch = useDispatch();
+  const tabBarHeight = useBottomTabBarHeight();
   const tourState = useSelector((state) => state.tour);
 
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -322,7 +324,7 @@ export default function Tour({ navigation }) {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["left", "right", "bottom"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["left", "right"]}>
       <Header
         compact
         showHero={false}
@@ -338,7 +340,7 @@ export default function Tour({ navigation }) {
       />
       <ScrollView
         className="flex-1 bg-slate-100"
-        contentContainerStyle={{ paddingBottom: 120 }}
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}
         stickyHeaderIndices={[0]}
       >
         <View className="pt-2 pb-3 bg-slate-100 z-20">

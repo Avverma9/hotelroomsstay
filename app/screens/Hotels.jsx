@@ -25,6 +25,7 @@ import SearchCard from "../components/SearchCard";
 import SkeletonShimmer from "../components/skeleton/SkeletonShimmer";
 import { HotelCardSkeleton } from "../components/skeleton/HotelSkeleton";
 import Header from "../components/Header";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import {
   extractHotelAmenities,
   getAmenityDisplayName,
@@ -41,6 +42,7 @@ const CARD_WIDTH = width - 32;
 
 const Hotels = ({ navigation, route }) => {
   const dispatch = useDispatch();
+  const tabBarHeight = useBottomTabBarHeight();
   const safeParams = route?.params || {};
   const {
     searchQuery,
@@ -694,7 +696,7 @@ const Hotels = ({ navigation, route }) => {
           keyExtractor={(item, index) =>
             String(getHotelUniqueId(item) || `hotel-${index}`)
           }
-          contentContainerStyle={{ paddingTop: 12, paddingBottom: 100 }}
+          contentContainerStyle={{ paddingTop: 12, paddingBottom: tabBarHeight + 20 }}
           showsVerticalScrollIndicator={false}
         />
       )}

@@ -136,7 +136,14 @@ const SearchCard = ({
           label="Guests"
           value={guests}
           onMinus={() => setGuests(Math.max(1, guests - 1))}
-          onPlus={() => setGuests(guests + 1)}
+          onPlus={() => {
+            const newGuests = guests + 1;
+            setGuests(newGuests);
+            // Auto-increment rooms: 1 room per 3 guests
+            if (newGuests > rooms * 3) {
+              setRooms(rooms + 1);
+            }
+          }}
         />
         <View className="w-px bg-slate-200" />
         <CompactCounter

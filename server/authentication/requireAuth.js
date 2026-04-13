@@ -4,6 +4,7 @@ require('dotenv').config();
 const SKIP_PATH_PREFIXES = [
   '/health',
   '/auth/me',
+  '/auth/refresh',
   '/mail',
   '/login/dashboard/user',
   '/forgot-password/dashboard/user',

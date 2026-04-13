@@ -61,11 +61,13 @@ const makeAuthData = (apiData) => {
 
   const sidebarLinks = sessionData.sidebarLinks || apiData?.sidebarLinks || {}
   const token = sessionData.token || apiData?.rsToken || ''
+  const refreshToken = apiData?.refreshToken || ''
 
   return {
     user,
     role: user.role || apiData?.loggedUserRole || '',
     token,
+    refreshToken,
     sidebarLinks,
     message: apiData?.message || '',
     sessionData: {
@@ -102,6 +104,7 @@ const getInitialState = () => ({
   user: savedAuthData?.user || null,
   role: savedAuthData?.role || '',
   token: savedAuthData?.token || '',
+  refreshToken: savedAuthData?.refreshToken || '',
   sidebarLinks: savedAuthData?.sidebarLinks || {},
   sessionData: savedAuthData?.sessionData || null,
   isAuthenticated: Boolean(savedAuthData?.token),
@@ -198,6 +201,29 @@ export const refreshRoutePermissions = createAsyncThunk(
   },
 )
 
+export const refreshAccessToken = createAsyncThunk(
+  'auth/refreshAccessToken',
+  async (_, thunkAPI) => {
+    try {
+      const state = thunkAPI.getState()
+      const refreshToken = state?.auth?.refreshToken || getSavedAuthData()?.refreshToken || ''
+      if (!refreshToken) {
+        return thunkAPI.rejectWithValue('No refresh token')
+      }
+      const response = await api.post('/auth/refresh/dashboard', { refreshToken }, { _skipRefreshIntercept: true })
+      const authData = {
+        token: response.data.rsToken,
+        refreshToken: response.data.refreshToken,
+      }
+      return authData
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || 'Token refresh failed',
+      )
+    }
+  },
+)
+
 export const logoutUser = createAsyncThunk('auth/logoutUser', async () => {
   removeAuthData()
   return true
@@ -216,12 +242,34 @@ const authSlice = createSlice({
       state.user = null
       state.role = ''
       state.token = ''
+      state.refreshToken = ''
       state.sidebarLinks = {}
       state.sessionData = null
       state.isAuthenticated = false
       state.loading = false
       state.message = ''
       state.error = ''
+    },
+    updateToken(state, action) {
+      state.token = action.payload.token
+      if (action.payload.refreshToken) {
+        state.refreshToken = action.payload.refreshToken
+      }
+      const updatedAuthData = {
+        user: state.user,
+        role: state.role,
+        token: action.payload.token,
+        refreshToken: action.payload.refreshToken || state.refreshToken,
+        sidebarLinks: state.sidebarLinks,
+        message: state.message,
+        sessionData: {
+          ...(state.sessionData || {}),
+          token: action.payload.token,
+          user: state.user,
+          sidebarLinks: state.sidebarLinks,
+        },
+      }
+      saveAuthData(updatedAuthData)
     },
   },
   extraReducers: (builder) => {
@@ -236,6 +284,7 @@ const authSlice = createSlice({
         state.user = action.payload.user
         state.role = action.payload.role
         state.token = action.payload.token
+        state.refreshToken = action.payload.refreshToken || ''
         state.sidebarLinks = action.payload.sidebarLinks
         state.sessionData = action.payload.sessionData
         state.isAuthenticated = true
@@ -270,6 +319,7 @@ const authSlice = createSlice({
         state.user = action.payload.user
         state.role = action.payload.role
         state.token = action.payload.token
+        state.refreshToken = action.payload.refreshToken || ''
         state.sidebarLinks = action.payload.sidebarLinks
         state.sessionData = action.payload.sessionData
         state.isAuthenticated = true
@@ -317,6 +367,7 @@ const authSlice = createSlice({
         state.user = null
         state.role = ''
         state.token = ''
+        state.refreshToken = ''
         state.sidebarLinks = {}
         state.sessionData = null
         state.isAuthenticated = false
@@ -324,10 +375,31 @@ const authSlice = createSlice({
         state.message = ''
         state.error = ''
       })
+      .addCase(refreshAccessToken.fulfilled, (state, action) => {
+        state.token = action.payload.token
+        if (action.payload.refreshToken) {
+          state.refreshToken = action.payload.refreshToken
+        }
+        const updatedAuthData = {
+          user: state.user,
+          role: state.role,
+          token: action.payload.token,
+          refreshToken: action.payload.refreshToken || state.refreshToken,
+          sidebarLinks: state.sidebarLinks,
+          message: state.message,
+          sessionData: {
+            ...(state.sessionData || {}),
+            token: action.payload.token,
+            user: state.user,
+            sidebarLinks: state.sidebarLinks,
+          },
+        }
+        saveAuthData(updatedAuthData)
+      })
   },
 })
 
-export const { clearAuthMessage, clearCredentials } = authSlice.actions
+export const { clearAuthMessage, clearCredentials, updateToken } = authSlice.actions
 
 export const selectAuth = (state) => state.auth
 

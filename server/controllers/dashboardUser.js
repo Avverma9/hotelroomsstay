@@ -11,12 +11,29 @@ const {
 } = require("./addtionalSettings/routePermissionService");
 require("dotenv").config(); // Load environment variables
 
-const buildDashboardLoginResponse = async (loggedUser) => {
-  const rsToken = jwt.sign(
-    { id: loggedUser._id, role: loggedUser.role },
+const generateDashboardTokens = (id, role) => {
+  const accessToken = jwt.sign(
+    { id, role },
     process.env.JWT_SECRET,
-    { expiresIn: "24h" },
+    { expiresIn: "15m" },
   );
+  const refreshToken = jwt.sign(
+    { id, role },
+    process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+    { expiresIn: "2d" },
+  );
+  return { accessToken, refreshToken };
+};
+
+const buildDashboardLoginResponse = async (loggedUser) => {
+  const { accessToken: rsToken, refreshToken } = generateDashboardTokens(
+    loggedUser._id,
+    loggedUser.role,
+  );
+
+  // Persist refresh token
+  loggedUser.refreshToken = refreshToken;
+  await loggedUser.save();
 
   let sidebarLinks = {};
   try {
@@ -31,7 +48,7 @@ const buildDashboardLoginResponse = async (loggedUser) => {
   const userSession = {
     token: rsToken,
     tokenType: "Bearer",
-    expiresIn: "24h",
+    expiresIn: "15m",
     user: {
       id: loggedUser._id,
       role: loggedUser.role,
@@ -57,6 +74,7 @@ const buildDashboardLoginResponse = async (loggedUser) => {
     loggedUserName: loggedUser.name,
     loggedUserEmail: loggedUser.email,
     rsToken,
+    refreshToken,
     sidebarLinks,
     routePermissions: userSession.routePermissions,
     sessionData: userSession,
@@ -770,6 +788,39 @@ const filterPartner = async (req, res) => {
   }
 };
 
+const refreshDashboardToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      return res.status(401).json({ message: "Refresh token required" });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(
+        refreshToken,
+        process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+      );
+    } catch (err) {
+      return res.status(403).json({ message: "Invalid or expired refresh token" });
+    }
+
+    const user = await Dashboard.findOne({ _id: decoded.id, refreshToken });
+    if (!user) {
+      return res.status(403).json({ message: "Invalid or expired refresh token" });
+    }
+
+    const { accessToken, refreshToken: newRefreshToken } = generateDashboardTokens(user._id, user.role);
+    user.refreshToken = newRefreshToken;
+    await user.save();
+
+    return res.status(200).json({ rsToken: accessToken, refreshToken: newRefreshToken });
+  } catch (error) {
+    console.error("refreshDashboardToken error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -783,5 +834,6 @@ module.exports = {
   getPartnersById,
   filterPartner,
   forgotPassword,
-  changePassword
+  changePassword,
+  refreshDashboardToken,
 };

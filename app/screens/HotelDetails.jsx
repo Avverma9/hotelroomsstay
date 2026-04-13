@@ -224,7 +224,7 @@ const HotelDetails = ({ navigation, route }) => {
   } = route?.params || {};
 
   const { selectedHotel: hotel, selectedHotelLoading: loading, selectedHotelError: error } = useSelector((state) => state.hotel);
-  const { bookingStatus, bookingError, monthlyData, gstData, couponStatus, couponError, discountAmount, appliedCoupon, couponResult } = useSelector((state) => state.booking);
+  const { bookingStatus, bookingError, monthlyData, gstData, couponStatus, couponError, discountAmount, appliedCoupon, couponResult, createdBookingStatus, createdBookingPendingReason } = useSelector((state) => state.booking);
   const userState = useSelector((state) => state.user);
   const user = userState?.user || userState?.data || null;
 
@@ -272,10 +272,20 @@ const HotelDetails = ({ navigation, route }) => {
   }, [dispatch, hotelId]);
 
   useEffect(() => {
-    if ((user?.userName || user?.name) && !guestName) setGuestName(user?.userName || user?.name);
-    if (user?.email && !guestEmail) setGuestEmail(user.email);
-    if ((user?.mobile || user?.phone) && !guestPhone) setGuestPhone(user?.mobile || user?.phone);
+    if (!user) return;
+    setGuestName(user?.userName || user?.name || "");
+    setGuestEmail(user?.email || "");
+    setGuestPhone(user?.mobile || user?.phone || "");
   }, [user]);
+
+  // Pre-fill guest details from logged-in user each time the booking modal opens
+  useEffect(() => {
+    if (bookingModalVisible && user) {
+      setGuestName(user?.userName || user?.name || "");
+      setGuestEmail(user?.email || "");
+      setGuestPhone(user?.mobile || user?.phone || "");
+    }
+  }, [bookingModalVisible]);
 
   const getRoomId = useCallback((room) =>
     room?.id ?? room?._id ?? room?.roomId ?? room?.roomID ?? room?.hotelRoomId ?? room?.typeId ??
@@ -502,9 +512,27 @@ const HotelDetails = ({ navigation, route }) => {
   }, [navigation]);
 
   useEffect(() => {
-    if (bookingStatus === "succeeded") { setBookingModalVisible(false); dispatch(resetBookingState()); showSuccess(paymentMode !== "offline" ? "Booking Submitted" : "Booking Confirmed", paymentMode !== "offline" ? "Your booking is pending. Please complete payment to confirm." : "Your booking is confirmed!", { onPrimary: navigateToHomeScreen }); }
+    if (bookingStatus === "succeeded") {
+      setBookingModalVisible(false);
+      dispatch(resetBookingState());
+      const isActuallyPending = createdBookingStatus === "Pending";
+      if (isActuallyPending) {
+        const reason = createdBookingPendingReason || "Awaiting manual confirmation";
+        showSuccess(
+          "Booking Submitted (Pending)",
+          `Your booking is pending review.\n\nReason: ${reason}\n\nWe will notify you once confirmed. If not confirmed within 2 hours, it will be auto-cancelled.`,
+          { onPrimary: navigateToHomeScreen }
+        );
+      } else {
+        showSuccess(
+          paymentMode !== "offline" ? "Booking Submitted" : "Booking Confirmed",
+          paymentMode !== "offline" ? "Your booking is pending payment. Please complete payment to confirm." : "Your booking is confirmed!",
+          { onPrimary: navigateToHomeScreen }
+        );
+      }
+    }
     if (bookingStatus === "failed") { showError("Booking Failed", String(bookingError?.message || bookingError || "Something went wrong.")); dispatch(resetBookingState()); }
-  }, [bookingStatus, bookingError, dispatch, navigateToHomeScreen, showError, showSuccess]);
+  }, [bookingStatus, bookingError, createdBookingStatus, createdBookingPendingReason, dispatch, navigateToHomeScreen, showError, showSuccess]);
 
   const openCheckIn = () => { setDateModalTarget("in"); setCalendarBase(new Date(checkInDate)); setShowDateModal(true); };
   const openCheckOut = () => { setDateModalTarget("out"); setCalendarBase(new Date(checkOutDate)); setShowDateModal(true); };
@@ -544,7 +572,7 @@ const HotelDetails = ({ navigation, route }) => {
     if (guestsCount > roomsCount * MAX_GUESTS_PER_ROOM) { showError("Guest Limit Exceeded", `Only ${MAX_GUESTS_PER_ROOM} guests are allowed per room.`); return; }
     const userId = await getUserId(); if (!userId) { showError("Login Required", "Please login to continue booking."); return; }
     const sp = parseNumber(selectedRoomData?.__pricing?.nightlyPrice ?? getRoomBasePrice(selectedRoomData));
-    dispatch(createBooking({ userId: String(userId), hotelId: String(hotelId), checkInDate: toDateOnly(checkInDate).toISOString(), checkOutDate: toDateOnly(checkOutDate).toISOString(), guests: guestsCount, numRooms: roomsCount, guestDetails: { fullName: name, mobile: phone, email }, foodDetails: [], roomDetails: [{ roomId: String(selectedRoomId), type: String(selectedRoomData?.name || selectedRoomData?.type || "Room"), bedTypes: String(selectedRoomData?.bedTypes || selectedRoomData?.bedType || ""), price: sp }], pm: paymentMode === "offline" ? "offline" : "online", bookingSource: "app", bookingStatus: paymentMode !== "offline" ? "Pending" : "Confirmed", ...(paymentMode === "online_partial" ? { advancePercent: 25 } : {}), couponCode: appliedCoupon || undefined, discountPrice: pricing.discount || 0, hotelDetails: { hotelName: basicInfo?.name || hotel?.hotelName || "", hotelEmail: basicInfo?.email || hotel?.email || hotel?.hotelEmail || "", hotelCity: basicInfo?.location?.city || hotel?.hotelCity || "", hotelOwnerName: basicInfo?.ownerName || hotel?.hotelOwnerName || hotel?.createdBy?.user || "", destination: basicInfo?.location?.city || basicInfo?.location?.state || hotel?.destination || "" } }));
+    dispatch(createBooking({ userId: String(userId), hotelId: String(hotelId), checkInDate: toDateOnly(checkInDate).toISOString(), checkOutDate: toDateOnly(checkOutDate).toISOString(), guests: guestsCount, numRooms: roomsCount, guestDetails: [{ fullName: name, mobile: phone, email }], foodDetails: [], roomDetails: [{ roomId: String(selectedRoomId), type: String(selectedRoomData?.name || selectedRoomData?.type || "Room"), bedTypes: String(selectedRoomData?.bedTypes || selectedRoomData?.bedType || ""), price: sp }], pm: paymentMode === "offline" ? "offline" : "online", bookingSource: "app", bookingStatus: paymentMode !== "offline" ? "Pending" : "Confirmed", ...(paymentMode === "online_partial" ? { advancePercent: 25 } : {}), couponCode: appliedCoupon || undefined, discountPrice: pricing.discount || 0, hotelDetails: { hotelName: basicInfo?.name || hotel?.hotelName || "", hotelEmail: basicInfo?.email || hotel?.email || hotel?.hotelEmail || "", hotelCity: basicInfo?.location?.city || hotel?.hotelCity || "", hotelOwnerName: basicInfo?.ownerName || hotel?.hotelOwnerName || hotel?.createdBy?.user || "", destination: basicInfo?.location?.city || basicInfo?.location?.state || hotel?.destination || "" } }));
   };
 
   const handleGoBack = () => { if (navigation?.canGoBack?.()) navigation.goBack(); else navigateToHomeScreen(); };

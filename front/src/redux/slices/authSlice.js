@@ -12,6 +12,7 @@ const initialState = {
     mobile: localStorage.getItem('rsUserMobile'),
   } : null,
   token: token,
+  refreshToken: localStorage.getItem('rsRefreshToken') || null,
   isAuthenticated: isSignedIn && !!token,
   loading: false,
   error: null,
@@ -30,11 +31,15 @@ const authSlice = createSlice({
       state.isAuthenticated = true;
       state.user = action.payload.user;
       state.token = action.payload.token;
+      state.refreshToken = action.payload.refreshToken || null;
       state.error = null;
       
       // Save token to localStorage
       if (action.payload.token) {
         localStorage.setItem('authToken', action.payload.token);
+      }
+      if (action.payload.refreshToken) {
+        localStorage.setItem('rsRefreshToken', action.payload.refreshToken);
       }
     },
     loginFailure: (state, action) => {
@@ -47,6 +52,7 @@ const authSlice = createSlice({
     logout: (state) => {
       state.user = null;
       state.token = null;
+      state.refreshToken = null;
       state.isAuthenticated = false;
       state.loading = false;
       state.error = null;
@@ -56,6 +62,7 @@ const authSlice = createSlice({
       localStorage.removeItem('isSignedIn');
       localStorage.removeItem('rsUserId');
       localStorage.removeItem('rsToken');
+      localStorage.removeItem('rsRefreshToken');
       localStorage.removeItem('roomsstayUserEmail');
       localStorage.removeItem('rsUserMobile');
       localStorage.removeItem('rsUserName');

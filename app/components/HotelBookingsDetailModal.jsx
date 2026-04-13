@@ -156,6 +156,16 @@ export default function HotelBookingsDetailModal({ visible, onClose, booking }) 
                   {booking?.destination || booking?.hotelDetails?.destination || "Location N/A"}
                 </Text>
               </View>
+              {/* Pending Reason */}
+              {booking?.bookingStatus?.toLowerCase() === "pending" && !!booking?.pendingReason && (
+                <View className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex-row items-start gap-2">
+                  <Ionicons name="warning-outline" size={14} color="#b45309" style={{ marginTop: 1 }} />
+                  <View className="flex-1">
+                    <Text className="text-[9px] font-bold uppercase text-amber-600 mb-0.5">Pending Reason</Text>
+                    <Text className="text-xs text-amber-800">{booking.pendingReason}</Text>
+                  </View>
+                </View>
+              )}
             </View>
             <TouchableOpacity onPress={onClose} className="bg-neutral-100 p-2 rounded-full">
               <Ionicons name="close" size={20} color="#171717" />
