@@ -31,16 +31,25 @@ export const getToken = async () => {
   if (secureValue) return secureValue;
   return AsyncStorage.getItem("rsToken");
 };
-
-export const saveAuthSession = async ({ token, userId, email }) => {
+export const getRefreshToken = async () => {
+  const secureValue = await SecureStore.getItemAsync('rsRefreshToken');
+  if (secureValue) return secureValue;
+  return AsyncStorage.getItem('rsRefreshToken');
+};
+export const saveAuthSession = async ({ token, userId, email, refreshToken }) => {
   const safeToken = token ? String(token) : "";
   const safeUserId = sanitizeUserId(userId);
   const safeEmail = email ? String(email) : "";
+  const safeRefreshToken = refreshToken ? String(refreshToken) : "";
 
   const tasks = [];
   if (safeToken) {
     tasks.push(SecureStore.setItemAsync("rsToken", safeToken));
     tasks.push(AsyncStorage.setItem("rsToken", safeToken));
+  }
+  if (safeRefreshToken) {
+    tasks.push(SecureStore.setItemAsync("rsRefreshToken", safeRefreshToken));
+    tasks.push(AsyncStorage.setItem("rsRefreshToken", safeRefreshToken));
   }
   if (safeUserId) {
     tasks.push(SecureStore.setItemAsync("userId", safeUserId));
@@ -59,9 +68,10 @@ export const saveAuthSession = async ({ token, userId, email }) => {
 export const clearAuthSession = async () => {
   await Promise.all([
     SecureStore.deleteItemAsync("rsToken"),
-    SecureStore.deleteItemAsync("userId"),
-    SecureStore.deleteItemAsync("rsUserId"),
-    SecureStore.deleteItemAsync("roomsstayUserEmail"),
-    AsyncStorage.multiRemove(["rsToken", "userId", "rsUserId", "roomsstayUserEmail"]),
+    SecureStore.deleteItemAsync('rsRefreshToken'),
+    SecureStore.deleteItemAsync('userId'),
+    SecureStore.deleteItemAsync('rsUserId'),
+    SecureStore.deleteItemAsync('roomsstayUserEmail'),
+    AsyncStorage.multiRemove(['rsToken', 'rsRefreshToken', 'userId', 'rsUserId', 'roomsstayUserEmail']),
   ]);
 };

@@ -19,4 +19,7 @@ router.post("/verify-otp", userController.verifyOTP);
 // Admin: filter users with bookings, coupons, complaints
 router.get("/admin/users/filter", userController.filterUsers);
 
+// Refresh token
+router.post("/auth/refresh", userController.refreshUserToken);
+
 module.exports = router;

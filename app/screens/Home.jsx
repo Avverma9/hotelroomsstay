@@ -8,6 +8,8 @@ import {
   Modal,
   StatusBar,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useDispatch, useSelector } from "react-redux";
 import * as Location from "expo-location";
 import { fetchLocation } from "../store/slices/locationSlice";
@@ -21,6 +23,8 @@ import HomeScreenFrontCabs from "./HomeScreenFrontCabs";
 
 const Home = ({ navigation }) => {
   // --- State Management ---
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const [searchCity, setSearchCity] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isLocatingCurrentLocation, setIsLocatingCurrentLocation] =
@@ -252,7 +256,7 @@ const Home = ({ navigation }) => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         className="flex-1"
-        contentContainerStyle={{ paddingTop: 28, paddingBottom: 20 }}
+        contentContainerStyle={{ paddingTop: 28, paddingBottom: 20 + tabBarHeight }}
       >
         <SearchCard
           searchCity={searchCity}

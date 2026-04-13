@@ -214,7 +214,7 @@ export default function LoginPage({ navigation }) {
       const res = await axios.post(`${baseURL}/signIn`, { email, password });
       const auth = extractAuth(res);
       if (!auth.token || !auth.userId) throw new Error("Missing credentials.");
-      await signIn(auth.token, auth.userId, auth.email);
+      await signIn(auth.token, auth.userId, auth.email, res.data?.refreshToken);
       toast("success", "Welcome Back!", "Logged in successfully.");
     } catch (err) {
       toast("error", "Login Failed", err.response?.data?.message || "Invalid credentials.");
@@ -253,7 +253,7 @@ export default function LoginPage({ navigation }) {
       }
       const auth = extractAuth(res);
       if (!auth.token || !auth.userId) throw new Error("Missing credentials.");
-      await signIn(auth.token, auth.userId, auth.email);
+      await signIn(auth.token, auth.userId, auth.email, res.data?.refreshToken);
       toast("success", "Welcome!", "Authenticated successfully.");
     } catch (err) {
       toast("error", "Verification Failed", err.response?.data?.message || "Invalid OTP.");

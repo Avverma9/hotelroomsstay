@@ -58,12 +58,13 @@ const bookingSchema = new mongoose.Schema(
       type: Number,
       required: false,
     },
-    guestDetails: 
+    guestDetails: [
       {
         fullName: String,
         mobile: String,
         email: String,
-      },
+      }
+    ],
 
     foodDetails: [
       {
@@ -104,6 +105,8 @@ const bookingSchema = new mongoose.Schema(
       ],
       default: "Confirmed",
     },
+    pendingReason: { type: String, default: null },
+    autoCancelAt: { type: Date, default: null },
     cancellationReason: String,
     failureReason: String,
     cancellationOtp: String,

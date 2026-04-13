@@ -393,7 +393,7 @@ function BookingViewModal({ booking, loading, shouldHideGuestContact, showCreate
               <div className="rounded-2xl border border-slate-200/60 bg-white p-5 sm:p-6 shadow-sm">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <h3 className="text-2xl font-extrabold tracking-tight text-slate-900">{booking.guestDetails?.fullName || booking.user?.name || 'Guest User'}</h3>
+                    <h3 className="text-2xl font-extrabold tracking-tight text-slate-900">{(Array.isArray(booking.guestDetails) ? booking.guestDetails[0]?.fullName : booking.guestDetails?.fullName) || booking.user?.name || 'Guest User'}</h3>
                     <p className="mt-1.5 flex items-center gap-2 text-sm font-medium text-slate-600">
                       <Hotel size={16} className="text-slate-400" />
                       {booking.hotelDetails?.hotelName || 'Property N/A'}
@@ -406,6 +406,22 @@ function BookingViewModal({ booking, loading, shouldHideGuestContact, showCreate
                     </span>
                   </div>
                 </div>
+
+                {/* Pending Reason Banner */}
+                {String(booking.bookingStatus || '').toLowerCase() === 'pending' && booking.pendingReason && (
+                  <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <CircleAlert size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-amber-600 mb-1">Pending Reason</p>
+                      <p className="text-sm text-amber-800 leading-relaxed">{booking.pendingReason}</p>
+                      {booking.autoCancelAt && (
+                        <p className="text-xs text-amber-500 mt-1">
+                          Auto-cancel at: {new Date(booking.autoCancelAt).toLocaleString('en-IN')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {showCreatedBy && (
@@ -427,12 +443,33 @@ function BookingViewModal({ booking, loading, shouldHideGuestContact, showCreate
                     <Users size={16} className="text-indigo-500" />
                     <h3 className="text-xs font-bold uppercase tracking-widest text-slate-900">Guest Profile</h3>
                   </div>
-                  <InfoRow label="Full Name" value={booking.guestDetails?.fullName || booking.user?.name} />
-                  {!shouldHideGuestContact && <InfoRow label="Contact Number" value={booking.guestDetails?.mobile || booking.user?.mobile} />}
-                  {!shouldHideGuestContact && (
-                    <InfoRow label="Email Address" value={booking.guestDetails?.email || booking.user?.email} className="truncate" />
+                  {(() => {
+                    const primaryGuest = Array.isArray(booking.guestDetails)
+                      ? booking.guestDetails[0]
+                      : booking.guestDetails
+                    return (
+                      <>
+                        <InfoRow label="Full Name" value={primaryGuest?.fullName || booking.user?.name} />
+                        {!shouldHideGuestContact && <InfoRow label="Contact Number" value={primaryGuest?.mobile || booking.user?.mobile} />}
+                        {!shouldHideGuestContact && (
+                          <InfoRow label="Email Address" value={primaryGuest?.email || booking.user?.email} className="truncate" />
+                        )}
+                        <InfoRow label="Total Occupants" value={`${booking.guests || 1} Guest(s)`} />
+                      </>
+                    )
+                  })()}
+                  {Array.isArray(booking.guestDetails) && booking.guestDetails.length > 1 && (
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Additional Guests</p>
+                      {booking.guestDetails.slice(1).map((g, i) => (
+                        <div key={i} className="mb-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                          <span className="font-semibold">{g.fullName || '—'}</span>
+                          {!shouldHideGuestContact && g.mobile && <span className="ml-2 text-slate-500">{g.mobile}</span>}
+                          {!shouldHideGuestContact && g.email && <span className="ml-2 text-slate-400">{g.email}</span>}
+                        </div>
+                      ))}
+                    </div>
                   )}
-                  <InfoRow label="Total Occupants" value={`${booking.guests || 1} Guest(s)`} />
                 </div>
 
                 {/* Stay Itinerary */}
@@ -521,11 +558,16 @@ function BookingEditModal({
   const [price, setPrice] = useState(String(booking?.price ?? ''))
   const [isPriceManuallyEdited, setIsPriceManuallyEdited] = useState(false)
   
-  const [guestDetails, setGuestDetails] = useState(() => ({
-    fullName: booking?.guestDetails?.fullName || booking?.user?.name || '',
-    mobile: booking?.guestDetails?.mobile || booking?.user?.mobile || '',
-    email: booking?.guestDetails?.email || booking?.user?.email || '',
-  }))
+  const [guestDetails, setGuestDetails] = useState(() => {
+    const primary = Array.isArray(booking?.guestDetails)
+      ? booking.guestDetails[0]
+      : booking?.guestDetails
+    return {
+      fullName: primary?.fullName || booking?.user?.name || '',
+      mobile: primary?.mobile || booking?.user?.mobile || '',
+      email: primary?.email || booking?.user?.email || '',
+    }
+  })
   
   const [hotelDetails, setHotelDetails] = useState(() => ({
     hotelName: booking?.hotelDetails?.hotelName || '',
@@ -630,12 +672,18 @@ function BookingEditModal({
     }
 
     if (isAdvancedEditEnabled) {
-      payload.guestDetails = {
-        ...booking?.guestDetails,
-        fullName: guestDetails.fullName.trim(),
-        mobile: guestDetails.mobile.trim(),
-        email: guestDetails.email.trim(),
-      }
+      // Always persist as array (primary guest update only preserves position 0)
+      const existingExtra = Array.isArray(booking?.guestDetails)
+        ? booking.guestDetails.slice(1)
+        : []
+      payload.guestDetails = [
+        {
+          fullName: guestDetails.fullName.trim(),
+          mobile: guestDetails.mobile.trim(),
+          email: guestDetails.email.trim(),
+        },
+        ...existingExtra,
+      ]
       payload.hotelDetails = {
         ...booking?.hotelDetails,
         hotelName: hotelDetails.hotelName.trim(),
@@ -739,6 +787,31 @@ function BookingEditModal({
                 </span>
               </div>
             </div>
+
+            {/* Pending Reason Banner in Edit Modal */}
+            {normalizedCurrentStatus === 'pending' && booking?.pendingReason && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-start gap-3">
+                  <CircleAlert size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600 mb-1">Pending Reason</p>
+                    <p className="text-sm text-amber-800 leading-relaxed">{booking.pendingReason}</p>
+                    {booking.autoCancelAt && (
+                      <p className="text-xs text-amber-500 mt-1">Auto-cancel at: {new Date(booking.autoCancelAt).toLocaleString('en-IN')}</p>
+                    )}
+                  </div>
+                </div>
+                {roleCapabilities.canEditStatus && (
+                  <button
+                    type="button"
+                    onClick={() => handleStatusChange('Confirmed')}
+                    className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 active:bg-emerald-800 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+                  >
+                    ✓ Clear Pending &amp; Confirm Booking
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Primary Editing Block */}
             <div className="space-y-4">

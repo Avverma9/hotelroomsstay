@@ -17,5 +17,8 @@ router.delete('/delete/dashboard/delete/partner/:id', DashboardUser.deletePartne
 router.patch('/update/dashboard/updated/partner/:id', upload, DashboardUser.updatePartner);
 router.get('/api/users-get-user/by/query', DashboardUser.filterPartner);
 
+// Refresh token
+router.post('/auth/refresh/dashboard', DashboardUser.refreshDashboardToken);
+
 
 module.exports = router;

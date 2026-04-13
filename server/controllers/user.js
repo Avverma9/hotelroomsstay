@@ -15,6 +15,20 @@ const {
   createUserNotificationSafe,
 } = require("./notification/helpers");
 
+const generateUserTokens = (userId) => {
+  const accessToken = jwt.sign(
+    { id: userId },
+    process.env.JWT_SECRET,
+    { expiresIn: "15m" },
+  );
+  const refreshToken = jwt.sign(
+    { id: userId },
+    process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+    { expiresIn: "2d" },
+  );
+  return { accessToken, refreshToken };
+};
+
 const formatDate = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -138,11 +152,9 @@ const GoogleSignIn = async function (req, res) {
     });
 
     if (existingUser) {
-      const token = jwt.sign(
-        { id: existingUser.userId },
-        process.env.JWT_SECRET,
-        { expiresIn: "24h" }
-      );
+      const { accessToken, refreshToken } = generateUserTokens(existingUser.userId);
+      existingUser.refreshToken = refreshToken;
+      await existingUser.save();
       return res.status(201).json({
         message: "User already exists",
         _id: existingUser._id,
@@ -150,7 +162,8 @@ const GoogleSignIn = async function (req, res) {
         mobile: existingUser.mobile,
         name: existingUser.userName,
         email: existingUser.email,
-        rsToken: token,
+        rsToken: accessToken,
+        refreshToken,
       });
     }
 
@@ -160,16 +173,17 @@ const GoogleSignIn = async function (req, res) {
       userId: user.userId,
     });
 
-    const token = jwt.sign({ id: user.userId }, process.env.JWT_SECRET, {
-      expiresIn: "24h",
-    });
+    const { accessToken, refreshToken } = generateUserTokens(user.userId);
+    user.refreshToken = refreshToken;
+    await user.save();
 
     res.status(201).json({
       message: "Sign-in successful",
       _id: user._id,
       userId: user.userId,
       name: user.userName,
-      rsToken: token,
+      rsToken: accessToken,
+      refreshToken,
     });
   } catch (error) {
     console.error(error);
@@ -222,9 +236,9 @@ const verifyOTP = async (req, res) => {
         .json({ success: false, message: "User not found" });
     }
 
-    const token = jwt.sign({ id: user.userId }, process.env.JWT_SECRET, {
-      expiresIn: "24h",
-    });
+    const { accessToken, refreshToken } = generateUserTokens(user.userId);
+    user.refreshToken = refreshToken;
+    await user.save();
 
     res.status(200).json({
       result,
@@ -232,7 +246,8 @@ const verifyOTP = async (req, res) => {
       userId: user.userId,
       mobile: user.mobile,
       email: user.email,
-      rsToken: token,
+      rsToken: accessToken,
+      refreshToken,
     });
   } catch (error) {
     console.error(error);
@@ -256,9 +271,9 @@ const signIn = async function (req, res) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const token = jwt.sign({ id: user.userId }, process.env.JWT_SECRET, {
-      expiresIn: "24h",
-    });
+    const { accessToken, refreshToken } = generateUserTokens(user.userId);
+    user.refreshToken = refreshToken;
+    await user.save();
 
     res.status(200).json({
       message: "Sign-in successful",
@@ -267,7 +282,8 @@ const signIn = async function (req, res) {
       mobile: user.mobile,
       name: user.userName,
       email: user.email,
-      rsToken: token,
+      rsToken: accessToken,
+      refreshToken,
     });
   } catch (error) {
     console.error("Sign-in error:", error);
@@ -953,6 +969,39 @@ const filterUsers = async (req, res) => {
   }
 };
 
+const refreshUserToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      return res.status(401).json({ message: "Refresh token required" });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(
+        refreshToken,
+        process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+      );
+    } catch (err) {
+      return res.status(403).json({ message: "Invalid or expired refresh token" });
+    }
+
+    const user = await userModel.findOne({ userId: decoded.id, refreshToken });
+    if (!user) {
+      return res.status(403).json({ message: "Invalid or expired refresh token" });
+    }
+
+    const { accessToken, refreshToken: newRefreshToken } = generateUserTokens(user.userId);
+    user.refreshToken = newRefreshToken;
+    await user.save();
+
+    return res.status(200).json({ rsToken: accessToken, refreshToken: newRefreshToken });
+  } catch (error) {
+    console.error("refreshUserToken error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
   createSignup,
   getUserById,
@@ -967,4 +1016,5 @@ module.exports = {
   loginWithOtp,
   verifyOTP,
   filterUsers,
+  refreshUserToken,
 };

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
-import { clearAuthSession, getToken, getUserId, saveAuthSession } from '../utils/credentials';
+import { clearAuthSession, getRefreshToken, getToken, getUserId, saveAuthSession } from '../utils/credentials';
 import { baseURL } from '../utils/baseUrl';
 
 const AuthContext = createContext();
@@ -47,7 +47,20 @@ export function AuthProvider({ children }) {
               const payload = JSON.parse(payloadJson);
               if (payload && typeof payload.exp === 'number') {
                 if (payload.exp * 1000 < Date.now()) {
-                  // token expired locally
+                  // token expired locally — try refresh before clearing
+                  const refreshToken = await getRefreshToken().catch(() => null);
+                  if (refreshToken) {
+                    try {
+                      const res = await axios.post(`${baseURL}/auth/refresh`, { refreshToken }, { timeout: TOKEN_VALIDATE_TIMEOUT_MS });
+                      if (res.data?.rsToken) {
+                        await saveAuthSession({ token: res.data.rsToken, refreshToken: res.data.refreshToken });
+                        if (mounted) setIsSignedIn(true);
+                        return;
+                      }
+                    } catch {
+                      // refresh failed, fall through to clear
+                    }
+                  }
                   await clearAuthSession();
                   if (mounted) setIsSignedIn(false);
                   return;
@@ -103,8 +116,8 @@ export function AuthProvider({ children }) {
     return () => { mounted = false; };
   }, []);
 
-  const signIn = async (token, userId, email) => {
-    await saveAuthSession({ token, userId, email });
+  const signIn = async (token, userId, email, refreshToken) => {
+    await saveAuthSession({ token, userId, email, refreshToken });
     setIsSignedIn(true);
   };
 

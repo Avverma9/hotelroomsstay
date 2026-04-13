@@ -1,6 +1,6 @@
 import axios from 'axios'
 import store from '../redux/store'
-import { clearCredentials } from '../redux/slices/authSlice'
+import { clearCredentials, updateToken } from '../redux/slices/authSlice'
 import { requestFinished, requestStarted } from '../redux/slices/globalLoader'
 import {
   baseURL,
@@ -59,6 +59,12 @@ const getStoredToken = () => {
   return String(rawToken).replace(/^Bearer\s+/i, '').trim()
 }
 
+const getStoredRefreshToken = () => {
+  const savedSession = getSavedSession()
+  const state = store.getState()
+  return state?.auth?.refreshToken || savedSession?.refreshToken || ''
+}
+
 const emitServerStatus = (hasServerError) => {
   if (typeof window === 'undefined') {
     return
@@ -108,6 +114,16 @@ const api = axios.create({
 let _consecutiveServerErrors = 0
 const FAILURES_BEFORE_OFFLINE = 2
 
+// Refresh token queue management
+let _isRefreshing = false
+let _refreshSubscribers = []
+
+const subscribeTokenRefresh = (cb) => _refreshSubscribers.push(cb)
+const onRefreshed = (token) => {
+  _refreshSubscribers.forEach((cb) => cb(token))
+  _refreshSubscribers = []
+}
+
 const shouldTrackRequest = (config) => config?.url !== '/health' && !config?.skipGlobalLoader
 
 api.interceptors.request.use(
@@ -148,10 +164,51 @@ api.interceptors.response.use(
       store.dispatch(requestFinished())
     }
 
-    if (shouldForceLogin(error)) {
-      store.dispatch(clearCredentials())
-      redirectToLogin()
-      return Promise.reject(error)
+    if (shouldForceLogin(error) && !error.config?._skipRefreshIntercept) {
+      const refreshToken = getStoredRefreshToken()
+
+      // Agar refresh token nahi hai ya already retry ho chuka hai
+      if (!refreshToken || error.config?._retry) {
+        store.dispatch(clearCredentials())
+        redirectToLogin()
+        return Promise.reject(error)
+      }
+
+      // Agar refresh already chal raha hai, queue mein daal do
+      if (_isRefreshing) {
+        return new Promise((resolve, reject) => {
+          subscribeTokenRefresh((newToken) => {
+            if (newToken) {
+              const retryConfig = { ...error.config, _retry: true }
+              retryConfig.headers = { ...retryConfig.headers, Authorization: `Bearer ${newToken}` }
+              resolve(api(retryConfig))
+            } else {
+              reject(error)
+            }
+          })
+        })
+      }
+
+      _isRefreshing = true
+      return axios
+        .post(`${baseURL}/auth/refresh/dashboard`, { refreshToken }, { _skipRefreshIntercept: true })
+        .then((res) => {
+          const newToken = res.data.rsToken
+          const newRefreshToken = res.data.refreshToken
+          store.dispatch(updateToken({ token: newToken, refreshToken: newRefreshToken }))
+          _isRefreshing = false
+          onRefreshed(newToken)
+          const retryConfig = { ...error.config, _retry: true }
+          retryConfig.headers = { ...retryConfig.headers, Authorization: `Bearer ${newToken}` }
+          return api(retryConfig)
+        })
+        .catch((refreshError) => {
+          _isRefreshing = false
+          onRefreshed(null)
+          store.dispatch(clearCredentials())
+          redirectToLogin()
+          return Promise.reject(refreshError)
+        })
     }
 
     const isServerDown =

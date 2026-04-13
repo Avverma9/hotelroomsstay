@@ -180,6 +180,7 @@ const buildPrintableBookingHtml = (booking = {}) => {
   const bookingSource = booking.bookingSource || "N/A";
   const bookedOn = formatDateTime(booking.createdAt, { includeTime: true });
   const status = booking.bookingStatus || "Confirmed";
+  const pendingReason = booking.pendingReason || null;
   const rooms = Array.isArray(booking.roomDetails) ? booking.roomDetails : [];
   const foods = Array.isArray(booking.foodDetails) ? booking.foodDetails : [];
 
@@ -246,6 +247,7 @@ const buildPrintableBookingHtml = (booking = {}) => {
           <div class="kv-row"><span>Booked On</span><strong>${escapeHtml(bookedOn)}</strong></div>
           <div class="kv-row"><span>Source</span><strong>${escapeHtml(bookingSource)}</strong></div>
           <div class="kv-row"><span>Payment</span><strong>${escapeHtml(paymentMode)}</strong></div>
+          ${status === "Pending" && pendingReason ? `<div class="kv-row" style="color:#b45309;background:#fffbeb;border-radius:4px;padding:4px 6px;margin-top:4px;"><span style="font-weight:600;">Pending Reason</span><strong style="color:#92400e;">${escapeHtml(pendingReason)}</strong></div>` : ""}
         </div>
         <div class="meta-card">
           <h3>Guest & Stay</h3>
@@ -753,7 +755,16 @@ export default function MyBookings() {
                   </div>
                 </div>
 
-                {/* 2. Dates Timeline */}
+                {/* Pending Reason Banner */}
+                {modalData.bookingStatus === "Pending" && modalData.pendingReason && (
+                  <div className="mb-5 bg-amber-50 border border-amber-200 rounded p-3 flex items-start gap-2">
+                    <span className="text-amber-500 text-base">⚠️</span>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase text-amber-600 mb-0.5">Pending Reason</p>
+                      <p className="text-xs text-amber-800">{modalData.pendingReason}</p>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between bg-slate-50 p-3 rounded border border-slate-100 mb-5">
                    <div className="text-left">
                       <p className="text-[10px] font-bold text-slate-400 uppercase">Check-in</p>

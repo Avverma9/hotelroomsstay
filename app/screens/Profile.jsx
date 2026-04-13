@@ -15,6 +15,7 @@ import {
   Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
 import * as ImagePicker from "expo-image-picker";
@@ -376,6 +377,7 @@ const BookingCard = ({ item, onViewBooking }) => {
 const Profile = () => {
   const dispatch = useDispatch();
   const { signOut } = useAuth();
+  const tabBarHeight = useBottomTabBarHeight();
 
   const [activeTab, setActiveTab] = useState("Bookings");
   const [bookingType, setBookingType] = useState("Hotel");
@@ -1135,7 +1137,7 @@ const Profile = () => {
       </View>
 
       {/* ── Content ── */}
-      <ScrollView style={S.scroll} contentContainerStyle={S.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView style={S.scroll} contentContainerStyle={[S.scrollContent, { paddingBottom: tabBarHeight + 16 }]} showsVerticalScrollIndicator={false}>
         {!!userState?.error && <Text style={S.errorTxt}>{String(userState?.error?.message || userState?.error)}</Text>}
         {renderTabContent()}
       </ScrollView>

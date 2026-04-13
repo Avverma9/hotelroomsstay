@@ -406,11 +406,11 @@ export default function BookHotel() {
       checkInDate: checkIn,
       checkOutDate: checkOut,
       guests: guests,
-      guestDetails: {
+      guestDetails: [{
         fullName: storedGuest.userName,
         mobile: storedGuest.mobile,
         email: storedGuest.email,
-      },
+      }],
       user: {
         userId: storedGuest.userId,
         name: storedGuest.userName,

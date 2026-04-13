@@ -228,6 +228,37 @@ const createBooking = async (req, res) => {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
+    // ── Normalize guestDetails → always an array ─────────────────────────
+    // Accept: array, single object, or missing (fallback to logged-in user)
+    let normalizedGuestDetails;
+    if (Array.isArray(guestDetails) && guestDetails.length > 0) {
+      normalizedGuestDetails = guestDetails.map((g) => ({
+        fullName: String(g?.fullName || g?.name || "").trim(),
+        mobile: String(g?.mobile || g?.phone || "").trim(),
+        email: String(g?.email || "").trim(),
+      }));
+    } else if (guestDetails && typeof guestDetails === "object" && !Array.isArray(guestDetails)) {
+      // Legacy single-object shape
+      normalizedGuestDetails = [{
+        fullName: String(guestDetails.fullName || guestDetails.name || "").trim(),
+        mobile: String(guestDetails.mobile || guestDetails.phone || "").trim(),
+        email: String(guestDetails.email || "").trim(),
+      }];
+    } else {
+      // Fallback: prefill from logged-in user
+      normalizedGuestDetails = [{
+        fullName: String(user.userName || user.name || "").trim(),
+        mobile: String(user.mobile || "").trim(),
+        email: String(user.email || "").trim(),
+      }];
+    }
+
+    // Derive guests count from array if not explicitly provided
+    if (!guests || Number(guests) < 1) {
+      guests = normalizedGuestDetails.length;
+    }
+    guestDetails = normalizedGuestDetails;
+
     const bookingId = [...Array(10)]
       .map(() => {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -265,11 +296,13 @@ const createBooking = async (req, res) => {
     // Calculate final price
     const finalPrice = discountedRoomTotal + gstAmount + foodPrice;
 
-    const existingSameHotelBooking = await bookingModel.exists({
-      "user.userId": user.userId,
-      "hotelDetails.hotelId": hotelId,
-      bookingStatus: { $nin: ["Cancelled", "Failed"] },
-    });
+    // Count total active rooms booked by this user across all hotels
+    const userActiveBookings = await bookingModel.find(
+      { "user.userId": user.userId, bookingStatus: { $nin: ["Cancelled", "Failed"] } },
+      { numRooms: 1 }
+    ).lean();
+    const totalExistingRooms = userActiveBookings.reduce((sum, b) => sum + (b.numRooms || 0), 0);
+    const totalRoomsAfterBooking = totalExistingRooms + (numRooms || 1);
 
     // Determine payment mode: offline = panel booking or pm/paymentMode says offline
     const resolvedPaymentMode =
@@ -279,7 +312,13 @@ const createBooking = async (req, res) => {
         : "online";
 
     const normalizedBookingStatus = String(bookingStatus || "").trim();
-    const shouldForcePending = Boolean(existingSameHotelBooking) || nights > 3;
+
+    // Business rules that force a booking into Pending for manual review
+    let pendingReason = null;
+    if (nights > 3) pendingReason = `Stay is ${nights} nights (more than 3 nights requires manual confirmation)`;
+    else if (totalRoomsAfterBooking > 3) pendingReason = `You already have ${totalExistingRooms} active room(s) booked. Total exceeds 3 rooms per user limit`;
+
+    const shouldForcePending = pendingReason !== null;
     // Offline bookings created from panel can be Confirmed immediately;
     // Online bookings always start as Pending until PhonePe confirms payment.
     const resolvedBookingStatus = shouldForcePending
@@ -331,6 +370,8 @@ const createBooking = async (req, res) => {
       isPartialBooking,
       partialAmount,
       bookingStatus: resolvedBookingStatus,
+      pendingReason: resolvedBookingStatus === "Pending" ? (pendingReason || "Awaiting payment confirmation") : null,
+      autoCancelAt: resolvedBookingStatus === "Pending" ? new Date(Date.now() + 2 * 60 * 60 * 1000) : null,
       bookingSource,
       destination,
       roomDetails,
@@ -487,6 +528,11 @@ const updateBooking = async (req, res) => {
     }
     if (nextStatus === "Failed" && previousStatus !== "Failed" && !data.failureReason) {
       statusMetadataUpdate.failureReason = "Payment failed or timed out";
+    }
+    // When a Pending booking is manually confirmed, clear the pending reason and auto-cancel timer
+    if (nextStatus === "Confirmed" && previousStatus === "Pending") {
+      statusMetadataUpdate.pendingReason = null;
+      statusMetadataUpdate.autoCancelAt = null;
     }
     if (resolvedCheckInTime) {
       statusMetadataUpdate.checkInTime = resolvedCheckInTime;
