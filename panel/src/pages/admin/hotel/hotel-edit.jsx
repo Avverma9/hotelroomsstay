@@ -30,7 +30,8 @@ const STEPS = [
   { id: 1, key: 'basic',    label: 'Basic Info',      sub: 'Name, location & contacts' },
   { id: 2, key: 'property', label: 'Property Details', sub: 'Type, rating & description' },
   { id: 3, key: 'rooms',    label: 'Rooms',            sub: 'Inventory management' },
-  { id: 4, key: 'policies', label: 'Policies',         sub: 'Rules & terms' },
+  { id: 4, key: 'foods',    label: 'Dining',           sub: 'Food menu management' },
+  { id: 5, key: 'policies', label: 'Policies',         sub: 'Rules & terms' },
 ]
 
 /* ─── Policy config ──────────────────────────────────────────── */
@@ -256,6 +257,41 @@ const createEmptyRoomForm = () => ({
   description: '', amenities: '', images: '', isOffer: false, offerName: '',
   offerPriceLess: '', offerExp: '',
 })
+
+const normalizeFood = (food, index = 0) => {
+  const foodId = food?.foodId || food?.id || ''
+  const images = Array.isArray(food?.images) ? food.images.join(', ') : (food?.images || '')
+  return {
+    _id: food?._id || foodId || `food-${index}`,
+    foodId,
+    name: food?.name || food?.title || '',
+    foodType: food?.foodType || food?.type || 'Veg',
+    price: String(food?.price ?? ''),
+    about: food?.about || food?.description || '',
+    images,
+  }
+}
+
+const createEmptyFoodForm = () => ({
+  name: '', foodType: 'Veg', price: '', about: '', images: '',
+})
+
+const buildFoodEntry = (form, existingFoodId = null) => {
+  const imagesArr = Array.isArray(form.images)
+    ? form.images
+    : (typeof form.images === 'string' && form.images.trim()
+        ? form.images.split(',').map((v) => v.trim()).filter(Boolean)
+        : [])
+  const entry = {
+    name: s(form.name),
+    foodType: s(form.foodType) || 'Veg',
+    price: Number(form.price) || 0,
+    about: s(form.about),
+    images: imagesArr,
+  }
+  if (existingFoodId) entry.foodId = existingFoodId
+  return entry
+}
 
 const buildHotelPayload = (form) => ({
   hotelName:    s(form.hotelName),
@@ -495,6 +531,10 @@ function HotelEditPage() {
   const [editingRoomId,   setEditingRoomId]   = useState(null)
   const [rooms,           setRooms]           = useState([])
   const [deletedRoomIds,  setDeletedRoomIds]  = useState([])
+  const [foodForm,        setFoodForm]        = useState(createEmptyFoodForm)
+  const [editingFoodId,   setEditingFoodId]   = useState(null)
+  const [foods,           setFoods]           = useState([])
+  const [deletedFoodIds,  setDeletedFoodIds]  = useState([])
   const [policies,        setPolicies]        = useState(createEmptyPolicies)
   const [policyLoading,   setPolicyLoading]   = useState(false)
   const [policyMsg,       setPolicyMsg]       = useState(null)
@@ -509,8 +549,13 @@ function HotelEditPage() {
     () => (Array.isArray(hotel?.rooms) ? hotel.rooms.map(normalizeRoom) : []),
     [hotel?.rooms],
   )
+  const normalizedFoods = useMemo(
+    () => (Array.isArray(hotel?.foods) ? hotel.foods.map(normalizeFood) : []),
+    [hotel?.foods],
+  )
 
   useEffect(() => { setRooms(normalizedRooms) }, [normalizedRooms])
+  useEffect(() => { setFoods(normalizedFoods) }, [normalizedFoods])
   useEffect(() => { if (id) dispatch(getHotelById(id)) }, [dispatch, id])
   useEffect(() => { if (hotel) setHotelForm(createHotelForm(hotel)) }, [hotel])
   useEffect(() => {
@@ -583,6 +628,10 @@ function HotelEditPage() {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value
     setRoomForm((p) => ({ ...p, [key]: value }))
   }
+  const setFoodField = (key) => (e) => {
+    const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value
+    setFoodForm((p) => ({ ...p, [key]: value }))
+  }
 
   const markComplete = (step) => {
     setCompletedSteps((p) => p.includes(step) ? p : [...p, step])
@@ -595,6 +644,7 @@ function HotelEditPage() {
   const goPrev = () => setCurrentStep((s) => Math.max(s - 1, 1))
 
   const resetRoomEditor = () => { setEditingRoomId(null); setRoomForm(createEmptyRoomForm()) }
+  const resetFoodEditor = () => { setEditingFoodId(null); setFoodForm(createEmptyFoodForm()) }
 
   const savePolicies = async (e) => {
     if (e?.preventDefault) e.preventDefault()
@@ -617,12 +667,19 @@ function HotelEditPage() {
     const hotelPayload  = buildHotelPayload(hotelForm)
     const roomsPayload  = rooms.map((r) => buildRoomEntry(r, r.roomId || null))
     const deletionPayload = deletedRoomIds.map((rid) => ({ roomId: rid, _delete: true }))
+    const foodsPayload = foods.map((f) => buildFoodEntry(f, f.foodId || null))
+    const foodDeletionPayload = deletedFoodIds.map((fid) => ({ foodId: fid, _delete: true }))
     try {
       await dispatch(updateHotelInfo({
         hotelId: displayHotelId,
-        hotelData: { ...hotelPayload, rooms: [...roomsPayload, ...deletionPayload] },
+        hotelData: {
+          ...hotelPayload,
+          rooms: [...roomsPayload, ...deletionPayload],
+          foods: [...foodsPayload, ...foodDeletionPayload],
+        },
       })).unwrap()
       setDeletedRoomIds([])
+      setDeletedFoodIds([])
       dispatch(getHotelById(displayHotelId))
     } catch (err) {
       console.error('saveHotel failed', err)
@@ -670,6 +727,48 @@ function HotelEditPage() {
       isOffer: room.isOffer, offerName: room.offerName,
       offerPriceLess: room.offerPriceLess || '',
       offerExp: room.offerExp || '',
+    })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const saveFoodLocal = (e) => {
+    if (e?.preventDefault) e.preventDefault()
+    const makeFood = (existingId) => {
+      const existing = existingId ? foods.find((f) => f._id === existingId) : null
+      return {
+        _id: existingId || `food-temp-${Date.now()}`,
+        foodId: existing?.foodId || '',
+        name: foodForm.name,
+        foodType: foodForm.foodType || 'Veg',
+        price: String(foodForm.price ?? ''),
+        about: foodForm.about,
+        images: foodForm.images,
+      }
+    }
+    if (editingFoodId) {
+      setFoods(foods.map((f) => f._id === editingFoodId ? { ...f, ...makeFood(editingFoodId) } : f))
+    } else {
+      setFoods((p) => [...p, makeFood(null)])
+    }
+    resetFoodEditor()
+  }
+
+  const handleFoodDelete = (food) => {
+    if (!food?._id) return
+    if (!window.confirm('Delete this food item?')) return
+    if (food.foodId) setDeletedFoodIds((p) => [...p, food.foodId])
+    setFoods((p) => p.filter((f) => f._id !== food._id))
+    if (editingFoodId === food._id) resetFoodEditor()
+  }
+
+  const handleFoodEdit = (food) => {
+    setEditingFoodId(food._id)
+    setFoodForm({
+      name: food.name,
+      foodType: food.foodType || 'Veg',
+      price: food.price,
+      about: food.about,
+      images: food.images,
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -995,8 +1094,134 @@ function HotelEditPage() {
             </div>
           )}
 
-          {/* ════ STEP 4: Policies ══════════════════════════════════ */}
+          {/* ════ STEP 4: Dining ════════════════════════════════════ */}
           {currentStep === 4 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <div style={{ background: '#f8fafc', borderRadius: 14, padding: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                  <div>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: '#6366f1', letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 0 2px' }}>
+                      {editingFoodId ? 'Edit Food Item' : 'Add Food Item'}
+                    </p>
+                    <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+                      {editingFoodId ? 'Changes will save locally. Hit "Save" to push to server.' : 'Create your hotel menu and keep dining options updated.'}
+                    </p>
+                  </div>
+                  {editingFoodId && (
+                    <button type="button" onClick={resetFoodEditor}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#64748b', cursor: 'pointer' }}>
+                      <X size={13} /> Cancel
+                    </button>
+                  )}
+                </div>
+
+                <form onSubmit={saveFoodLocal}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px 16px' }}>
+                    <FieldInput label="Food Name" required value={foodForm.name} onChange={setFoodField('name')} placeholder="Paneer Butter Masala" />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8' }}>Food Type</label>
+                      <select
+                        value={foodForm.foodType}
+                        onChange={setFoodField('foodType')}
+                        style={{ ...inputCls }}
+                        onFocus={(e) => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff' }}
+                        onBlur={(e)  => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc' }}
+                      >
+                        <option value="Veg">Veg</option>
+                        <option value="Non Veg">Non Veg</option>
+                        <option value="Vegan">Vegan</option>
+                      </select>
+                    </div>
+                    <FieldInput label="Price (₹)" type="number" min="0" value={foodForm.price} onChange={setFoodField('price')} placeholder="299" />
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8' }}>Description</label>
+                      <textarea
+                        value={foodForm.about} onChange={setFoodField('about')} rows={3}
+                        placeholder="Short description for guests…"
+                        style={{ ...inputCls, resize: 'vertical', lineHeight: 1.7 }}
+                        onFocus={(e) => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff' }}
+                        onBlur={(e)  => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc' }}
+                      />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <FieldInput label="Image URLs (comma separated)" value={foodForm.images} onChange={setFoodField('images')} placeholder="https://..." />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                    <button type="submit"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px',
+                        borderRadius: 10, border: 'none', background: '#6366f1',
+                        fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 600,
+                        color: '#fff', cursor: 'pointer',
+                      }}>
+                      {editingFoodId ? <><PencilLine size={14} /> Update Food</> : <><Plus size={14} /> Add Food</>}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#94a3b8', margin: 0 }}>
+                    Saved Food Items ({foods.length})
+                  </p>
+                  {updating && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6366f1' }}>
+                      <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Syncing…
+                    </div>
+                  )}
+                </div>
+
+                {foods.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', background: '#f8fafc', borderRadius: 12, border: '1.5px dashed #e2e8f0' }}>
+                    <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>No food items added yet. Use the form above to add the first menu item.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {foods.map((food) => (
+                      <div key={food._id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px',
+                          borderRadius: 12, border: `1.5px solid ${editingFoodId === food._id ? '#6366f1' : '#f1f5f9'}`,
+                          background: editingFoodId === food._id ? '#eef2ff' : '#fafafa',
+                          transition: 'all .15s',
+                        }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 10, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#c2410c' }}>{food.foodType?.slice(0, 3)?.toUpperCase() || 'FOOD'}</span>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <p style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: 0 }}>{food.name || 'Untitled food item'}</p>
+                            <span style={{ fontSize: 10, fontWeight: 700, background: food.foodType?.toLowerCase() === 'veg' ? '#dcfce7' : '#fee2e2', color: food.foodType?.toLowerCase() === 'veg' ? '#15803d' : '#b91c1c', padding: '2px 8px', borderRadius: 20 }}>
+                              {food.foodType || 'Veg'}
+                            </span>
+                          </div>
+                          <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0' }}>
+                            ₹{food.price || 0}{food.about ? ` · ${food.about}` : ''}
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                          <button type="button" onClick={() => handleFoodEdit(food)}
+                            style={{ padding: '6px 12px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <PencilLine size={12} /> Edit
+                          </button>
+                          <button type="button" onClick={() => handleFoodDelete(food)}
+                            style={{ padding: '6px 12px', borderRadius: 8, border: '1.5px solid #fecdd3', background: '#fff1f2', fontSize: 12, fontWeight: 600, color: '#be123c', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <Trash2 size={12} /> Del
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ════ STEP 5: Policies ══════════════════════════════════ */}
+          {currentStep === 5 && (
             <div>
               {policyMsg && (
                 <div style={{

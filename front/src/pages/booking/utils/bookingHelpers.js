@@ -61,6 +61,50 @@ export const normalizeAmenities = (amenities, fallback = []) => {
   return fallback;
 };
 
+export const normalizeFoods = (foods, fallback = []) => {
+  const source = Array.isArray(foods) ? foods : [];
+  const normalized = source
+    .filter(Boolean)
+    .map((food, index) => {
+      if (typeof food === 'string') {
+        return {
+          id: `food-${index}`,
+          foodId: `food-${index}`,
+          name: food,
+          type: 'Veg',
+          description: '',
+          images: [],
+          price: 0,
+          displayPrice: 'Price on request',
+        };
+      }
+
+      const price = extractPriceCandidate(food?.price ?? food?.amount ?? food?.total) ?? 0;
+      const images = Array.isArray(food?.images)
+        ? food.images.filter(Boolean)
+        : food?.image
+          ? [food.image]
+          : [];
+
+      return {
+        ...food,
+        id: food?.id || food?.foodId || food?._id || `food-${index}`,
+        foodId: food?.foodId || food?.id || food?._id || `food-${index}`,
+        name: food?.name || food?.title || `Food Item ${index + 1}`,
+        type: food?.type || food?.foodType || 'Veg',
+        description: food?.description || food?.about || '',
+        images,
+        price: parseNumber(price, 0),
+        displayPrice:
+          String(food?.displayPrice || '').trim() ||
+          (price > 0 ? `₹${formatCurrency(price)}` : 'Price on request'),
+      };
+    })
+    .filter((food) => food.name);
+
+  return normalized.length ? normalized : fallback;
+};
+
 export const extractPriceCandidate = (payload) => {
   if (payload === null || payload === undefined) return null;
   if (typeof payload === 'number' && Number.isFinite(payload)) return payload;

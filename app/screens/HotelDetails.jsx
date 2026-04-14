@@ -105,6 +105,7 @@ const normalizeBool = (value) => {
 };
 const toList = (value) => { if (Array.isArray(value)) return value; if (!value) return []; return [value]; };
 const toDateOnly = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const formatCurrencyINR = (value) => `₹${Math.round(parseNumber(value)).toLocaleString("en-IN")}`;
 const formatFullDate = (d) => {
   try { return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); } catch { return ""; }
 };
@@ -128,10 +129,96 @@ const dateRangesOverlap = (aStart, aEnd, bStart, bEnd) => {
 };
 const extractFoods = (hotel) => {
   const direct = hotel?.basicInfo?.foods || hotel?.foods || hotel?.menu || hotel?.basicInfo?.menu || null;
-  if (Array.isArray(direct)) return direct;
-  if (direct?.items && Array.isArray(direct.items)) return direct.items;
-  if (direct?.categories && Array.isArray(direct.categories)) return direct.categories;
-  return [];
+
+  const flattenFoodCandidates = (value) => {
+    if (!value) return [];
+    if (typeof value === "string") return [value];
+    if (Array.isArray(value)) return value.flatMap(flattenFoodCandidates);
+    if (typeof value !== "object") return [];
+
+    const nestedCollections = [
+      value.items,
+      value.foods,
+      value.menu,
+      value.categories,
+      value.sections,
+      value.children,
+      value.list,
+      value.data,
+    ].filter(Boolean);
+
+    if (nestedCollections.length > 0) {
+      const flattenedNested = nestedCollections.flatMap(flattenFoodCandidates);
+      if (flattenedNested.length > 0) return flattenedNested;
+    }
+
+    return [value];
+  };
+
+  const isLikelyFoodItem = (value) => {
+    if (typeof value === "string") return true;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    return Boolean(
+      value.name ||
+      value.title ||
+      value.foodId ||
+      value.id ||
+      value._id ||
+      value.price !== undefined ||
+      value.about ||
+      value.description ||
+      value.foodType ||
+      value.type
+    );
+  };
+
+  const normalizedPriceLabel = (rawLabel) =>
+    String(rawLabel || "")
+      .replace(/â‚¹/g, "₹")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const candidates = flattenFoodCandidates(direct).filter(isLikelyFoodItem);
+
+  return candidates.map((food, index) => {
+    if (typeof food === "string") {
+      return {
+        id: `food-${index}`,
+        name: food,
+        type: "Veg",
+        description: "Description not available.",
+        images: [],
+        price: 0,
+        displayPrice: "Price on request",
+      };
+    }
+
+    const images = Array.isArray(food?.images)
+      ? food.images.filter(Boolean)
+      : food?.image
+        ? [food.image]
+        : [];
+    const type = String(food?.type || food?.foodType || "Veg").trim() || "Veg";
+    const price = parseNumber(food?.price);
+    const serverPriceLabel = normalizedPriceLabel(food?.displayPrice || food?.priceLabel || food?.formattedPrice);
+
+    return {
+      id: food?.id || food?.foodId || food?._id || `food-${index}`,
+      name: food?.name || food?.title || `Food Item ${index + 1}`,
+      type,
+      description: String(food?.description || food?.about || "Description not available.").trim(),
+      images,
+      price,
+      displayPrice: serverPriceLabel || (price > 0 ? formatCurrencyINR(price) : "Price on request"),
+    };
+  });
+};
+
+const getFoodAccent = (type) => {
+  const normalized = String(type || "").trim().toLowerCase();
+  if (normalized === "veg") return { color: C.green, bg: C.greenBg, icon: "leaf-outline" };
+  if (normalized === "vegan") return { color: "#047857", bg: "#ECFDF5", icon: "nutrition-outline" };
+  return { color: C.red, bg: C.redBg, icon: "restaurant-outline" };
 };
 
 // ─── DESIGN PRIMITIVES ───────────────────────────────────────────────────────
@@ -253,6 +340,7 @@ const HotelDetails = ({ navigation, route }) => {
   const [paymentMode, setPaymentMode] = useState("offline");
   const [galleryModalVisible, setGalleryModalVisible] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
+  const [selectedFood, setSelectedFood] = useState([]);
   const galleryScrollRef = useRef(null);
 
   useEffect(() => {
@@ -367,6 +455,10 @@ const HotelDetails = ({ navigation, route }) => {
   const gstConfig = hotel?.gstConfig || null;
   const amenities = hotel?.amenities || [];
   const foods = useMemo(() => extractFoods(hotel), [hotel]);
+  const selectedFoodTotal = useMemo(
+    () => selectedFood.reduce((sum, item) => sum + parseNumber(item?.price) * parseNumber(item?.quantity || 1), 0),
+    [selectedFood]
+  );
   const monthlyDataSource = useMemo(() => {
     if (Array.isArray(monthlyData) && monthlyData.length) return monthlyData;
     if (Array.isArray(hotel?.monthlyData) && hotel.monthlyData.length) return hotel.monthlyData;
@@ -478,7 +570,7 @@ const HotelDetails = ({ navigation, route }) => {
   const currencySymbol = pricingOverview?.currencySymbol || selectedRoomData?.pricing?.currencySymbol || selectedRoomData?.pricing?.currency || "₹";
 
   const pricing = useMemo(() => {
-    if (!selectedRoomData) return { base: 0, tax: 0, total: 0, discount: 0, finalTotal: 0, couponApplied: false, perNight: 0, appliedTaxPercent: 0, taxLabel: "" };
+    if (!selectedRoomData) return { base: 0, tax: 0, foodTotal: 0, total: 0, discount: 0, finalTotal: 0, couponApplied: false, perNight: 0, appliedTaxPercent: 0, taxLabel: "" };
     const pn = selectedRoomData.__pricing?.nightlyPrice ?? getRoomBasePrice(selectedRoomData);
     const bt = pn * roomsCount * nights;
     const rtp = parseNumber(selectedRoomData?.pricing?.taxPercent || selectedRoomData?.pricing?.gstPercent);
@@ -492,9 +584,22 @@ const HotelDetails = ({ navigation, route }) => {
     else if (gstData?.gstPrice) { atp = parseNumber(gstData.gstPrice); gt = (bt * atp) / 100; tl = `GST (${atp}%)`; }
     else { const minThresh = parseNumber(gstData?.gstMinThreshold) || 1000; const maxThresh = parseNumber(gstData?.gstMaxThreshold) || 7500; if (pn > maxThresh) atp = 18; else if (pn > minThresh) atp = parseNumber(gstData?.gstPrice) || 12; else atp = 0; gt = (bt * atp) / 100; tl = atp ? `GST (${atp}%)` : "No GST"; }
     const rd = parseNumber(discountAmount || couponResult?.discountPrice || couponResult?.discountAmount);
-    const gross = bt + gt; const dv = Math.min(Math.max(rd, 0), Math.max(gross, 0));
-    return { base: bt, tax: gt, total: gross, discount: dv, finalTotal: Math.max(gross - dv, 0), couponApplied: dv > 0, perNight: pn, appliedTaxPercent: atp, taxLabel: tl };
-  }, [selectedRoomData, roomsCount, nights, getRoomBasePrice, gstData, gstConfig, discountAmount, couponResult]);
+    const discountedRoomGross = Math.max(bt + gt - Math.min(Math.max(rd, 0), Math.max(bt + gt, 0)), 0);
+    const foodTotal = selectedFoodTotal;
+    const finalTotal = discountedRoomGross + foodTotal;
+    return {
+      base: bt,
+      tax: gt,
+      foodTotal,
+      total: bt + gt + foodTotal,
+      discount: Math.min(Math.max(rd, 0), Math.max(bt + gt, 0)),
+      finalTotal,
+      couponApplied: rd > 0,
+      perNight: pn,
+      appliedTaxPercent: atp,
+      taxLabel: tl,
+    };
+  }, [selectedRoomData, roomsCount, nights, getRoomBasePrice, gstData, gstConfig, discountAmount, couponResult, selectedFoodTotal]);
 
   const getRoomOfferDisplayDiscount = useCallback((room, np) => { const ed = parseNumber(room?.__pricing?.offerDiscount); if (ed > 0) return ed; return Math.max(parseNumber(room?.__pricing?.originalPrice) - parseNumber(np), 0); }, []);
 
@@ -564,6 +669,27 @@ const HotelDetails = ({ navigation, route }) => {
   };
   const handleClearCoupon = () => { dispatch(resetCoupon()); setCouponCodeInput(""); };
 
+  const upsertFood = useCallback((foodItem, quantity) => {
+    const normalizedQty = Math.max(0, Number(quantity) || 0);
+    const normalizedFood = {
+      foodId: String(foodItem?.id || foodItem?.foodId || foodItem?._id || ""),
+      name: String(foodItem?.name || "Food Item"),
+      price: parseNumber(foodItem?.price),
+      quantity: normalizedQty,
+      type: String(foodItem?.type || foodItem?.foodType || ""),
+    };
+    setSelectedFood((current) => {
+      const next = current.filter((item) => String(item.foodId || item.id || "") !== normalizedFood.foodId);
+      if (normalizedQty <= 0) return next;
+      return [...next, normalizedFood];
+    });
+  }, []);
+
+  const getFoodQuantity = useCallback((foodId) => {
+    const match = selectedFood.find((item) => String(item.foodId || item.id || "") === String(foodId));
+    return Number(match?.quantity) || 0;
+  }, [selectedFood]);
+
   const submitBooking = async () => {
     const name = String(guestName || "").trim(), phone = String(guestPhone || "").trim(), email = String(guestEmail || "").trim();
     if (!name || !phone || !email) { showError("Missing Details", "Please fill all guest details."); return; }
@@ -572,7 +698,36 @@ const HotelDetails = ({ navigation, route }) => {
     if (guestsCount > roomsCount * MAX_GUESTS_PER_ROOM) { showError("Guest Limit Exceeded", `Only ${MAX_GUESTS_PER_ROOM} guests are allowed per room.`); return; }
     const userId = await getUserId(); if (!userId) { showError("Login Required", "Please login to continue booking."); return; }
     const sp = parseNumber(selectedRoomData?.__pricing?.nightlyPrice ?? getRoomBasePrice(selectedRoomData));
-    dispatch(createBooking({ userId: String(userId), hotelId: String(hotelId), checkInDate: toDateOnly(checkInDate).toISOString(), checkOutDate: toDateOnly(checkOutDate).toISOString(), guests: guestsCount, numRooms: roomsCount, guestDetails: [{ fullName: name, mobile: phone, email }], foodDetails: [], roomDetails: [{ roomId: String(selectedRoomId), type: String(selectedRoomData?.name || selectedRoomData?.type || "Room"), bedTypes: String(selectedRoomData?.bedTypes || selectedRoomData?.bedType || ""), price: sp }], pm: paymentMode === "offline" ? "offline" : "online", bookingSource: "app", bookingStatus: paymentMode !== "offline" ? "Pending" : "Confirmed", ...(paymentMode === "online_partial" ? { advancePercent: 25 } : {}), couponCode: appliedCoupon || undefined, discountPrice: pricing.discount || 0, hotelDetails: { hotelName: basicInfo?.name || hotel?.hotelName || "", hotelEmail: basicInfo?.email || hotel?.email || hotel?.hotelEmail || "", hotelCity: basicInfo?.location?.city || hotel?.hotelCity || "", hotelOwnerName: basicInfo?.ownerName || hotel?.hotelOwnerName || hotel?.createdBy?.user || "", destination: basicInfo?.location?.city || basicInfo?.location?.state || hotel?.destination || "" } }));
+    dispatch(createBooking({
+      userId: String(userId),
+      hotelId: String(hotelId),
+      checkInDate: toDateOnly(checkInDate).toISOString(),
+      checkOutDate: toDateOnly(checkOutDate).toISOString(),
+      guests: guestsCount,
+      numRooms: roomsCount,
+      guestDetails: [{ fullName: name, mobile: phone, email }],
+      foodDetails: selectedFood.map((food) => ({
+        foodId: String(food.foodId || ""),
+        name: String(food.name || "Food Item"),
+        price: parseNumber(food.price),
+        quantity: Number(food.quantity) || 1,
+        type: String(food.type || ""),
+      })),
+      roomDetails: [{ roomId: String(selectedRoomId), type: String(selectedRoomData?.name || selectedRoomData?.type || "Room"), bedTypes: String(selectedRoomData?.bedTypes || selectedRoomData?.bedType || ""), price: sp }],
+      pm: paymentMode === "offline" ? "offline" : "online",
+      bookingSource: "app",
+      bookingStatus: paymentMode !== "offline" ? "Pending" : "Confirmed",
+      ...(paymentMode === "online_partial" ? { advancePercent: 25 } : {}),
+      couponCode: appliedCoupon || undefined,
+      discountPrice: pricing.discount || 0,
+      hotelDetails: {
+        hotelName: basicInfo?.name || hotel?.hotelName || "",
+        hotelEmail: basicInfo?.email || hotel?.email || hotel?.hotelEmail || "",
+        hotelCity: basicInfo?.location?.city || hotel?.hotelCity || "",
+        hotelOwnerName: basicInfo?.ownerName || hotel?.hotelOwnerName || hotel?.createdBy?.user || "",
+        destination: basicInfo?.location?.city || basicInfo?.location?.state || hotel?.destination || ""
+      }
+    }));
   };
 
   const handleGoBack = () => { if (navigation?.canGoBack?.()) navigation.goBack(); else navigateToHomeScreen(); };
@@ -931,17 +1086,113 @@ const HotelDetails = ({ navigation, route }) => {
           {!!foods.length && (
             <View style={{ marginBottom: 12 }}>
               <SectionLabel title="Restaurant / Menu" />
-              <View style={s.card}>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-                  {foods.slice(0, 24).map((f, i) => {
-                    const lbl = typeof f === "string" ? f : f?.name || f?.title || JSON.stringify(f);
-                    return (
-                      <View key={`${lbl}-${i}`} style={{ paddingHorizontal: 11, paddingVertical: 5, backgroundColor: C.slate1, borderWidth: 1, borderColor: C.slate2, borderRadius: 20 }}>
-                        <Text style={{ fontSize: 11, fontWeight: "700", color: C.text2 }}>{lbl}</Text>
+              {foods.slice(0, 24).map((food, index) => {
+                const accent = getFoodAccent(food.type);
+                const foodQty = getFoodQuantity(food.id);
+                return (
+                  <View key={`${food.id}-${index}`} style={s.roomCard}>
+                    <View style={{ flexDirection: "row", padding: 12, gap: 10 }}>
+                      {food?.images?.[0] ? (
+                        <Image source={{ uri: food.images[0] }} style={{ width: 88, height: 88, borderRadius: 12 }} resizeMode="cover" />
+                      ) : (
+                        <View style={{ width: 88, height: 88, borderRadius: 12, backgroundColor: C.slate1, alignItems: "center", justifyContent: "center" }}>
+                          <Ionicons name="restaurant-outline" size={24} color={C.slate3} />
+                        </View>
+                      )}
+
+                      <View style={{ flex: 1, justifyContent: "space-between", minWidth: 0 }}>
+                        <View>
+                          <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 2 }}>
+                            <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "800", color: C.text1, flex: 1, paddingRight: 6 }}>
+                              {food.name}
+                            </Text>
+                            <View style={{ backgroundColor: accent.bg, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 3 }}>
+                              <Ionicons name={accent.icon} size={10} color={accent.color} />
+                              <Text style={{ color: accent.color, fontSize: 9, fontWeight: "800" }}>{food.type}</Text>
+                            </View>
+                          </View>
+
+                          <Text numberOfLines={2} style={{ fontSize: 11, color: C.text3, fontWeight: "600", marginBottom: 5 }}>
+                            {food.description}
+                          </Text>
+
+                          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
+                            <Badge
+                              label={food.images?.length ? `${food.images.length} Photos` : "No Photos"}
+                              color={C.blue}
+                              bg={C.blueBg}
+                              icon="images-outline"
+                            />
+                            <Badge
+                              label={food.price > 0 ? "Priced" : "Ask Price"}
+                              color={food.price > 0 ? C.green : C.gold}
+                              bg={food.price > 0 ? C.greenBg : "#FFF9EC"}
+                              icon={food.price > 0 ? "cash-outline" : "help-circle-outline"}
+                            />
+                          </View>
+                        </View>
+
+                        <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 }}>
+                          <View>
+                            <Text style={{ fontSize: 18, fontWeight: "800", color: C.text1, lineHeight: 22 }}>
+                              {food.displayPrice}
+                            </Text>
+                            <Text style={{ fontSize: 9, color: C.slate4, marginTop: 2 }}>
+                              Per item
+                            </Text>
+                          </View>
+
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                            <TouchableOpacity
+                              onPress={() => upsertFood(food, Math.max(foodQty - 1, 0))}
+                              disabled={foodQty <= 0}
+                              style={[s.counterBtn, foodQty <= 0 && s.counterBtnDisabled]}
+                            >
+                              <Ionicons name="remove" size={13} color={foodQty <= 0 ? C.slate3 : C.text1} />
+                            </TouchableOpacity>
+                            <View style={{ minWidth: 22, alignItems: "center" }}>
+                              <Text style={{ fontSize: 15, fontWeight: "800", color: foodQty > 0 ? C.navy : C.text1 }}>
+                                {foodQty}
+                              </Text>
+                            </View>
+                            <TouchableOpacity
+                              onPress={() => upsertFood(food, foodQty + 1)}
+                              style={s.counterBtn}
+                            >
+                              <Ionicons name="add" size={13} color={C.text1} />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
                       </View>
-                    );
-                  })}
-                </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {!!selectedFood.length && (
+            <View style={{ marginBottom: 12 }}>
+              <SectionLabel title="Selected Food" />
+              <View style={s.card}>
+                {selectedFood.map((item, index) => (
+                  <View key={`${item.foodId}-${index}`}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                      <View style={{ flex: 1, paddingRight: 12 }}>
+                        <Text style={{ fontSize: 13, fontWeight: "800", color: C.text1 }}>
+                          {item.name}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>
+                          {item.quantity} × {formatCurrencyINR(item.price)}
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 13, fontWeight: "800", color: C.navy }}>
+                        {formatCurrencyINR(parseNumber(item.price) * parseNumber(item.quantity))}
+                      </Text>
+                    </View>
+                    {index < selectedFood.length - 1 && <GoldDivider />}
+                  </View>
+                ))}
               </View>
             </View>
           )}
@@ -994,7 +1245,7 @@ const HotelDetails = ({ navigation, route }) => {
               {currencySymbol}{Math.round(pricing.finalTotal).toLocaleString()}
             </Text>
             <Text style={{ fontSize: 10, color: C.slate4, marginTop: 1 }}>
-              {currencySymbol}{Math.round(pricing.base).toLocaleString()} + {currencySymbol}{Math.round(pricing.tax).toLocaleString()} tax
+              {currencySymbol}{Math.round(pricing.base).toLocaleString()} + {currencySymbol}{Math.round(pricing.tax).toLocaleString()} tax{!!pricing.foodTotal ? ` + ${currencySymbol}${Math.round(pricing.foodTotal).toLocaleString()} food` : ""}
             </Text>
           </View>
           <TouchableOpacity onPress={handleBookNow} style={s.bookBtn}>
@@ -1137,6 +1388,7 @@ const HotelDetails = ({ navigation, route }) => {
                   {[
                     { label: `Room × ${nights} night${nights > 1 ? "s" : ""}`, val: pricing.base },
                     { label: pricing.taxLabel || "GST / Taxes", val: pricing.tax },
+                    ...(pricing.foodTotal > 0 ? [{ label: "Food & Beverages", val: pricing.foodTotal }] : []),
                   ].map((row, i) => (
                     <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
                       <Text style={{ fontSize: 12, color: C.text3, fontWeight: "600" }}>{row.label}</Text>
@@ -1159,6 +1411,22 @@ const HotelDetails = ({ navigation, route }) => {
                   </View>
                   <Text style={{ fontSize: 9, color: C.slate4, marginTop: 6 }}>* Final amount subject to hotel confirmation.</Text>
                 </View>
+
+                {!!selectedFood.length && (
+                  <View style={{ backgroundColor: C.slate1, borderRadius: 16, padding: 14, marginTop: -8, marginBottom: 20 }}>
+                    <Text style={{ fontSize: 11, fontWeight: "800", color: C.text2, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 12 }}>Selected Food</Text>
+                    {selectedFood.map((item, index) => (
+                      <View key={`${item.foodId}-${index}`} style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: index === selectedFood.length - 1 ? 0 : 8 }}>
+                        <Text style={{ fontSize: 12, color: C.text3, fontWeight: "600", flex: 1, paddingRight: 8 }}>
+                          {item.name} × {item.quantity}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: C.text2, fontWeight: "700" }}>
+                          {formatCurrencyINR(parseNumber(item.price) * parseNumber(item.quantity))}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
 
                 {/* Coupon Code */}
                 <View style={{ marginBottom: 20 }}>

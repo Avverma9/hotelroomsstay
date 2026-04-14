@@ -56,6 +56,7 @@ import {
   normalizeHotelId,
   deriveHotelId,
   normalizeAmenities,
+  normalizeFoods,
   extractPriceCandidate,
   sumFoodSelections,
   calculateStayNights,
@@ -389,12 +390,12 @@ export default function BookNowPage() {
 
   // --- Food Selection ---
   const availableFoods = useMemo(
-    () => (Array.isArray(hotel?.foods) ? hotel.foods : []),
+    () => normalizeFoods(hotel?.foods, []),
     [hotel?.foods]
   );
   const [selectedFood, setSelectedFood] = useState(() => {
     const initial = state?.selectedFood;
-    return Array.isArray(initial) ? initial : [];
+    return normalizeFoods(Array.isArray(initial) ? initial : [], []);
   });
 
   const upsertFood = useCallback((food, nextQty) => {

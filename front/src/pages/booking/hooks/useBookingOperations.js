@@ -12,7 +12,6 @@ import {
   loadRazorpayScript,
   openRazorpayCheckout,
 } from "../../../services/bookingService";
-import { userId } from "@/utils/Unauthorized";
 
 const formatForApi = (value) => {
   if (!value) return null;
@@ -199,13 +198,47 @@ const useBookingOperations = ({
       discountPrice,
       bookingStatus: computeBookingStatus({ roomsCount, nights }),
       bookingSource: "Site",
-      destination: hotelData?.city,
-      hotelName: hotelData?.hotelName,
-      hotelOwnerName: hotelData?.hotelOwnerName,
-      hotelEmail: hotelData?.hotelEmail,
+      destination:
+        hotelData?.city ||
+        hotelData?.destination ||
+        hotelData?.basicInfo?.location?.city,
+      hotelName:
+        hotelData?.hotelName ||
+        hotelData?.name ||
+        hotelData?.basicInfo?.name,
+      hotelOwnerName:
+        hotelData?.hotelOwnerName || hotelData?.basicInfo?.owner,
+      hotelEmail:
+        hotelData?.hotelEmail || hotelData?.basicInfo?.contacts?.email,
       contactName: resolvedContact.name,
       contactEmail: resolvedContact.email,
       contactNumber: resolvedContact.phone,
+      hotelDetails: {
+        hotelId,
+        hotelName:
+          hotelData?.hotelName ||
+          hotelData?.name ||
+          hotelData?.basicInfo?.name ||
+          "",
+        hotelEmail:
+          hotelData?.hotelEmail ||
+          hotelData?.basicInfo?.contacts?.email ||
+          "",
+        hotelCity:
+          hotelData?.city ||
+          hotelData?.basicInfo?.location?.city ||
+          "",
+        hotelOwnerName:
+          hotelData?.hotelOwnerName ||
+          hotelData?.basicInfo?.owner ||
+          "",
+        destination:
+          hotelData?.destination ||
+          hotelData?.city ||
+          hotelData?.basicInfo?.location?.city ||
+          hotelData?.basicInfo?.location?.state ||
+          "",
+      },
       guestDetails: [{
         fullName: resolvedContact.name,
         email: resolvedContact.email,
@@ -220,7 +253,13 @@ const useBookingOperations = ({
       discountPrice,
       finalTotal,
       guestsCount,
+      hotelData?.basicInfo?.contacts?.email,
+      hotelData?.basicInfo?.location?.city,
+      hotelData?.basicInfo?.location?.state,
+      hotelData?.basicInfo?.name,
+      hotelData?.basicInfo?.owner,
       hotelData?.city,
+      hotelData?.destination,
       hotelData?.hotelEmail,
       hotelData?.hotelName,
       hotelData?.hotelOwnerName,
@@ -282,8 +321,8 @@ const useBookingOperations = ({
     try {
       const response = await dispatch(
         getGstForHotelData({
-          hotelId,
-          amount: roundedTaxable,
+          type: "Hotel",
+          gstThreshold: roundedTaxable,
         })
       ).unwrap();
 
@@ -323,7 +362,7 @@ const useBookingOperations = ({
 
     const payload = {
       hotelId,
-      userId,
+      userId: bookingUserId,
       roomId: selectedRooms?.[0]?.roomId,
       couponCode,
       checkInDate: formatForApi(checkInDate),
