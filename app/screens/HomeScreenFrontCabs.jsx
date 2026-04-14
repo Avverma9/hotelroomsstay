@@ -20,9 +20,27 @@ const toNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const toFiniteNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const getFare = (cab) => {
   const isShared = String(cab?.sharingType || "").toLowerCase() === "shared";
-  return isShared ? toNumber(cab?.perPersonCost) : toNumber(cab?.price);
+  const seatPrices = (Array.isArray(cab?.seatConfig) ? cab.seatConfig : [])
+    .map((seat) => toFiniteNumber(seat?.seatPrice))
+    .filter((value) => value !== null && value >= 0);
+  const seatDerivedFare = seatPrices.length ? Math.min(...seatPrices) : null;
+  const candidates = isShared
+    ? [cab?.perPersonCost, cab?.price, seatDerivedFare]
+    : [cab?.price, cab?.perPersonCost, seatDerivedFare];
+
+  for (const value of candidates) {
+    const numeric = toFiniteNumber(value);
+    if (numeric !== null && numeric >= 0) return numeric;
+  }
+
+  return null;
 };
 
 const getSeatCount = (cab) => {
@@ -30,6 +48,18 @@ const getSeatCount = (cab) => {
   const seater = toNumber(cab?.seater);
   return seater > 0 ? seater : configured;
 };
+
+const isSeatBooked = (seat) => {
+  const direct = normalizeBool(seat?.isBooked ?? seat?.booked ?? seat?.isSeatBooked);
+  if (direct !== null) return direct;
+  const status = String(seat?.status || seat?.seatStatus || "").trim().toLowerCase();
+  if (status.includes("book")) return true;
+  if (status.includes("open") || status.includes("available") || status.includes("vacant")) return false;
+  return false;
+};
+
+const getBookedSeats = (cab) =>
+  (Array.isArray(cab?.seatConfig) ? cab.seatConfig : []).filter((seat) => isSeatBooked(seat)).length;
 
 const normalizeBool = (value) => {
   if (typeof value === "boolean") return value;
@@ -45,6 +75,12 @@ const normalizeBool = (value) => {
 const getCabBookingState = (cab) => {
   const isRunning = normalizeBool(cab?.isRunning);
   if (isRunning === false) return { label: "Unavailable", tone: "rose" };
+
+  const totalSeats = getSeatCount(cab);
+  const bookedSeats = getBookedSeats(cab);
+  if (totalSeats > 0 && bookedSeats >= totalSeats) {
+    return { label: "Full", tone: "amber" };
+  }
 
   const isAvailable = normalizeBool(cab?.isAvailable);
   if (isAvailable === false) return { label: "Unavailable", tone: "rose" };
@@ -105,11 +141,17 @@ function TinyFireIcon() {
 const CabCard = ({ cab, onPress }) => {
   const fare = getFare(cab);
   const seats = getSeatCount(cab);
+  const bookedSeats = getBookedSeats(cab);
+  const availableSeats = seats > 0 ? Math.max(seats - bookedSeats, 0) : 0;
   const image = cab?.images?.[0] || "";
   const status = getCabBookingState(cab);
+  const isShared = String(cab?.sharingType || "").toLowerCase() === "shared";
+  const rideTypeLabel = isShared ? "Shared" : "Private";
   const statusClasses =
     status.tone === "emerald"
       ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+      : status.tone === "amber"
+      ? "bg-amber-50 border-amber-200 text-amber-700"
       : "bg-rose-50 border-rose-200 text-rose-700";
 
   return (
@@ -139,8 +181,15 @@ const CabCard = ({ cab, onPress }) => {
           </Text>
 
           <Text className="text-slate-500 text-[11px] font-semibold mt-0.5" numberOfLines={1}>
-            {cab?.vehicleType || "Car"} | {seats || 0} seats | {cab?.fuelType || "Fuel"}
+            {cab?.vehicleType || "Car"} | {rideTypeLabel} | {seats || 0} seats
           </Text>
+
+          <View className="flex-row items-center mt-1.5">
+            <Ionicons name="people-outline" size={12} color="#94a3b8" />
+            <Text className="text-slate-500 text-[11px] font-medium ml-1" numberOfLines={1}>
+              {availableSeats > 0 ? `${availableSeats} seats left` : status.label === "Full" ? "No seats left" : `${seats || 0} seats`}
+            </Text>
+          </View>
 
           <View className="flex-row items-center mt-1.5">
             <Ionicons name="location-outline" size={12} color="#94a3b8" />
@@ -151,10 +200,10 @@ const CabCard = ({ cab, onPress }) => {
 
           <View className="flex-row items-baseline mt-3">
             <Text className="text-[#0d3b8f] font-extrabold text-[18px]">
-              {formatINR(fare)}
+              {fare !== null ? formatINR(fare) : "On request"}
             </Text>
             <Text className="text-slate-500 text-[11px] font-semibold ml-1">
-              {String(cab?.sharingType || "").toLowerCase() === "shared" ? "/ seat" : "/ trip"}
+              {isShared ? "/ seat" : "/ trip"}
             </Text>
           </View>
         </View>
@@ -190,7 +239,7 @@ export default function HomeScreenFrontCabs() {
               <TinyFireIcon />
             </View>
             <Text className="text-[12px] text-slate-500 font-semibold mt-0.5">
-              Top 4 rides for your next trip
+              Live cab inventory with updated fare and route details
             </Text>
           </View>
 

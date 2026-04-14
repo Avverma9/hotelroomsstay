@@ -23,6 +23,41 @@ import {
 import Breadcrumb from '../../../components/breadcrumb'
 import { clearHotelUpdateStatus, getHotelById, updateHotelInfo } from '../../../../redux/slices/admin/hotel'
 
+const formatCurrency = (value) => {
+  const amount = Number(value) || 0
+  return new Intl.NumberFormat('en-IN').format(amount)
+}
+
+const normalizeFoodDetails = (foods = []) =>
+  (Array.isArray(foods) ? foods : [])
+    .filter((food) => food && typeof food === 'object')
+    .map((food, index) => {
+      const images = Array.isArray(food.images)
+        ? food.images.filter(Boolean)
+        : food.image
+          ? [food.image]
+          : []
+      const type = food.type || food.foodType || 'Veg'
+      const description = food.description || food.about || 'Description not available.'
+      const price = Number(food.price) || 0
+      return {
+        id: food.id || food.foodId || food._id || `food-${index}`,
+        name: food.name || food.title || `Food Item ${index + 1}`,
+        type,
+        description,
+        images,
+        price,
+        displayPrice: food.displayPrice || `₹${formatCurrency(price)}`,
+      }
+    })
+
+const getFoodBadgeClasses = (type = '') => {
+  const normalized = String(type).trim().toLowerCase()
+  if (normalized === 'veg') return 'bg-green-100 text-green-700 border-green-200'
+  if (normalized === 'vegan') return 'bg-emerald-100 text-emerald-700 border-emerald-200'
+  return 'bg-rose-100 text-rose-700 border-rose-200'
+}
+
 // Renders stored policy text with bullet/number list formatting
 const FormattedPolicyText = ({ text, className = '' }) => {
   if (!text) return null
@@ -253,7 +288,7 @@ function HotelDetails({ listPath, listLabel }) {
   const detailedPolicies = policies?.detailed || {}
   const restrictions = policies?.restrictions || {}
   const rooms = hotel?.rooms || []
-  const foods = hotel?.foods || []
+  const foods = useMemo(() => normalizeFoodDetails(hotel?.foods), [hotel?.foods])
   const amenities = hotel?.amenities || []
   const ratingBreakdown = hotel?.ratingBreakdown || {}
   const propertyTypes = Array.isArray(basicInfo?.propertyType)
@@ -497,30 +532,97 @@ function HotelDetails({ listPath, listLabel }) {
             )}
 
             {activeTab === 'food' && (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {foods.map((food, index) => (
-                  <div key={`${food.id}-${index}`} className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <div className="h-32 w-full shrink-0">
-                      <img
-                        src={food.images?.[0] || 'https://via.placeholder.com/400x300?text=Food'}
-                        alt={food.name}
-                        className="h-full w-full object-cover"
-                      />
+              <div className="space-y-5">
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-[0.28em] text-orange-500">Dining Overview</p>
+                      <h3 className="mt-1 text-xl font-black text-slate-900">Food Menu & Meal Details</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Full food details with item type, pricing, images, and descriptions.
+                      </p>
                     </div>
-                    <div className="flex flex-1 flex-col p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="line-clamp-1 font-bold text-slate-900">{food.name}</h3>
-                        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${food.type?.toLowerCase() === 'veg' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {food.type}
-                        </span>
+                    <div className="grid grid-cols-2 gap-3 sm:min-w-[260px]">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Items</p>
+                        <p className="mt-1 text-2xl font-black text-slate-900">{foods.length}</p>
                       </div>
-                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">{food.description}</p>
-                      <div className="mt-auto pt-3">
-                        <span className="text-lg font-bold text-slate-900">{food.displayPrice || `â‚¹${food.price || 0}`}</span>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Starting At</p>
+                        <p className="mt-1 text-2xl font-black text-slate-900">
+                          {foods.length ? `₹${formatCurrency(Math.min(...foods.map((food) => Number(food.price) || 0)))}` : 'N/A'}
+                        </p>
                       </div>
                     </div>
                   </div>
-                ))}
+                </div>
+
+                {foods.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center shadow-sm">
+                    <Utensils size={28} className="mx-auto text-slate-300" />
+                    <p className="mt-3 text-base font-bold text-slate-800">No food details available</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      This hotel does not have complete dining data yet.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+                    {foods.map((food) => (
+                      <div key={food.id} className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)]">
+                          <div className="relative h-56 bg-slate-100 md:h-full">
+                            <img
+                              src={food.images?.[0] || 'https://via.placeholder.com/500x400?text=Food'}
+                              alt={food.name}
+                              className="h-full w-full object-cover"
+                            />
+                            <div className="absolute left-3 top-3">
+                              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${getFoodBadgeClasses(food.type)}`}>
+                                {food.type}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col p-5">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <h3 className="text-xl font-black text-slate-900">{food.name}</h3>
+                                <p className="mt-1 text-sm font-medium text-slate-500">
+                                  {food.images?.length ? `${food.images.length} image${food.images.length > 1 ? 's' : ''} available` : 'No gallery images'}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Price</p>
+                                <p className="mt-1 text-2xl font-black text-slate-900">{food.displayPrice}</p>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+                              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Description</p>
+                              <p className="mt-2 text-sm leading-6 text-slate-600">{food.description}</p>
+                            </div>
+
+                            {food.images?.length > 1 && (
+                              <div className="mt-4">
+                                <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">More Photos</p>
+                                <div className="flex gap-2 overflow-x-auto pb-1">
+                                  {food.images.slice(1).map((image, imageIndex) => (
+                                    <img
+                                      key={`${food.id}-image-${imageIndex}`}
+                                      src={image}
+                                      alt={`${food.name} ${imageIndex + 2}`}
+                                      className="h-16 w-20 flex-none rounded-xl border border-slate-200 object-cover"
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -688,6 +790,5 @@ function HotelDetails({ listPath, listLabel }) {
 }
 
 export default HotelDetails
-
 
 

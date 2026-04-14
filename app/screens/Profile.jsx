@@ -309,34 +309,36 @@ const GhostButton = ({ label, icon, onPress, disabled, loading, variant }) => {
 // ─── Booking Card ─────────────────────────────────────────────────────────────
 
 const BookingCard = ({ item, onViewBooking }) => {
-  const hotelName = item?.hotelDetails?.hotelName || "Hotel";
-  const destination = item?.destination || item?.hotelDetails?.destination || "—";
-  const status = item?.bookingStatus || "Pending";
-  const roomType = item?.roomDetails?.[0]?.type || "—";
-  const guests = toNumber(item?.guests || 0);
-  const amount = formatCurrencyINR(item?.price);
-  const { color, border, bg } = statusConfig(status);
+  const roomDetails = toList(item?.roomDetails);
+  const primaryRoom = roomDetails[0] || {};
+  const hotelName = [item?.hotelName, item?.hotelDetails?.hotelName, item?.hotel?.hotelName].map(normalizeText).find(Boolean) || "Hotel";
+  const destination = [item?.destination, item?.hotelDetails?.destination, item?.hotelDetails?.hotelCity, item?.hotel?.city, item?.city].map(normalizeText).find(Boolean) || "Location unavailable";
+  const status = normalizeText(item?.bookingStatus) || "Pending";
+  const roomType = [primaryRoom?.type, primaryRoom?.roomType, item?.roomType].map(normalizeText).find(Boolean) || "Room details pending";
+  const guests = Math.max(1, toNumber(item?.guests || item?.guestCount || item?.totalGuests || item?.numberOfGuests || 1));
+  const bookingCode = [item?.bookingId, item?.bookingID, item?.booking_id, item?._id].map(normalizeText).find(Boolean) || "-";
+  const costs = calculateBookingCosts(item);
+  const amount = formatCurrencyINR(costs.totalPaid || item?.price || 0);
+  const nights = Math.max(0, toNumber(item?.numberOfNights || item?.nights || item?.night));
+  const { color } = statusConfig(status);
 
   return (
     <View style={S.bookingCard}>
-      {/* Left accent */}
       <View style={[S.cardStripe, { backgroundColor: color }]} />
 
-      <View style={{ flex: 1, paddingLeft: 14 }}>
-        {/* Header */}
+      <View style={S.bookingCardBody}>
         <View style={S.cardHead}>
-          <View style={{ flex: 1, marginRight: 8 }}>
+          <View style={S.cardHeadMain}>
             <Text style={S.cardTitle} numberOfLines={1}>{hotelName}</Text>
             <View style={S.cardSubRow}>
               <Ionicons name="location-outline" size={11} color={C.gold} />
-              <Text style={S.cardSub}> {destination}</Text>
+              <Text style={S.cardSub} numberOfLines={1}> {destination}</Text>
             </View>
-            <Text style={S.cardId}>#{item?.bookingId || "—"}</Text>
+            <Text style={S.cardId} numberOfLines={1}>#{bookingCode}</Text>
           </View>
           <StatusBadge label={status} />
         </View>
 
-        {/* Dates */}
         <View style={S.datesStrip}>
           <View style={{ flex: 1 }}>
             <Text style={S.dateKey}>CHECK-IN</Text>
@@ -353,16 +355,22 @@ const BookingCard = ({ item, onViewBooking }) => {
           </View>
         </View>
 
-        {/* Footer */}
         <View style={S.cardFoot}>
-          <View style={S.rowC}>
+          <View style={S.cardMetaGroup}>
             <Ionicons name="people-outline" size={12} color={C.textSec} />
             <Text style={S.cardFootTxt}> {guests} Guest{guests === 1 ? "" : "s"}</Text>
-            <Text style={S.dot}>·</Text>
+            <Text style={S.dot}>|</Text>
             <Ionicons name="bed-outline" size={12} color={C.textSec} />
             <Text style={S.cardFootTxt} numberOfLines={1}> {roomType}</Text>
+            {nights > 0 ? (
+              <>
+                <Text style={S.dot}>|</Text>
+                <Ionicons name="moon-outline" size={12} color={C.textSec} />
+                <Text style={S.cardFootTxt}> {nights} Night{nights === 1 ? "" : "s"}</Text>
+              </>
+            ) : null}
           </View>
-          <View style={S.rowCGap}>
+          <View style={S.cardActionGroup}>
             <Text style={S.amtTxt}>{amount}</Text>
             <GoldButton label="View" icon="arrow-forward" onPress={() => onViewBooking?.(item)} small />
           </View>
@@ -1482,14 +1490,18 @@ const S = StyleSheet.create({
 
   // ── Booking Card ──
   bookingCard: { flexDirection: "row", backgroundColor: C.bgCard, borderRadius: 18, borderWidth: 1, borderColor: C.border, marginBottom: 12, overflow: "hidden", padding: 14 },
+  bookingCardBody: { flex: 1, paddingLeft: 14, minWidth: 0 },
   cardStripe: { width: 3.5, borderRadius: 4, minHeight: 80 },
-  cardHead: { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
+  cardHead: { flexDirection: "row", alignItems: "flex-start", marginBottom: 10, gap: 8 },
+  cardHeadMain: { flex: 1, minWidth: 0 },
   cardTitle: { fontSize: 15, fontWeight: "800", color: C.textPrimary, letterSpacing: -0.2 },
-  cardSubRow: { flexDirection: "row", alignItems: "center", marginTop: 3 },
-  cardSub: { fontSize: 11, color: C.textSec },
+  cardSubRow: { flexDirection: "row", alignItems: "center", marginTop: 3, minWidth: 0 },
+  cardSub: { fontSize: 11, color: C.textSec, flexShrink: 1 },
   cardId: { fontSize: 10, color: C.textDim, marginTop: 3, fontFamily: Platform.OS === "ios" ? "Courier" : "monospace" },
-  cardFoot: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 },
-  cardFootTxt: { fontSize: 11, color: C.textSec },
+  cardFoot: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginTop: 10, flexWrap: "wrap", gap: 10 },
+  cardMetaGroup: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", flex: 1, minWidth: 0, paddingRight: 8 },
+  cardActionGroup: { alignItems: "flex-end", justifyContent: "center", marginLeft: "auto", minWidth: 96, gap: 8 },
+  cardFootTxt: { fontSize: 11, color: C.textSec, flexShrink: 1 },
   amtTxt: { fontSize: 14, fontWeight: "900", color: C.goldBright },
 
   datesStrip: { flexDirection: "row", alignItems: "center", backgroundColor: C.bgElevated, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 10 },
