@@ -19,6 +19,18 @@ import {
   Save,
   X,
   Loader2,
+  ChevronDown,
+  ChevronUp,
+  Info,
+  CreditCard,
+  Users,
+  FileText,
+  Settings,
+  Tag,
+  Map,
+  CalendarDays,
+  ThumbsUp,
+  Percent
 } from 'lucide-react'
 import Breadcrumb from '../../../components/breadcrumb'
 import { clearHotelUpdateStatus, getHotelById, updateHotelInfo } from '../../../../redux/slices/admin/hotel'
@@ -26,6 +38,15 @@ import { clearHotelUpdateStatus, getHotelById, updateHotelInfo } from '../../../
 const formatCurrency = (value) => {
   const amount = Number(value) || 0
   return new Intl.NumberFormat('en-IN').format(amount)
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/A'
+  return new Date(dateString).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  })
 }
 
 const normalizeFoodDetails = (foods = []) =>
@@ -58,194 +79,86 @@ const getFoodBadgeClasses = (type = '') => {
   return 'bg-rose-100 text-rose-700 border-rose-200'
 }
 
-// Renders stored policy text with bullet/number list formatting
-const FormattedPolicyText = ({ text, className = '' }) => {
+const ExpandableText = ({ text, maxLength = 200, className = '' }) => {
+  const [isExpanded, setIsExpanded] = useState(false)
   if (!text) return null
-  const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean)
-  if (!lines.length) return null
-  const isBullet = l => /^[•\-–\*]\s/.test(l)
-  const isNum    = l => /^\d+\.\s/.test(l)
-  if (lines.length === 1 && !isBullet(lines[0]) && !isNum(lines[0]))
-    return <span className={className}>{text}</span>
+
+  const shouldTruncate = text.length > maxLength
+  const displayText = isExpanded ? text : text.slice(0, maxLength) + (shouldTruncate ? '...' : '')
+
   return (
-    <ul className={className} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-      {lines.map((line, i) => {
-        const bullet = isBullet(line)
-        const num    = isNum(line)
-        const pfx    = bullet ? '•' : num ? line.match(/^\d+\./)[0] : '›'
-        const body   = bullet ? line.replace(/^[•\-–\*]\s*/, '') : num ? line.replace(/^\d+\.\s*/, '') : line
-        return (
-          <li key={i} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', marginBottom: 3 }}>
-            <span style={{ color: '#888', minWidth: 16, flexShrink: 0, lineHeight: 1.55 }}>{pfx}</span>
-            <span style={{ lineHeight: 1.55 }}>{body}</span>
-          </li>
-        )
-      })}
-    </ul>
+    <div className={className}>
+      <p className="text-sm leading-relaxed text-slate-600 inline">{displayText}</p>
+      {shouldTruncate && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="ml-2 text-sm font-bold text-blue-600 hover:text-blue-700 focus:outline-none"
+        >
+          {isExpanded ? 'Show Less' : 'Read More'}
+        </button>
+      )}
+    </div>
   )
 }
 
-const createHotelEditForm = (hotel) => {
-  const basicInfo = hotel?.basicInfo || {}
-  const location = basicInfo?.location || {}
-  const contacts = basicInfo?.contacts || {}
-  const propertyType = Array.isArray(basicInfo?.propertyType)
-    ? basicInfo.propertyType
-    : basicInfo?.propertyType
-      ? [basicInfo.propertyType]
-      : Array.isArray(hotel?.propertyType)
-        ? hotel.propertyType
-        : hotel?.propertyType
-          ? [hotel.propertyType]
-          : []
+const FormattedPolicyText = ({ text, className = '' }) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  
+  if (!text) return null
+  const lines = String(text).split('\n').map((l) => l.trim()).filter(Boolean)
+  if (!lines.length) return null
 
-  return {
-    hotelName: basicInfo?.name || hotel?.hotelName || '',
-    city: location?.city || hotel?.city || '',
-    state: location?.state || hotel?.state || '',
-    address: location?.address || hotel?.address || '',
-    pinCode: location?.pinCode || hotel?.pinCode || '',
-    starRating: String(basicInfo?.starRating || hotel?.starRating || ''),
-    propertyType: propertyType.join(', '),
-    hotelEmail: contacts?.email || hotel?.hotelEmail || hotel?.email || '',
-    phone: contacts?.phone || hotel?.phone || '',
-    owner: basicInfo?.owner || hotel?.owner || '',
-    description: basicInfo?.description || hotel?.description || '',
-    onFront: Boolean(hotel?.onFront),
-    isAccepted: Boolean(hotel?.isAccepted),
-  }
-}
+  const isBullet = (l) => /^[•\-–\*]\s/.test(l)
+  const isNum = (l) => /^\d+\.\s/.test(l)
 
-function HotelEditModal({ hotel, saving, onClose, onSave }) {
-  const [form, setForm] = useState(() => createHotelEditForm(hotel))
-
-  useEffect(() => {
-    setForm(createHotelEditForm(hotel))
-  }, [hotel])
-
-  const setField = (key) => (event) => {
-    const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value
-    setForm((current) => ({ ...current, [key]: value }))
-  }
-
-  const handleSubmit = (event) => {
-    event.preventDefault()
-    onSave({
-      hotelName: form.hotelName.trim(),
-      city: form.city.trim(),
-      state: form.state.trim(),
-      address: form.address.trim(),
-      pinCode: form.pinCode.trim(),
-      starRating: form.starRating.trim(),
-      propertyType: form.propertyType
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean),
-      hotelEmail: form.hotelEmail.trim(),
-      phone: form.phone.trim(),
-      owner: form.owner.trim(),
-      description: form.description.trim(),
-      onFront: form.onFront,
-      isAccepted: form.isAccepted,
-    })
-  }
+  const maxLines = 4
+  const shouldTruncate = lines.length > maxLines
+  const displayLines = isExpanded ? lines : lines.slice(0, maxLines)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-100 bg-[linear-gradient(135deg,#eff6ff_0%,#f8fafc_55%,#ffffff_100%)] px-6 py-5">
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.25em] text-blue-600">Edit Hotel</p>
-            <h2 className="mt-1 text-2xl font-black text-slate-900">Update Hotel Details</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">{hotel?.hotelId || hotel?._id}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
-          >
-            <X size={18} />
-          </button>
+    <div className={className}>
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+        {displayLines.map((line, i) => {
+          const bullet = isBullet(line)
+          const num = isNum(line)
+          const pfx = bullet ? '•' : num ? line.match(/^\d+\./)[0] : '›'
+          const body = bullet ? line.replace(/^[•\-–\*]\s*/, '') : num ? line.replace(/^\d+\.\s*/, '') : line
+          return (
+            <li key={i} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', marginBottom: 6 }}>
+              <span style={{ color: '#94a3b8', minWidth: 16, flexShrink: 0, lineHeight: 1.55 }}>{pfx}</span>
+              <span className="text-sm text-slate-600" style={{ lineHeight: 1.55 }}>{body}</span>
+            </li>
+          )
+        })}
+      </ul>
+      {shouldTruncate && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="mt-2 text-sm font-bold text-blue-600 hover:text-blue-700 focus:outline-none"
+        >
+          {isExpanded ? 'Show Less' : `View ${lines.length - maxLines} More Items`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+const CollapsibleSection = ({ title, icon: Icon, children, defaultOpen = false, className = '' }) => {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+
+  return (
+    <div className={`rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden ${className}`}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center justify-between px-6 py-4 transition hover:bg-slate-50 focus:outline-none"
+      >
+        <div className="flex items-center gap-3">
+          {Icon && <Icon size={20} className="text-slate-600" />}
+          <h3 className="text-base font-bold text-slate-900">{title}</h3>
         </div>
-
-        <form onSubmit={handleSubmit} className="max-h-[calc(92vh-88px)] overflow-y-auto px-6 py-6">
-          <div className="grid gap-5 md:grid-cols-2">
-            <label className="space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Hotel Name</span>
-              <input required value={form.hotelName} onChange={setField('hotelName')} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-            <label className="space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Hotel Email</span>
-              <input type="email" value={form.hotelEmail} onChange={setField('hotelEmail')} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-            <label className="space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">City</span>
-              <input required value={form.city} onChange={setField('city')} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-            <label className="space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">State</span>
-              <input required value={form.state} onChange={setField('state')} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-            <label className="space-y-2 md:col-span-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Address</span>
-              <input value={form.address} onChange={setField('address')} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-            <label className="space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Pin Code</span>
-              <input value={form.pinCode} onChange={setField('pinCode')} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-            <label className="space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Star Rating</span>
-              <input type="number" min="0" max="5" value={form.starRating} onChange={setField('starRating')} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-            <label className="space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Owner</span>
-              <input value={form.owner} onChange={setField('owner')} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-            <label className="space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Phone</span>
-              <input value={form.phone} onChange={setField('phone')} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-            <label className="space-y-2 md:col-span-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Property Type</span>
-              <input value={form.propertyType} onChange={setField('propertyType')} placeholder="Hotel, Resort" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-            <label className="space-y-2 md:col-span-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Description</span>
-              <textarea value={form.description} onChange={setField('description')} rows={4} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            </label>
-          </div>
-
-          <div className="mt-6 flex flex-wrap gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-            <label className="inline-flex items-center gap-3 text-sm font-semibold text-slate-700">
-              <input type="checkbox" checked={form.onFront} onChange={setField('onFront')} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-              On Front
-            </label>
-            <label className="inline-flex items-center gap-3 text-sm font-semibold text-slate-700">
-              <input type="checkbox" checked={form.isAccepted} onChange={setField('isAccepted')} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-              Accepted
-            </label>
-          </div>
-
-          <div className="mt-6 flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-900/15 transition hover:bg-slate-800 disabled:pointer-events-none disabled:opacity-50"
-            >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              Save Changes
-            </button>
-          </div>
-        </form>
-      </div>
+        {isOpen ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />}
+      </button>
+      {isOpen && <div className="border-t border-slate-100 bg-white px-6 py-5">{children}</div>}
     </div>
   )
 }
@@ -256,8 +169,8 @@ function HotelDetails({ listPath, listLabel }) {
   const locationState = useLocation()
   const { id } = useParams()
   const { selectedHotel, loading, updating, error, updateSuccess } = useSelector((state) => state.hotel)
-  const [activeTab, setActiveTab] = useState('rooms')
-  const [isEditOpen, setIsEditOpen] = useState(false)
+  
+  const [activeTab, setActiveTab] = useState('overview')
 
   const resolvedListPath =
     listPath ||
@@ -273,522 +186,699 @@ function HotelDetails({ listPath, listLabel }) {
 
   useEffect(() => {
     if (!updateSuccess) return
-    setIsEditOpen(false)
     if (id) dispatch(getHotelById(id))
     const timeout = setTimeout(() => dispatch(clearHotelUpdateStatus()), 2500)
     return () => clearTimeout(timeout)
   }, [dispatch, id, updateSuccess])
 
-  const hotel = selectedHotel?.data || selectedHotel
-  const basicInfo = hotel?.basicInfo || {}
+  const hotelData = selectedHotel?.data || selectedHotel
+  const basicInfo = hotelData?.basicInfo || {}
   const location = basicInfo?.location || {}
   const contacts = basicInfo?.contacts || {}
-  const pricingOverview = hotel?.pricingOverview || {}
-  const policies = hotel?.policies || {}
+  const pricingOverview = hotelData?.pricingOverview || {}
+  const policies = hotelData?.policies || {}
   const detailedPolicies = policies?.detailed || {}
   const restrictions = policies?.restrictions || {}
-  const rooms = hotel?.rooms || []
-  const foods = useMemo(() => normalizeFoodDetails(hotel?.foods), [hotel?.foods])
-  const amenities = hotel?.amenities || []
-  const ratingBreakdown = hotel?.ratingBreakdown || {}
+  const rooms = hotelData?.rooms || []
+  const foods = useMemo(() => normalizeFoodDetails(hotelData?.foods), [hotelData?.foods])
+  const amenities = hotelData?.amenities || []
+  const ratingBreakdown = hotelData?.ratingBreakdown || {}
+  const ratingDistribution = hotelData?.ratingDistribution || {}
+  const gstConfig = hotelData?.gstConfig || {}
+  
   const propertyTypes = Array.isArray(basicInfo?.propertyType)
     ? basicInfo.propertyType
     : basicInfo?.propertyType
       ? [basicInfo.propertyType]
       : []
-  const displayHotelId = hotel?.hotelId || id
+  
+  const displayHotelId = hotelData?.hotelId || id
 
-  const handleHotelUpdate = async (formData) => {
-    await dispatch(
-      updateHotelInfo({
-        hotelId: displayHotelId,
-        hotelData: formData,
-      }),
-    ).unwrap()
-  }
-
-  if (loading && !hotel) {
+  if (loading && !hotelData) {
     return (
       <div className="mx-auto max-w-7xl bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
         <Breadcrumb />
-        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">
-          Loading hotel details...
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-24 shadow-sm">
+          <Loader2 size={32} className="animate-spin text-blue-600 mb-4" />
+          <p className="text-sm font-medium text-slate-500">Loading comprehensive property data...</p>
         </div>
       </div>
     )
   }
 
-  if (error && !hotel) {
+  if (error && !hotelData) {
     return (
       <div className="mx-auto max-w-7xl bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
         <Breadcrumb />
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-16 text-center text-sm text-rose-700">
-          {error}
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-16 text-center shadow-sm">
+          <ShieldAlert size={32} className="mx-auto text-rose-500 mb-3" />
+          <p className="text-base font-bold text-rose-800">Failed to load data</p>
+          <p className="mt-1 text-sm text-rose-600">{error}</p>
+          <button onClick={() => navigate(resolvedListPath)} className="mt-4 text-sm font-semibold text-rose-700 underline focus:outline-none">Return to list</button>
         </div>
       </div>
     )
   }
 
-  if (!hotel) {
+  if (!hotelData) {
     return (
       <div className="mx-auto max-w-7xl bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
         <Breadcrumb />
-        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">
-          No hotel data available.
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
+          <p className="text-sm font-medium text-slate-500">No hotel data available to display.</p>
         </div>
       </div>
     )
   }
+
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: Info },
+    { id: 'rooms', label: 'Rooms & Pricing', icon: Bed },
+    { id: 'dining', label: 'Dining', icon: Utensils },
+    { id: 'policies', label: 'Rules & Policies', icon: FileText },
+  ]
 
   return (
     <>
       <div className="mx-auto max-w-7xl bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
         <Breadcrumb />
 
-      <div className="mb-6 flex flex-col items-start justify-between gap-4 md:flex-row md:items-end">
-        <div>
+        {hotelData.customerWelcomeNote && (
+          <div className="mb-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-4 text-white shadow-md flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3">
+              <ThumbsUp size={24} className="text-blue-200" />
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-blue-200">Welcome Note</p>
+                <p className="text-sm font-medium mt-0.5">{hotelData.customerWelcomeNote}</p>
+              </div>
+            </div>
+            {(hotelData.startDate || hotelData.endDate) && (
+              <div className="flex items-center gap-4 text-sm font-medium bg-white/10 px-4 py-2 rounded-lg">
+                <CalendarDays size={18} className="text-blue-200" />
+                <span>{formatDate(hotelData.startDate)} - {formatDate(hotelData.endDate)}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mb-6 flex flex-col items-start justify-between gap-5 md:flex-row md:items-end">
+          <div>
+            <button
+              type="button"
+              onClick={() => navigate(resolvedListPath)}
+              className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-slate-900 focus:outline-none"
+            >
+              <ArrowLeft size={16} />
+              Back to {resolvedListLabel}
+            </button>
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <span className="rounded-md bg-blue-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-blue-800">
+                {basicInfo.category || 'Hotel'}
+              </span>
+              <span className="flex items-center rounded-md bg-yellow-50 px-2.5 py-1 text-sm font-bold text-yellow-700 border border-yellow-200">
+                <Star size={14} className="mr-1.5 fill-yellow-500 text-yellow-500" />
+                {hotelData.rating || basicInfo.starRating || 0}
+                <span className="ml-1.5 font-medium text-yellow-600/70">({hotelData.reviewCount || 0} reviews)</span>
+              </span>
+              {hotelData.isAccepted && (
+                <span className="rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                  <CheckCircle2 size={12} /> Accepted
+                </span>
+              )}
+              {hotelData.onFront && (
+                <span className="rounded-md bg-purple-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-purple-800">
+                  Frontpage
+                </span>
+              )}
+            </div>
+            <h1 className="text-3xl font-black text-slate-900 sm:text-4xl tracking-tight">
+              {basicInfo.name || 'Unnamed Property'}
+            </h1>
+            <div className="mt-3 flex flex-wrap items-center gap-4 text-sm font-medium text-slate-600">
+              <span className="flex items-center">
+                <MapPin size={16} className="mr-1.5 text-slate-400" />
+                {[location.address, location.city, location.state, location.pinCode].filter(Boolean).join(', ')}
+              </span>
+              {hotelData.destination && (
+                <span className="flex items-center">
+                  <Map size={14} className="mr-1.5 text-slate-400" />
+                  Destination: {hotelData.destination}
+                </span>
+              )}
+            </div>
+          </div>
           <button
             type="button"
-            onClick={() => navigate(resolvedListPath)}
-            className="mb-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+            onClick={() => navigate(`${resolvedListPath}/${displayHotelId}/edit`, { state: { from: resolvedListPath } })}
+            className="inline-flex w-full md:w-auto items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-900/15 transition hover:bg-slate-800"
           >
-            <ArrowLeft size={14} />
-            Back to {resolvedListLabel}
+            <PencilLine size={16} />
+            Update Hotel
           </button>
-          <div className="mb-2 flex items-center gap-3">
-            <span className="rounded-md bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
-              {basicInfo.category || 'Hotel'}
-            </span>
-            <span className="flex items-center text-sm font-bold text-yellow-500">
-              <Star size={16} className="mr-1 fill-yellow-500" />
-              {hotel?.rating || basicInfo.starRating || 0} ({hotel?.reviewCount || 0} reviews)
-            </span>
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl">
-            {basicInfo.name || 'Unnamed Hotel'}
-          </h1>
-          <div className="mt-2 flex items-center text-sm font-medium text-slate-600">
-            <MapPin size={16} className="mr-1 text-slate-400" />
-            {[location.address, location.city, location.state, location.pinCode]
-              .filter(Boolean)
-              .join(', ')}
-          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate(`${resolvedListPath}/${displayHotelId}/edit`, { state: { from: resolvedListPath } })}
-          className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-900/15 transition hover:bg-slate-800"
-        >
-          <PencilLine size={16} />
-          Update Hotel
-        </button>
-      </div>
 
-      {updateSuccess && (
-        <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
-          {updateSuccess}
-        </div>
-      )}
-
-      {error && hotel && (
-        <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
-          {error}
-        </div>
-      )}
-
-      {basicInfo.images?.length > 0 && (
-        <div className="mb-8 grid h-[400px] grid-cols-1 gap-2 overflow-hidden rounded-2xl md:grid-cols-4">
-          <div className="col-span-1 md:col-span-2">
-            <img src={basicInfo.images[0]} alt={basicInfo.name} className="h-full w-full object-cover" />
+        {updateSuccess && (
+          <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 flex items-center gap-3">
+            <CheckCircle2 className="text-emerald-500" size={20} />
+            <span className="text-sm font-bold text-emerald-800">{updateSuccess}</span>
           </div>
-          <div className="col-span-1 hidden grid-rows-2 gap-2 md:grid">
-            {basicInfo.images[1] && <img src={basicInfo.images[1]} alt="Gallery 1" className="h-full w-full object-cover" />}
-            {basicInfo.images[2] && <img src={basicInfo.images[2]} alt="Gallery 2" className="h-full w-full object-cover" />}
+        )}
+
+        {error && hotelData && (
+          <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-5 py-4 flex items-center gap-3">
+            <ShieldAlert className="text-rose-500" size={20} />
+            <span className="text-sm font-bold text-rose-800">{error}</span>
           </div>
-          <div className="col-span-1 hidden grid-rows-2 gap-2 md:grid">
-            {(basicInfo.images[3] || basicInfo.images[1]) && (
-              <img src={basicInfo.images[3] || basicInfo.images[1]} alt="Gallery 3" className="h-full w-full object-cover" />
-            )}
-            {(basicInfo.images[4] || basicInfo.images[2]) && (
-              <img src={basicInfo.images[4] || basicInfo.images[2]} alt="Gallery 4" className="h-full w-full object-cover" />
-            )}
-          </div>
-        </div>
-      )}
+        )}
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <div className="mb-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-bold text-slate-900">About this property</h2>
-            <p className="mb-4 text-sm leading-relaxed text-slate-600">
-              {basicInfo.description || 'No description available.'}
-            </p>
-
-            {detailedPolicies.hotelsPolicy && (
-              <div className="rounded-lg bg-blue-50 p-4 text-sm font-medium text-blue-800">
-                <FormattedPolicyText text={detailedPolicies.hotelsPolicy} />
-              </div>
-            )}
-
-            {propertyTypes.length > 0 && (
-              <div className="mt-6 flex flex-wrap gap-2">
-                {propertyTypes.map((type, index) => (
-                  <span
-                    key={`${type}-${index}`}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600"
-                  >
-                    <Building size={12} />
-                    {type}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mb-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-bold text-slate-900">Top Amenities</h2>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              {amenities.map((amenity, index) => (
-                <div key={`${amenity}-${index}`} className="flex items-center text-sm font-medium text-slate-700">
-                  <CheckCircle2 size={16} className="mr-2 text-green-500" />
-                  {amenity}
-                </div>
-              ))}
+        {basicInfo.images?.length > 0 && (
+          <div className="mb-8 grid h-[300px] md:h-[450px] grid-cols-1 gap-3 overflow-hidden rounded-[24px] md:grid-cols-4">
+            <div className="col-span-1 md:col-span-2 h-full">
+              <img src={basicInfo.images[0]} alt={basicInfo.name} className="h-full w-full object-cover transition hover:scale-105 duration-700" />
+            </div>
+            <div className="col-span-1 hidden grid-rows-2 gap-3 md:grid h-full">
+              {basicInfo.images[1] ? <img src={basicInfo.images[1]} alt="Gallery 1" className="h-full w-full object-cover transition hover:scale-105 duration-700 rounded-lg" /> : <div className="bg-slate-100 rounded-lg h-full w-full"></div>}
+              {basicInfo.images[2] ? <img src={basicInfo.images[2]} alt="Gallery 2" className="h-full w-full object-cover transition hover:scale-105 duration-700 rounded-lg" /> : <div className="bg-slate-100 rounded-lg h-full w-full"></div>}
+            </div>
+            <div className="col-span-1 hidden grid-rows-2 gap-3 md:grid h-full">
+              {basicInfo.images[3] ? <img src={basicInfo.images[3]} alt="Gallery 3" className="h-full w-full object-cover transition hover:scale-105 duration-700 rounded-lg" /> : <div className="bg-slate-100 rounded-lg h-full w-full"></div>}
+              {basicInfo.images[4] ? <img src={basicInfo.images[4]} alt="Gallery 4" className="h-full w-full object-cover transition hover:scale-105 duration-700 rounded-lg" /> : <div className="bg-slate-100 rounded-lg h-full w-full"></div>}
             </div>
           </div>
+        )}
 
-          <div className="mb-8">
-            <div className="mb-4 flex space-x-1 rounded-xl bg-slate-200/50 p-1">
-              <button
-                onClick={() => setActiveTab('rooms')}
-                className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-bold transition-all ${
-                  activeTab === 'rooms' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Available Rooms
-              </button>
-              <button
-                onClick={() => setActiveTab('food')}
-                className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-bold transition-all ${
-                  activeTab === 'food' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Dining & Food
-              </button>
-            </div>
+        <div className="mb-8 border-b border-slate-200">
+          <nav className="-mb-px flex space-x-6 overflow-x-auto custom-scrollbar" aria-label="Tabs">
+            {tabs.map((tab) => {
+              const Icon = tab.icon
+              const isActive = activeTab === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex whitespace-nowrap items-center py-4 px-1 border-b-2 font-bold text-sm transition-colors focus:outline-none ${
+                    isActive
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <Icon size={16} className={`mr-2 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                  {tab.label}
+                </button>
+              )
+            })}
+          </nav>
+        </div>
 
-            {activeTab === 'rooms' && (
-              <div className="space-y-4">
-                {rooms.map((room, index) => (
-                  <div key={`${room.id}-${index}`} className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm sm:flex-row">
-                    <div className="h-48 w-full sm:h-auto sm:w-64 sm:shrink-0">
-                      <img
-                        src={room.images?.[0] || 'https://via.placeholder.com/400x300?text=Room'}
-                        alt={room.name}
-                        className="h-full w-full object-cover"
-                      />
+        <div className="space-y-8">
+          
+          {activeTab === 'overview' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-8">
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="text-lg font-bold text-slate-900 mb-4">About this property</h3>
+                  <ExpandableText text={basicInfo.description || 'No description available for this property.'} maxLength={300} />
+                  
+                  {propertyTypes.length > 0 && (
+                    <div className="mt-6 flex flex-wrap gap-2 pt-6 border-t border-slate-100">
+                      {propertyTypes.map((type, index) => (
+                        <span
+                          key={`${type}-${index}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 border border-slate-200"
+                        >
+                          <Building size={14} className="text-slate-400" />
+                          {type}
+                        </span>
+                      ))}
                     </div>
-                    <div className="flex flex-1 flex-col justify-between p-5">
-                      <div>
-                        <div className="flex items-start justify-between">
-                          <h3 className="text-lg font-bold text-slate-900">{room.name}</h3>
-                          {room.features?.isOffer && (
-                            <span className="rounded bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
-                              {room.features.offerText}
-                            </span>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="text-lg font-bold text-slate-900 mb-6">Popular Amenities</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-4 gap-x-6">
+                    {amenities.length > 0 ? (
+                      amenities.map((amenity, index) => (
+                        <div key={`${amenity}-${index}`} className="flex items-center text-sm font-medium text-slate-700">
+                          <CheckCircle2 size={18} className="mr-2.5 text-emerald-500 shrink-0" />
+                          {amenity}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500 col-span-full">No amenities listed.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="text-base font-bold text-slate-900 mb-4">Key Details</h3>
+                  <div className="space-y-4 text-sm">
+                    <div>
+                      <span className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Check-in / Check-out</span>
+                      <div className="flex items-center gap-4 text-slate-700 font-medium">
+                        <span className="flex items-center"><Clock size={14} className="mr-1.5 text-slate-400"/> In: {policies.checkIn || detailedPolicies.checkInPolicy || '12:00 PM'}</span>
+                        <span className="flex items-center"><Clock size={14} className="mr-1.5 text-slate-400"/> Out: {policies.checkOut || detailedPolicies.checkOutPolicy || '11:00 AM'}</span>
+                      </div>
+                    </div>
+                    <hr className="border-slate-100" />
+                    <div>
+                      <span className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Contact</span>
+                      <div className="space-y-2">
+                        {contacts.email && <a href={`mailto:${contacts.email}`} className="flex items-center text-blue-600 hover:underline font-medium"><Mail size={14} className="mr-2" />{contacts.email}</a>}
+                        {contacts.phone && <a href={`tel:${contacts.phone}`} className="flex items-center text-slate-700 font-medium"><Phone size={14} className="mr-2 text-slate-400" />{contacts.phone}</a>}
+                      </div>
+                    </div>
+                    <hr className="border-slate-100" />
+                    <div>
+                      <span className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Management</span>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-slate-500">Owner</span>
+                        <span className="font-semibold text-slate-900">{basicInfo.owner || 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-slate-500">General Manager</span>
+                        <span className="font-semibold text-slate-900">{contacts.generalManager || 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">Sales Manager</span>
+                        <span className="font-semibold text-slate-900">{contacts.salesManager || 'N/A'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="text-base font-bold text-slate-900 mb-4">Guest Reviews</h3>
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-yellow-100 text-yellow-700 font-black text-xl">
+                      {hotelData.rating || basicInfo.starRating || '0'}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900">Overall Rating</p>
+                      <p className="text-xs text-slate-500">Based on {hotelData.reviewCount || 0} reviews</p>
+                    </div>
+                  </div>
+                  
+                  {Object.keys(ratingBreakdown).length > 0 && (
+                    <div className="space-y-3 mb-6">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Breakdown</p>
+                      {Object.entries(ratingBreakdown).map(([key, value]) => (
+                        <div key={key} className="flex items-center justify-between text-sm">
+                          <span className="capitalize text-slate-600 w-24 truncate">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                          <div className="flex-1 mx-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                            <div className="h-full rounded-full bg-blue-500" style={{ width: `${(value / 5) * 100}%` }} />
+                          </div>
+                          <span className="w-6 text-right font-bold text-slate-900">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {Object.keys(ratingDistribution).length > 0 && (
+                    <div className="space-y-2 pt-4 border-t border-slate-100">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Distribution</p>
+                      {['fiveStar', 'fourStar', 'threeStar', 'twoStar', 'oneStar'].map((key, idx) => {
+                        const val = ratingDistribution[key] || 0
+                        const total = hotelData.reviewCount || 1 
+                        const percent = (val / total) * 100
+                        return (
+                          <div key={key} className="flex items-center justify-between text-xs">
+                            <span className="text-slate-600 w-12">{5 - idx} Stars</span>
+                            <div className="flex-1 mx-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                              <div className="h-full rounded-full bg-yellow-400" style={{ width: `${percent}%` }} />
+                            </div>
+                            <span className="w-6 text-right font-medium text-slate-500">{val}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'rooms' && (
+            <div className="space-y-8">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col justify-center">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Starting Price</p>
+                  <p className="mt-2 text-3xl font-black text-slate-900">
+                    {pricingOverview.displayString || `${pricingOverview.currencySymbol || '₹'}${pricingOverview.lowestBasePrice || 'N/A'}`}
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-slate-500">per night onwards</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col justify-center">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Inventory Status</p>
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <p className="text-3xl font-black text-slate-900">
+                      {hotelData.availability?.availableRooms || rooms.reduce((sum, r) => sum + (r.inventory?.available || 0), 0)}
+                    </p>
+                    <p className="text-sm font-medium text-slate-500">
+                      / {hotelData.availability?.totalRooms || rooms.length || 0} rooms
+                    </p>
+                  </div>
+                  <p className={`mt-1 text-xs font-bold ${hotelData.availability?.isFullyBooked ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {hotelData.availability?.status || (hotelData.availability?.isFullyBooked ? 'Fully Booked' : 'Available')}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-blue-50 p-5 shadow-sm flex flex-col justify-center relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <Percent size={64} />
+                  </div>
+                  <div className="flex items-center gap-2 mb-2 relative z-10">
+                    <Tag size={16} className="text-blue-600" />
+                    <p className="text-xs font-bold uppercase tracking-wider text-blue-800">Taxes & Fees</p>
+                  </div>
+                  <p className="text-sm font-semibold text-blue-900 leading-snug relative z-10">
+                    {pricingOverview.taxNote || 'Check individual rooms for tax details.'}
+                  </p>
+                  {gstConfig.enabled && (
+                    <div className="mt-3 pt-3 border-t border-blue-200/50 flex flex-wrap gap-x-4 gap-y-1 text-xs text-blue-800 relative z-10">
+                      <span><strong className="font-bold">Rate:</strong> {gstConfig.rate}%</span>
+                      <span><strong className="font-bold">Range:</strong> ₹{gstConfig.minLimit} - ₹{gstConfig.maxLimit}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <h3 className="text-xl font-bold text-slate-900 pt-4">Available Room Categories</h3>
+              
+              <div className="space-y-5">
+                {rooms.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
+                    <Bed size={32} className="mx-auto text-slate-300 mb-3" />
+                    <p className="text-base font-bold text-slate-800">No rooms configured</p>
+                    <p className="text-sm text-slate-500 mt-1">Add rooms from the inventory management section.</p>
+                  </div>
+                ) : (
+                  rooms.map((room, index) => (
+                    <div key={`${room.id}-${index}`} className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:flex-row transition hover:shadow-md">
+                      <div className="h-56 w-full sm:h-auto sm:w-72 sm:shrink-0 relative">
+                        <img
+                          src={room.images?.[0] || 'https://via.placeholder.com/400x300?text=Room'}
+                          alt={room.name}
+                          className="h-full w-full object-cover"
+                        />
+                        {room.features?.isOffer && (
+                          <div className="absolute top-3 left-3 rounded-lg bg-red-600 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-sm">
+                            {room.features.offerText}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-1 flex-col justify-between p-6">
+                        <div>
+                          <div className="flex items-start justify-between">
+                            <h3 className="text-xl font-bold text-slate-900">{room.name}</h3>
+                          </div>
+                          <div className="mt-2 flex items-center gap-4 text-sm font-medium text-slate-600">
+                            <span className="flex items-center"><Bed size={16} className="mr-1.5 text-slate-400" /> {room.bedType || room.type || 'Standard Bed'}</span>
+                            <span className="flex items-center"><Users size={16} className="mr-1.5 text-slate-400" /> Up to {room.occupancy || 2} Guests</span>
+                          </div>
+                          {room.description && (
+                            <p className="mt-3 text-sm text-slate-500 line-clamp-2">{room.description}</p>
                           )}
+                          <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-2">
+                            <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ${
+                              (room.inventory?.available ?? 0) > 0 && !room.inventory?.isSoldOut ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            }`}>
+                              {(room.inventory?.available ?? 0) > 0 && !room.inventory?.isSoldOut ? `${room.inventory.available} Left` : 'Sold Out'}
+                            </span>
+                            {room.amenities?.slice(0, 3).map((am, idx) => (
+                              <span key={idx} className="inline-flex items-center rounded-md bg-slate-50 border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600">
+                                {am}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                        <div className="mt-2 flex items-center text-sm font-medium text-slate-600">
-                          <Bed size={16} className="mr-1.5 text-slate-400" />
-                          {room.bedType || room.type}
+                        <div className="mt-6 flex items-end justify-between">
+                          <div>
+                            {room.features?.isOffer && (
+                              <span className="text-sm font-medium text-slate-400 line-through">{room.pricing?.currency || '₹'}{room.pricing?.basePrice || 0}</span>
+                            )}
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-3xl font-black text-slate-900 tracking-tight">
+                                {room.pricing?.displayPrice || `${room.pricing?.currency || '₹'}${room.pricing?.finalPrice || room.pricing?.basePrice || 0}`}
+                              </span>
+                              <span className="text-sm font-bold text-slate-500">/ night</span>
+                            </div>
+                            <p className="text-xs font-medium text-slate-400 mt-0.5">+ {room.pricing?.currency || '₹'}{room.pricing?.taxAmount || 0} Taxes ({room.pricing?.taxPercent || 0}%)</p>
+                          </div>
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                            Available: {room.inventory?.available ?? 0} / {room.inventory?.total ?? 0}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'dining' && (
+            <div className="space-y-6">
+              {foods.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
+                  <div className="mx-auto h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                    <Utensils size={28} className="text-slate-400" />
+                  </div>
+                  <p className="text-lg font-bold text-slate-900">No Dining Menu Available</p>
+                  <p className="mt-2 text-sm text-slate-500 max-w-md mx-auto">
+                    This property hasn't uploaded any food or dining menu options yet. Menu items added will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                  {foods.map((food) => (
+                    <div key={food.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm flex flex-col md:flex-row">
+                      <div className="relative h-64 md:h-auto md:w-2/5 bg-slate-100 shrink-0">
+                        <img
+                          src={food.images?.[0] || 'https://via.placeholder.com/500x400?text=Food'}
+                          alt={food.name}
+                          className="h-full w-full object-cover"
+                        />
+                        <div className="absolute left-3 top-3">
+                          <span className={`inline-flex items-center rounded-lg border px-3 py-1 text-[10px] font-black uppercase tracking-wider shadow-sm ${getFoodBadgeClasses(food.type)}`}>
+                            {food.type}
                           </span>
                         </div>
                       </div>
-                      <div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-4">
-                        <div>
-                          {room.features?.isOffer && (
-                            <span className="text-xs text-slate-400 line-through">â‚¹{room.pricing?.basePrice || 0}</span>
-                          )}
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-2xl font-bold text-slate-900">
-                              {room.pricing?.displayPrice || `â‚¹${room.pricing?.finalPrice || room.pricing?.basePrice || 0}`}
-                            </span>
-                            <span className="text-xs font-medium text-slate-500">/ night</span>
-                          </div>
-                          <p className="text-[11px] text-slate-400">+ â‚¹{room.pricing?.taxAmount || 0} GST</p>
-                        </div>
-                        <button className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700">
-                          Select Room
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
 
-            {activeTab === 'food' && (
-              <div className="space-y-5">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.28em] text-orange-500">Dining Overview</p>
-                      <h3 className="mt-1 text-xl font-black text-slate-900">Food Menu & Meal Details</h3>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Full food details with item type, pricing, images, and descriptions.
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 sm:min-w-[260px]">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Items</p>
-                        <p className="mt-1 text-2xl font-black text-slate-900">{foods.length}</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Starting At</p>
-                        <p className="mt-1 text-2xl font-black text-slate-900">
-                          {foods.length ? `₹${formatCurrency(Math.min(...foods.map((food) => Number(food.price) || 0)))}` : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {foods.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center shadow-sm">
-                    <Utensils size={28} className="mx-auto text-slate-300" />
-                    <p className="mt-3 text-base font-bold text-slate-800">No food details available</p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      This hotel does not have complete dining data yet.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                    {foods.map((food) => (
-                      <div key={food.id} className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-                        <div className="grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)]">
-                          <div className="relative h-56 bg-slate-100 md:h-full">
-                            <img
-                              src={food.images?.[0] || 'https://via.placeholder.com/500x400?text=Food'}
-                              alt={food.name}
-                              className="h-full w-full object-cover"
-                            />
-                            <div className="absolute left-3 top-3">
-                              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${getFoodBadgeClasses(food.type)}`}>
-                                {food.type}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col p-5">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <h3 className="text-xl font-black text-slate-900">{food.name}</h3>
-                                <p className="mt-1 text-sm font-medium text-slate-500">
-                                  {food.images?.length ? `${food.images.length} image${food.images.length > 1 ? 's' : ''} available` : 'No gallery images'}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Price</p>
-                                <p className="mt-1 text-2xl font-black text-slate-900">{food.displayPrice}</p>
-                              </div>
-                            </div>
-
-                            <div className="mt-4 rounded-2xl bg-slate-50 p-4">
-                              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Description</p>
-                              <p className="mt-2 text-sm leading-6 text-slate-600">{food.description}</p>
-                            </div>
-
-                            {food.images?.length > 1 && (
-                              <div className="mt-4">
-                                <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">More Photos</p>
-                                <div className="flex gap-2 overflow-x-auto pb-1">
-                                  {food.images.slice(1).map((image, imageIndex) => (
-                                    <img
-                                      key={`${food.id}-image-${imageIndex}`}
-                                      src={image}
-                                      alt={`${food.name} ${imageIndex + 2}`}
-                                      className="h-16 w-20 flex-none rounded-xl border border-slate-200 object-cover"
-                                    />
-                                  ))}
-                                </div>
-                              </div>
-                            )}
+                      <div className="flex flex-col p-6 w-full">
+                        <div className="flex items-start justify-between gap-4 mb-3">
+                          <h3 className="text-xl font-bold text-slate-900">{food.name}</h3>
+                          <div className="text-right shrink-0">
+                            <p className="text-2xl font-black text-blue-600">{food.displayPrice || `${food.currency || '₹'} ${food.price}`}</p>
                           </div>
                         </div>
+
+                        <div className="flex-1">
+                          <p className="text-sm leading-relaxed text-slate-600 line-clamp-3">{food.description}</p>
+                        </div>
+
+                        {food.images?.length > 1 && (
+                          <div className="mt-5 pt-4 border-t border-slate-100">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Gallery</p>
+                            <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                              {food.images.slice(1).map((image, imageIndex) => (
+                                <img
+                                  key={`${food.id}-image-${imageIndex}`}
+                                  src={image}
+                                  alt={`${food.name} view ${imageIndex + 2}`}
+                                  className="h-14 w-14 flex-none rounded-lg border border-slate-200 object-cover"
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-bold text-slate-900">House Rules & Policies</h2>
-
-            <div className="mb-6 grid grid-cols-2 gap-4 rounded-lg bg-slate-50 p-4">
-              <div>
-                <span className="block text-xs font-medium text-slate-500">Check-in</span>
-                <span className="flex items-center text-sm font-bold text-slate-900">
-                  <Clock size={14} className="mr-1.5 text-blue-600" />
-                  {policies.checkIn || detailedPolicies.checkInPolicy || 'N/A'}
-                </span>
-              </div>
-              <div>
-                <span className="block text-xs font-medium text-slate-500">Check-out</span>
-                <span className="flex items-center text-sm font-bold text-slate-900">
-                  <Clock size={14} className="mr-1.5 text-blue-600" />
-                  {policies.checkOut || detailedPolicies.checkOutPolicy || 'N/A'}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-4 text-sm text-slate-700">
-              <div className="flex items-start gap-3">
-                <ShieldAlert size={18} className="mt-0.5 shrink-0 text-slate-400" />
-                <div>
-                  <p className="font-bold text-slate-900">Cancellation Policy</p>
-                  <FormattedPolicyText text={policies.cancellationText || detailedPolicies.cancellationPolicy} className="text-slate-700" />
-                  {!policies.cancellationText && !detailedPolicies.cancellationPolicy && <span className="text-slate-700">Not available</span>}
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <UserCheck size={18} className="mt-0.5 shrink-0 text-slate-400" />
-                <div>
-                  <p className="font-bold text-slate-900">General Rules</p>
-                  <FormattedPolicyText text={detailedPolicies.hotelsPolicy} className="text-slate-700" />
-                  {!detailedPolicies.hotelsPolicy && <span className="text-slate-700">Not available</span>}
-                  <ul className="mt-2 space-y-1">
-                    {policies.rules?.map((rule, index) => (
-                      <li key={`${rule}-${index}`} className="flex items-center gap-2 text-slate-600">
-                        <Check size={14} className="text-green-500" /> {rule}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <Utensils size={18} className="mt-0.5 shrink-0 text-slate-400" />
-                <div>
-                  <p className="font-bold text-slate-900">Outside Food</p>
-                  <FormattedPolicyText text={detailedPolicies.outsideFoodPolicy} className="text-slate-700" />
-                  {!detailedPolicies.outsideFoodPolicy && <span className="text-slate-700">Not available</span>}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="lg:col-span-1">
-          <div className="sticky top-6 flex flex-col gap-6">
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="mb-4 flex items-baseline gap-1">
-                <span className="text-3xl font-black text-slate-900">
-                  {pricingOverview.displayString || `â‚¹${pricingOverview.lowestBasePrice || 'N/A'}`}
-                </span>
-                <span className="text-sm font-medium text-slate-500">/ night onwards</span>
-              </div>
-
-              {hotel.gstConfig?.enabled && (
-                <div className="mb-6 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
-                  <span className="font-bold text-slate-900">Note: </span>
-                  {pricingOverview.taxNote || 'GST applicable'}
+                    </div>
+                  ))}
                 </div>
               )}
-
-              <button className="w-full rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white shadow-md transition hover:bg-blue-700">
-                Check Availability
-              </button>
             </div>
+          )}
 
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-4 text-base font-bold text-slate-900">Contact Details</h3>
-              <div className="space-y-3 text-sm font-medium text-slate-700">
-                <a href={`tel:${contacts.phone || ''}`} className="flex items-center gap-3 transition hover:text-blue-600">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                    <Phone size={14} />
+          {activeTab === 'policies' && (
+            <div className="space-y-6">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center gap-3 mb-4">
+                    <ShieldAlert className="text-blue-600" size={24} />
+                    <h3 className="text-lg font-bold text-slate-900">Cancellation & Refund</h3>
                   </div>
-                  +91 {contacts.phone || 'N/A'}
-                </a>
-                <a href={`mailto:${contacts.email || ''}`} className="flex items-center gap-3 transition hover:text-blue-600">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                    <Mail size={14} />
-                  </div>
-                  {contacts.email || 'N/A'}
-                </a>
-              </div>
-
-              <hr className="my-5 border-slate-100" />
-
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">Management</h3>
-              <div className="space-y-2 text-sm text-slate-600">
-                <div className="flex justify-between">
-                  <span>Owner</span>
-                  <span className="font-bold text-slate-900">{basicInfo.owner || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>General Manager</span>
-                  <span className="font-medium text-slate-900">{contacts.generalManager || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Sales Manager</span>
-                  <span className="font-medium text-slate-900">{contacts.salesManager || 'N/A'}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-4 text-base font-bold text-slate-900">Restrictions</h3>
-              <div className="space-y-3 text-sm text-slate-700">
-                <div className="flex justify-between"><span>Pets Allowed</span><span className="font-semibold">{restrictions.petsAllowed ? 'Yes' : 'No'}</span></div>
-                <div className="flex justify-between"><span>Smoking Allowed</span><span className="font-semibold">{restrictions.smokingAllowed ? 'Yes' : 'No'}</span></div>
-                <div className="flex justify-between"><span>Alcohol Allowed</span><span className="font-semibold">{restrictions.alcoholAllowed ? 'Yes' : 'No'}</span></div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-4 text-base font-bold text-slate-900">Rating Breakdown</h3>
-              <div className="space-y-3">
-                {Object.keys(ratingBreakdown).length === 0 && (
-                  <p className="text-sm text-slate-500">No rating breakdown available.</p>
-                )}
-                {Object.entries(ratingBreakdown).map(([key, value]) => (
-                  <div key={key} className="flex items-center justify-between text-sm">
-                    <span className="capitalize text-slate-600">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
-                        <div className="h-full rounded-full bg-yellow-400" style={{ width: `${(value / 5) * 100}%` }} />
-                      </div>
-                      <span className="w-6 text-right font-bold text-slate-900">{value}</span>
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800 mb-2">Cancellation Policy</h4>
+                      <FormattedPolicyText text={policies.cancellationText || detailedPolicies.cancellationPolicy} />
+                      {!policies.cancellationText && !detailedPolicies.cancellationPolicy && <p className="text-sm text-slate-500">Standard cancellation policy applies.</p>}
+                    </div>
+                    <hr className="border-slate-100" />
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800 mb-2">Refund Rules</h4>
+                      <FormattedPolicyText text={detailedPolicies.refundPolicy} />
+                      {!detailedPolicies.refundPolicy && <p className="text-sm text-slate-500">Subject to cancellation timeline.</p>}
                     </div>
                   </div>
-                ))}
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center gap-3 mb-4">
+                    <UserCheck className="text-blue-600" size={24} />
+                    <h3 className="text-lg font-bold text-slate-900">Guest Rules</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800 mb-2">General Guidelines</h4>
+                      <FormattedPolicyText text={detailedPolicies.hotelsPolicy} />
+                      {policies.rules?.length > 0 && (
+                        <ul className="mt-3 space-y-2">
+                          {policies.rules.map((rule, index) => (
+                            <li key={index} className="flex items-start gap-2 text-sm text-slate-600">
+                              <Check size={16} className="text-emerald-500 mt-0.5 shrink-0" />
+                              <span>{rule}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <hr className="border-slate-100" />
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="block text-slate-500 mb-1">Unmarried Couples</span>
+                        <span className="font-semibold text-slate-800">{detailedPolicies.unmarriedCouplesAllowed || 'Depends'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-slate-500 mb-1">Bachelors</span>
+                        <span className="font-semibold text-slate-800">{detailedPolicies.bachelorAllowed || 'Depends'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-slate-500 mb-1">International Guests</span>
+                        <span className="font-semibold text-slate-800">{detailedPolicies.internationalGuestAllowed || 'Depends'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-slate-500 mb-1">Pets</span>
+                        <span className="font-semibold text-slate-800">{restrictions.petsAllowed || detailedPolicies.petsAllowed === 'Yes' ? 'Allowed' : 'Not Allowed'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-slate-500 mb-1">Alcohol</span>
+                        <span className="font-semibold text-slate-800">{restrictions.alcoholAllowed || detailedPolicies.alcoholAllowed === 'Yes' ? 'Allowed' : 'Not Allowed'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-slate-500 mb-1">Smoking</span>
+                        <span className="font-semibold text-slate-800">{restrictions.smokingAllowed || detailedPolicies.smokingAllowed === 'Yes' ? 'Allowed' : 'Not Allowed'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-4">
+                  <CreditCard className="text-blue-600" size={24} />
+                  <h3 className="text-lg font-bold text-slate-900">Payment & Outside Policies</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800 mb-2">Accepted Payment Modes</h4>
+                    <p className="text-sm text-slate-600">{detailedPolicies.paymentMode || 'Credit Card, Debit Card, UPI, Cash'}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800 mb-2">Outside Food Policy</h4>
+                    <FormattedPolicyText text={detailedPolicies.outsideFoodPolicy} />
+                    {!detailedPolicies.outsideFoodPolicy && <p className="text-sm text-slate-600">Please check with front desk.</p>}
+                  </div>
+                </div>
+              </div>
+
+              <CollapsibleSection title="Advanced Pricing & Sharing Configuration" icon={Settings} className="bg-slate-50 border-slate-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-bold text-emerald-700 bg-emerald-100 py-2 px-3 rounded-lg text-center">Standard Discounts</h4>
+                    <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                      <div className="space-y-2 text-sm text-slate-700">
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-1"><span>Double Sharing:</span> <span className="font-bold">{detailedPolicies.onDoubleSharing || 0}%</span></div>
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-1"><span>Triple Sharing:</span> <span className="font-bold">{detailedPolicies.onTrippleSharing || 0}%</span></div>
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-1"><span>Quad Sharing:</span> <span className="font-bold">{detailedPolicies.onQuadSharing || 0}%</span></div>
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-1"><span>Bulk Booking:</span> <span className="font-bold">{detailedPolicies.onBulkBooking || 0}%</span></div>
+                        <div className="flex justify-between items-center"><span>More Than Four:</span> <span className="font-bold">{detailedPolicies.onMoreThanFour || 0}%</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-bold text-blue-700 bg-blue-100 py-2 px-3 rounded-lg text-center">Advance Payment (AP)</h4>
+                    <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                      <div className="space-y-2 text-sm text-slate-700">
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-1"><span>Double Sharing:</span> <span className="font-bold">{detailedPolicies.onDoubleSharingAp || 0}%</span></div>
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-1"><span>Triple Sharing:</span> <span className="font-bold">{detailedPolicies.onTrippleSharingAp || 0}%</span></div>
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-1"><span>Quad Sharing:</span> <span className="font-bold">{detailedPolicies.onQuadSharingAp || 0}%</span></div>
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-1"><span>Bulk Booking:</span> <span className="font-bold">{detailedPolicies.onBulkBookingAp || 0}%</span></div>
+                        <div className="flex justify-between items-center"><span>More Than Four:</span> <span className="font-bold">{detailedPolicies.onMoreThanFourAp || 0}%</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-bold text-purple-700 bg-purple-100 py-2 px-3 rounded-lg text-center">Multiple Advance (MAP)</h4>
+                    <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                      <div className="space-y-2 text-sm text-slate-700">
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-1"><span>Double Sharing:</span> <span className="font-bold">{detailedPolicies.onDoubleSharingMAp || 0}%</span></div>
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-1"><span>Triple Sharing:</span> <span className="font-bold">{detailedPolicies.onTrippleSharingMAp || 0}%</span></div>
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-1"><span>Quad Sharing:</span> <span className="font-bold">{detailedPolicies.onQuadSharingMAp || 0}%</span></div>
+                        <div className="flex justify-between items-center border-b border-slate-50 pb-1"><span>Bulk Booking:</span> <span className="font-bold">{detailedPolicies.onBulkBookingMAp || 0}%</span></div>
+                        <div className="flex justify-between items-center"><span>More Than Four:</span> <span className="font-bold">{detailedPolicies.onMoreThanFourMAp || 0}%</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 lg:col-span-3 mt-4 pt-6 border-t border-slate-200">
+                    <h4 className="text-sm font-bold text-rose-700 bg-rose-100 py-2 px-3 rounded-lg w-full">Extra Charges Overview (%)</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Standard</p>
+                        <div className="space-y-2 text-sm text-slate-700">
+                          <div className="flex justify-between"><span>Double:</span> <span className="font-bold">{detailedPolicies.offDoubleSharing || 0}%</span></div>
+                          <div className="flex justify-between"><span>Triple:</span> <span className="font-bold">{detailedPolicies.offTrippleSharing || 0}%</span></div>
+                          <div className="flex justify-between"><span>Quad:</span> <span className="font-bold">{detailedPolicies.offQuadSharing || 0}%</span></div>
+                          <div className="flex justify-between"><span>Bulk:</span> <span className="font-bold">{detailedPolicies.offBulkBooking || 0}%</span></div>
+                          <div className="flex justify-between"><span>4 Guests:</span> <span className="font-bold">{detailedPolicies.offMoreThanFour || 0}%</span></div>
+                        </div>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Advance (AP)</p>
+                        <div className="space-y-2 text-sm text-slate-700">
+                          <div className="flex justify-between"><span>Double:</span> <span className="font-bold">{detailedPolicies.offDoubleSharingAp || 0}%</span></div>
+                          <div className="flex justify-between"><span>Triple:</span> <span className="font-bold">{detailedPolicies.offTrippleSharingAp || 0}%</span></div>
+                          <div className="flex justify-between"><span>Quad:</span> <span className="font-bold">{detailedPolicies.offQuadSharingAp || 0}%</span></div>
+                          <div className="flex justify-between"><span>Bulk:</span> <span className="font-bold">{detailedPolicies.offBulkBookingAp || 0}%</span></div>
+                          <div className="flex justify-between"><span>4 Guests:</span> <span className="font-bold">{detailedPolicies.offMoreThanFourAp || 0}%</span></div>
+                        </div>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Multi Advance (MAP)</p>
+                        <div className="space-y-2 text-sm text-slate-700">
+                          <div className="flex justify-between"><span>Double:</span> <span className="font-bold">{detailedPolicies.offDoubleSharingMAp || 0}%</span></div>
+                          <div className="flex justify-between"><span>Triple:</span> <span className="font-bold">{detailedPolicies.offTrippleSharingMAp || 0}%</span></div>
+                          <div className="flex justify-between"><span>Quad:</span> <span className="font-bold">{detailedPolicies.offQuadSharingMAp || 0}%</span></div>
+                          <div className="flex justify-between"><span>Bulk:</span> <span className="font-bold">{detailedPolicies.offBulkBookingMAp || 0}%</span></div>
+                          <div className="flex justify-between"><span>4 Guests:</span> <span className="font-bold">{detailedPolicies.offMoreThanFourMAp || 0}%</span></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </CollapsibleSection>
             </div>
-          </div>
-        </div>
+          )}
+
         </div>
       </div>
-
-      {isEditOpen && (
-        <HotelEditModal
-          hotel={hotel}
-          saving={updating}
-          onClose={() => {
-            setIsEditOpen(false)
-            dispatch(clearHotelUpdateStatus())
-          }}
-          onSave={handleHotelUpdate}
-        />
-      )}
     </>
   )
 }
 
 export default HotelDetails
-
-

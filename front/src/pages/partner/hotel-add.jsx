@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import apiClient from '../../utils/apiInterceptor'
 import {
   Building2, ImagePlus, Loader2, Plus, X,
   MapPin, Phone, Mail, Star, Calendar, Check,
@@ -355,7 +355,7 @@ export default function HotelAdd() {
       if (form.endDate)   fd.append('endDate',   form.endDate)
       images.forEach((f) => fd.append('images', f))
 
-      const res = await axios.post(`${baseURL}/data/hotels-new/post/upload/data`, fd, {
+      const res = await apiClient.post(`${baseURL}/data/hotels-new/post/upload/data`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       const hotelId = res.data?.data?.hotelId
@@ -364,7 +364,7 @@ export default function HotelAdd() {
 
       /* 2 — Amenities */
       if (amenities.length > 0)
-        await axios.post(`${baseURL}/create-a-amenities/to-your-hotel`, { hotelId, amenities })
+        await apiClient.post(`${baseURL}/create-a-amenities/to-your-hotel`, { hotelId, amenities })
 
       /* 3 — Foods */
       for (const food of foods.filter((f) => s(f.name))) {
@@ -373,12 +373,12 @@ export default function HotelAdd() {
         ffd.append('foodType', s(food.foodType)); ffd.append('price', s(food.price))
         ffd.append('about', s(food.about))
         food.imageFiles.forEach((file) => ffd.append('images', file))
-        await axios.post(`${baseURL}/add/food-to/your-hotel`, ffd, { headers: { 'Content-Type': 'multipart/form-data' } })
+        await apiClient.post(`${baseURL}/add/food-to/your-hotel`, ffd, { headers: { 'Content-Type': 'multipart/form-data' } })
       }
 
       /* 4 — Policies */
       if (Object.values(policies).some((v) => s(v)))
-        await axios.post(`${baseURL}/add-a-new/policy-to-your/hotel`, { hotelId, ...policies })
+        await apiClient.post(`${baseURL}/add-a-new/policy-to-your/hotel`, { hotelId, ...policies })
 
       /* 5 — Rooms */
       for (const room of rooms.filter((r) => s(r.type))) {
@@ -394,7 +394,7 @@ export default function HotelAdd() {
           if (room.offerExp) rfd.append('offerExp', room.offerExp)
         }
         room.imageFiles.forEach((file) => rfd.append('images', file))
-        await axios.post(`${baseURL}/create-a-room-to-your-hotel`, rfd, { headers: { 'Content-Type': 'multipart/form-data' } })
+        await apiClient.post(`${baseURL}/create-a-room-to-your-hotel`, rfd, { headers: { 'Content-Type': 'multipart/form-data' } })
       }
 
       setStatus({ type: 'success', msg: `Hotel registered! ID: ${hotelId}` })
