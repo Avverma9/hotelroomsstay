@@ -1,6 +1,6 @@
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Home, User, Car, Palmtree } from "lucide-react";
+import { Home, User, Car, Palmtree, Building2 } from "lucide-react";
 
 export default function BottomBar() {
   const location = useLocation();
@@ -10,6 +10,7 @@ export default function BottomBar() {
   const navItems = [
     { label: "Holidays", icon: Palmtree, path: "/holidays", color: "text-teal-500", bg: "bg-teal-50" },
     { label: "Home", icon: Home, path: "/", color: "text-blue-500", bg: "bg-blue-50" },
+    { label: "Hotels", icon: Building2, path: "/hotel-search?destination=all", color: "text-orange-500", bg: "bg-orange-50" },
     { label: "Cabs", icon: Car, path: "/cabs", color: "text-yellow-500", bg: "bg-yellow-50" },
     { label: "Profile", icon: User, path: "/profile", color: "text-purple-500", bg: "bg-purple-50" },
   ];

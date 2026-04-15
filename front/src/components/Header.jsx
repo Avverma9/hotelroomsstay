@@ -33,6 +33,7 @@ const Logo = () => (
 );
 
 const navLinks = [
+  { text: "Hotels", path: "/hotel-search?destination=all", icon: <Building2 className="w-5 h-5" /> },
   { text: "Cabs", path: "/cabs", icon: <Car className="w-5 h-5" /> },
   { text: "Holidays", path: "/holidays", icon: <Palmtree className="w-5 h-5" /> },
   { text: "List Property", path: "/partner", icon: <Building2 className="w-5 h-5" /> },

@@ -16,6 +16,11 @@ export const getGst = createAsyncThunk(
       const response = await apiClient.get(endpoint);
       return response.data?.data || response.data || null;
     } catch (error) {
+      // If 404 (GST data not found), return null instead of error
+      // GST configuration is optional for hotels
+      if (error.response?.status === 404) {
+        return null;
+      }
       console.error('Error fetching GST:', error.response?.data || error.message);
       return rejectWithValue(error.response?.data?.message || error.message || 'Failed to fetch GST data');
     }
