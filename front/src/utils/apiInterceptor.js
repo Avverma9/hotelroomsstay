@@ -137,11 +137,20 @@ apiClient.interceptors.request.use(
     if (updateLoaderStatus) updateLoaderStatus(true);
 
     // Get token from localStorage if available
-    const token = localStorage.getItem('authToken');
+    const token = localStorage.getItem('authToken') || localStorage.getItem('rsToken');
+    
+    console.log('🔑 Token check:', {
+      url: config.url,
+      hasAuthToken: !!localStorage.getItem('authToken'),
+      hasRsToken: !!localStorage.getItem('rsToken'),
+      token: token ? `${token.substring(0, 20)}...` : 'none',
+      isProtected: isProtectedRequest(config.url)
+    });
     
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     } else if (isProtectedRequest(config.url)) {
+      console.error('❌ No token found for protected request:', config.url);
       clearAuthStorage();
       redirectToLogin();
       return Promise.reject(new axios.Cancel('Missing auth token for protected request'));
