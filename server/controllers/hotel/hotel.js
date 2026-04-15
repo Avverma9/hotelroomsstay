@@ -2,6 +2,7 @@ const hotelModel = require("../../models/hotel/basicDetails");
 const month = require("../../models/booking/monthly");
 const cron = require("node-cron");
 const { DateTime } = require("luxon"); // Add this line at the top
+const mongoose = require("mongoose");
 
 const bookingsModel = require("../../models/booking/booking");
 const monthly = require("../../models/booking/monthly");
@@ -17,9 +18,24 @@ const {
   isOfferActive,
 } = require("./offerUtils");
 
+// Import related models for hybrid approach
+const amenitiesModel = require("../../models/hotel/amenities");
+const policyModel = require("../../models/hotel/policies");
+
 const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const isValueProvided = (value) => value !== undefined;
+
+// XSS Prevention - Sanitize user input
+const sanitizeInput = (input) => {
+  if (typeof input !== 'string') return input;
+  return input
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/\//g, '&#x2F;');
+};
 
 // Frontend may send different field names than the schema uses — map them here.
 const FIELD_ALIASES = {
@@ -120,6 +136,13 @@ const buildHotelQuery = (hotelId) => {
 };
 
 const createHotel = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction({
+    readConcern: { level: 'snapshot' },
+    writeConcern: { w: 'majority' },
+    readPreference: 'primary',
+  });
+
   try {
     const {
       hotelName,
@@ -148,50 +171,216 @@ const createHotel = async (req, res) => {
       hotelEmail,
       customerWelcomeNote,
       generalManagerContact,
+      // Hybrid approach: only amenities and policies in single call
+      amenities,
+      policies,
     } = req.body;
 
-    const images = req.files.map((file) => file.location);
+    // === Validation ===
+    if (!hotelName || !hotelName.trim()) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: "Hotel name is required" });
+    }
+    if (!state || !state.trim()) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: "State is required" });
+    }
+    if (!city || !city.trim()) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: "City is required" });
+    }
+    if (!contact || !contact.trim()) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: "Contact number is required" });
+    }
+
+    // === Phone Number Validation ===
+    const phoneRegex = /^[0-9]{10}$/;
+    if (!phoneRegex.test(contact.trim())) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: "Invalid phone number. Must be 10 digits." });
+    }
+
+    // === Email Validation ===
+    if (hotelEmail && hotelEmail.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(hotelEmail.trim())) {
+        await session.abortTransaction();
+        return res.status(400).json({ error: "Invalid email address format." });
+      }
+    }
+
+    // === Date Validation ===
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      if (start >= end) {
+        await session.abortTransaction();
+        return res.status(400).json({ error: "Start date must be before end date" });
+      }
+    }
+
+    // === Duplicate Hotel Check (Case-Insensitive) ===
+    const existingHotel = await hotelModel.findOne({
+      hotelName: { $regex: `^${hotelName.trim()}$`, $options: 'i' },
+      city: { $regex: `^${city.trim()}$`, $options: 'i' },
+      state: { $regex: `^${state.trim()}$`, $options: 'i' }
+    });
+    if (existingHotel) {
+      await session.abortTransaction();
+      return res.status(409).json({ 
+        error: "Hotel with this name already exists in this city" 
+      });
+    }
+
+    const images = req.files ? req.files.map((file) => file.location) : [];
+
+    // === Image Count Validation ===
+    const MAX_IMAGES = 20; // Maximum allowed images
+    const MIN_IMAGES = 1;  // Minimum required images
+    if (images.length > MAX_IMAGES) {
+      await session.abortTransaction();
+      return res.status(400).json({ 
+        error: `Maximum ${MAX_IMAGES} images allowed. You uploaded ${images.length} images.` 
+      });
+    }
+    if (images.length < MIN_IMAGES) {
+      await session.abortTransaction();
+      return res.status(400).json({ 
+        error: `At least ${MIN_IMAGES} image is required. You uploaded ${images.length} images.` 
+      });
+    }
+
+    // === File Type Validation ===
+    const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    const invalidFiles = req.files ? req.files.filter(file => !ALLOWED_MIME_TYPES.includes(file.mimetype)) : [];
+    if (invalidFiles.length > 0) {
+      await session.abortTransaction();
+      return res.status(400).json({ 
+        error: `Invalid file type. Only JPEG, PNG, WebP, and GIF images are allowed.` 
+      });
+    }
+
+    // === File Size Validation ===
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB per file
+    const oversizedFiles = req.files ? req.files.filter(file => file.size > MAX_FILE_SIZE) : [];
+    if (oversizedFiles.length > 0) {
+      await session.abortTransaction();
+      return res.status(400).json({ 
+        error: `File size exceeds limit. Maximum ${MAX_FILE_SIZE / 1024 / 1024}MB per file allowed.` 
+      });
+    }
+
+    // Parse JSON strings with error handling
+    const parsedAmenities = (() => {
+      try {
+        return typeof amenities === 'string' ? JSON.parse(amenities) : (amenities || []);
+      } catch (error) {
+        console.error('Error parsing amenities:', error);
+        return [];
+      }
+    })();
+
+    const parsedPolicies = (() => {
+      try {
+        return typeof policies === 'string' ? JSON.parse(policies) : (policies || {});
+      } catch (error) {
+        console.error('Error parsing policies:', error);
+        return {};
+      }
+    })();
 
     const hotelData = {
-      hotelName,
-      description,
-      hotelOwnerName,
-      destination,
-      onFront,
-      customerWelcomeNote,
+      hotelName: sanitizeInput(hotelName),
+      description: sanitizeInput(description),
+      hotelOwnerName: sanitizeInput(hotelOwnerName),
+      destination: sanitizeInput(destination),
+      onFront: onFront === 'true' || onFront === true,
+      customerWelcomeNote: sanitizeInput(customerWelcomeNote),
       startDate,
       endDate,
-      state,
-      latitude,
-      longitude,
-      city,
-      landmark,
+      state: sanitizeInput(state),
+      latitude: Number(latitude) || 0,
+      longitude: Number(longitude) || 0,
+      city: sanitizeInput(city),
+      landmark: sanitizeInput(landmark),
       pinCode,
-      hotelCategory,
-      numRooms,
-      reviews,
-      rating,
-      starRating,
-      propertyType,
-      contact,
-      isAccepted,
-      localId,
-      hotelEmail,
-      generalManagerContact,
-      salesManagerContact,
+      hotelCategory: sanitizeInput(hotelCategory),
+      numRooms: Number(numRooms) || 0,
+      reviews: Number(reviews) || 0,
+      rating: Number(rating) || 0,
+      starRating: Number(starRating) || 0,
+      propertyType: sanitizeInput(propertyType),
+      contact: sanitizeInput(contact),
+      isAccepted: isAccepted === 'true' || isAccepted === true,
+      localId: sanitizeInput(localId),
+      hotelEmail: hotelEmail, // ❌ Don't sanitize email
+      generalManagerContact: sanitizeInput(generalManagerContact),
+      salesManagerContact: sanitizeInput(salesManagerContact),
       images,
+      amenities: parsedAmenities || [],
+      policies: parsedPolicies || {},
     };
 
-    const savedHotel = await hotelModel.create(hotelData);
+    // Create hotel with transaction
+    const savedHotel = await hotelModel.create([hotelData], { session });
+    const hotelId = savedHotel[0].hotelId;
+
+    // Create amenities if provided (check if already exists)
+    if (parsedAmenities && parsedAmenities.length > 0) {
+      const existingAmenities = await amenitiesModel.findOne({ hotelId });
+      if (existingAmenities) {
+        await amenitiesModel.updateOne(
+          { hotelId },
+          { amenities: parsedAmenities },
+          { session }
+        );
+      } else {
+        await amenitiesModel.create([{
+          hotelId,
+          amenities: parsedAmenities,
+        }], { session });
+      }
+    }
+
+    // Create policies if provided (check if already exists)
+    if (parsedPolicies && Object.keys(parsedPolicies).length > 0) {
+      const existingPolicies = await policyModel.findOne({ hotelId });
+      if (existingPolicies) {
+        await policyModel.updateOne(
+          { hotelId },
+          { $set: parsedPolicies },
+          { session }
+        );
+      } else {
+        await policyModel.create([{
+          hotelId,
+          ...parsedPolicies,
+        }], { session });
+      }
+    }
+
+    await session.commitTransaction();
 
     return res.status(201).json({
-      message: `Your request is accepted. Kindly note your hotel id (${savedHotel.hotelId}) for future purposes.`,
+      message: `Hotel created successfully with amenities and policies. Hotel ID: ${hotelId}`,
       status: true,
-      data: savedHotel,
+      data: {
+        hotelId,
+        hotelName,
+        amenitiesCreated: parsedAmenities.length,
+        policiesCreated: Object.keys(parsedPolicies).length,
+      },
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal Server Error" });
+    await session.abortTransaction();
+    console.error("Error creating hotel:", error);
+    return res.status(500).json({ 
+      error: "Internal Server Error",
+      message: error.message 
+    });
+  } finally {
+    session.endSession();
   }
 };
 

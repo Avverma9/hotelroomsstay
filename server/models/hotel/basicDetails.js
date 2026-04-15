@@ -48,7 +48,15 @@ const hotelsSchema = new mongoose.Schema(
             type: Number,
             default: 0,
         },
+        reviews: {
+            type: Number,
+            default: 0,
+        },
         reviewCount: {
+            type: Number,
+            default: 0,
+        },
+        numRooms: {
             type: Number,
             default: 0,
         },

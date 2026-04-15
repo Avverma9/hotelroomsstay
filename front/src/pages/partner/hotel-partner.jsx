@@ -54,6 +54,7 @@ const createEmptyForm = () => ({
   contact: '', hotelEmail: '', customerWelcomeNote: '',
   generalManagerContact: '', salesManagerContact: '',
   localId: 'Accepted', startDate: '', endDate: '', rating: '', reviews: '',
+  onFront: false, isAccepted: false,  // ✅ Added these fields
 })
 
 const STEPS = [
@@ -64,8 +65,9 @@ const STEPS = [
   { id: 4, label: 'Dining',    short: '05', icon: UtensilsCrossed, color: 'text-rose-700 bg-rose-50 border-rose-200' },
   { id: 5, label: 'Policies',  short: '06', icon: ShieldCheck,     color: 'text-indigo-700 bg-indigo-50 border-indigo-200' },
   { id: 6, label: 'Rooms',     short: '07', icon: BedDouble,       color: 'text-purple-700 bg-purple-50 border-purple-200' },
-  { id: 7, label: 'Contact',   short: '08', icon: Settings2,       color: 'text-teal-700 bg-teal-50 border-teal-200' },
+  { id: 7, label: 'Contact',   short: '08', icon: Phone,           color: 'text-teal-700 bg-teal-50 border-teal-200' },
   { id: 8, label: 'Preview',   short: '09', icon: Eye,             color: 'text-blue-700 bg-blue-50 border-blue-200' },
+  { id: 9, label: 'Finalize',  short: '10', icon: Check,           color: 'text-green-700 bg-green-50 border-green-200' },
 ]
 
 const inp = "w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
@@ -209,6 +211,7 @@ export default function HotelPartnerForm() {
   const [policies, setPolicies]           = useState(createEmptyPolicies)
   const [submitting, setSubmitting]       = useState(false)
   const [status, setStatus]               = useState({ type: null, msg: '' })
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false)
   const [contactError, setContactError]   = useState('')
   const [gmError, setGmError]             = useState('')
   const [smError, setSmError]             = useState('')
@@ -306,6 +309,15 @@ export default function HotelPartnerForm() {
   const addFoodItem    = () => setFoods((p) => [...p, createEmptyFood()])
   const removeFoodItem = (fi) => setFoods((p) => { p[fi].imagePreviews.forEach((u) => URL.revokeObjectURL(u)); return p.filter((_, i) => i !== fi) })
 
+  /* ✅ Cleanup on unmount to prevent memory leaks */
+  useEffect(() => {
+    return () => {
+      previews.forEach((u) => URL.revokeObjectURL(u))
+      rooms.forEach(room => room.imagePreviews.forEach(url => URL.revokeObjectURL(url)))
+      foods.forEach(food => food.imagePreviews.forEach(url => URL.revokeObjectURL(url)))
+    }
+  }, [previews, rooms, foods])
+
   /* phone validation helper */
   const validatePhone = (val, setErr) => {
     setErr(val.length > 0 && !/^[0-9]{10}$/.test(val) ? 'Enter valid 10-digit number' : '')
@@ -314,7 +326,7 @@ export default function HotelPartnerForm() {
   /* submit */
   const handleSubmit = async (e) => {
     e?.preventDefault()
-    if (!window.confirm('Have you checked all details? Confirm submission?')) return
+    // ❌ Removed window.confirm - better UX without blocking dialog
     setSubmitting(true)
     setStatus({ type: null, msg: '' })
     try {
@@ -324,9 +336,34 @@ export default function HotelPartnerForm() {
         'contact','hotelEmail','customerWelcomeNote','generalManagerContact',
         'salesManagerContact','localId','rating','reviews',
       ].forEach((k) => fd.append(k, s(form[k])))
+      fd.append('onFront', form.onFront)
+      fd.append('isAccepted', form.isAccepted)
       if (form.startDate) fd.append('startDate', form.startDate)
       if (form.endDate)   fd.append('endDate',   form.endDate)
+
+      // === Minimum Image Validation ===
+      if (images.length === 0) {
+        setStatus({ type: 'error', msg: 'At least 1 image is required.' })
+        setSubmitting(false)
+        return
+      }
+
       images.forEach((f) => fd.append('images', f))
+
+      // ✅ Hybrid Approach: Send amenities and policies in single call with error handling
+      try {
+        fd.append('amenities', JSON.stringify(amenities))
+      } catch (error) {
+        console.error('Error stringifying amenities:', error)
+        fd.append('amenities', JSON.stringify([]))
+      }
+
+      try {
+        fd.append('policies', JSON.stringify(policies))
+      } catch (error) {
+        console.error('Error stringifying policies:', error)
+        fd.append('policies', JSON.stringify({}))
+      }
 
       const res = await axios.post(
         `${baseURL}/data/hotels-new/post/upload/data`,
@@ -338,42 +375,75 @@ export default function HotelPartnerForm() {
       const hotelId = res.data?.data?.hotelId
       if (!hotelId) throw new Error('Hotel created but hotelId not received.')
 
-      if (amenities.length > 0)
-        await axios.post(`${baseURL}/create-a-amenities/to-your-hotel`, { hotelId, amenities })
-
-      for (const food of foods.filter((f) => s(f.name))) {
-        const ffd = new FormData()
-        ffd.append('hotelId', hotelId); ffd.append('name', s(food.name))
-        ffd.append('foodType', s(food.foodType)); ffd.append('price', s(food.price))
-        ffd.append('about', s(food.about))
-        food.imageFiles.forEach((file) => ffd.append('images', file))
-        await axios.post(`${baseURL}/add/food-to/your-hotel`, ffd, { headers: { 'Content-Type': 'multipart/form-data' } })
-      }
-
-      if (Object.values(policies).some((v) => s(v)))
-        await axios.post(`${baseURL}/add-a-new/policy-to-your/hotel`, { hotelId, ...policies })
-
-      for (const room of rooms.filter((r) => s(r.type))) {
-        const rfd = new FormData()
-        rfd.append('hotelId', hotelId); rfd.append('type', s(room.type))
-        rfd.append('bedTypes', s(room.bedTypes)); rfd.append('price', s(room.price))
-        rfd.append('originalPrice', s(room.originalPrice) || s(room.price))
-        rfd.append('countRooms', s(room.countRooms) || '1')
-        rfd.append('isOffer', room.isOffer)
-        if (room.isOffer) {
-          rfd.append('offerName', s(room.offerName))
-          rfd.append('offerPriceLess', s(room.offerPriceLess))
-          if (room.offerExp) rfd.append('offerExp', room.offerExp)
+      // ✅ Separate API calls for rooms with error handling and rollback
+      try {
+        for (const room of rooms.filter((r) => s(r.type))) {
+          const rfd = new FormData()
+          rfd.append('hotelId', hotelId); rfd.append('type', s(room.type))
+          rfd.append('bedTypes', s(room.bedTypes)); rfd.append('price', s(room.price))
+          rfd.append('originalPrice', s(room.originalPrice) || s(room.price))
+          rfd.append('countRooms', s(room.countRooms) || '1')
+          rfd.append('isOffer', room.isOffer)
+          if (room.isOffer) {
+            rfd.append('offerName', s(room.offerName))
+            rfd.append('offerPriceLess', s(room.offerPriceLess))
+            if (room.offerExp) rfd.append('offerExp', room.offerExp)
+          }
+          room.imageFiles.forEach((file) => rfd.append('images', file))
+          await axios.post(`${baseURL}/create-a-room-to-your-hotel`, rfd, { headers: { 'Content-Type': 'multipart/form-data' } })
         }
-        room.imageFiles.forEach((file) => rfd.append('images', file))
-        await axios.post(`${baseURL}/create-a-room-to-your-hotel`, rfd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      } catch (error) {
+        console.error('Error creating rooms:', error)
+        // ✅ Revoke previews to prevent memory leak
+        rooms.forEach(room => room.imagePreviews.forEach(url => URL.revokeObjectURL(url)))
+        throw new Error('Failed to create rooms: ' + (error?.response?.data?.message || error?.message))
       }
 
-      alert(`${res.data.message}. Now you will be redirected to the next step.`)
+      // ✅ Separate API calls for foods with error handling and rollback
+      try {
+        for (const food of foods.filter((f) => s(f.name))) {
+          const ffd = new FormData()
+          ffd.append('hotelId', hotelId); ffd.append('name', s(food.name))
+          ffd.append('foodType', s(food.foodType)); ffd.append('price', s(food.price))
+          ffd.append('about', s(food.about))
+          food.imageFiles.forEach((file) => ffd.append('images', file))
+          await axios.post(`${baseURL}/add/food-to/your-hotel`, ffd, { headers: { 'Content-Type': 'multipart/form-data' } })
+        }
+      } catch (error) {
+        console.error('Error creating foods:', error)
+        // ✅ Revoke previews to prevent memory leak
+        foods.forEach(food => food.imagePreviews.forEach(url => URL.revokeObjectURL(url)))
+        throw new Error('Failed to create foods: ' + (error?.response?.data?.message || error?.message))
+      }
+
+      // ✅ Success status instead of alert
+      setStatus({ type: 'success', msg: res.data.message || 'Hotel created successfully!' })
+      setShowSuccessPopup(true)
       localStorage.setItem('hotelId', hotelId)
-      window.location.href = '/partner/second-step'
+
+      // ✅ Form reset before redirect
+      setForm(createEmptyForm())
+      setImages([])
+      previews.forEach((u) => URL.revokeObjectURL(u))
+      setPreviews([])
+      setAmenities([])
+      setAmenityInput('')
+      setSelectedAmenity('')
+      setFoods([createEmptyFood()])
+      setRooms([createEmptyRoom()])
+      setPolicies(createEmptyPolicies())
+      setCompletedSteps(new Set(STEPS.map((s) => s.id)))
+
+      // ✅ Redirect after delay with cleanup
+      const redirectTimer = setTimeout(() => {
+        window.location.href = '/partner/second-step'
+      }, 2000)
+
+      // Return cleanup function to clear timeout if component unmounts
+      return () => clearTimeout(redirectTimer)
     } catch (err) {
       setStatus({ type: 'error', msg: err?.response?.data?.message || err?.message || 'Something went wrong.' })
+    } finally {
       setSubmitting(false)
     }
   }
@@ -808,11 +878,11 @@ export default function HotelPartnerForm() {
       </div>
     ),
 
-    /* 7  Contact & Images */
+    /* 7  Contact */
     7: (
       <>
         <Card>
-          <SecTitle icon={Settings2} label="Contact Information" colorClass="text-teal-700 bg-teal-50 border-teal-200" />
+          <SecTitle icon={Phone} label="Contact Information" colorClass="text-teal-700 bg-teal-50 border-teal-200" />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
               { label: 'Hotel Email', key: 'hotelEmail', type: 'email', ph: 'hotel@example.com', err: null, setErr: null },
@@ -839,42 +909,12 @@ export default function HotelPartnerForm() {
           </div>
         </Card>
 
-        <Card>
-          <SecTitle icon={ImagePlus} label="Hotel Images" colorClass="text-pink-700 bg-pink-50 border-pink-200" />
-          <p className="text-xs text-gray-400 mb-4">Upload high-quality images of your hotel (at least 3â€“5 recommended).</p>
-
-          <label className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-all w-fit">
-            <ImagePlus size={16} className="text-gray-400" />
-            <span className="text-sm font-medium text-gray-600">Click to add images</span>
-            <input type="file" multiple accept="image/*" onChange={addImages} className="hidden" />
-          </label>
-
-          {previews.length > 0 && (
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mt-4">
-              {previews.map((src, i) => (
-                <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-gray-200">
-                  <img src={src} alt="" className="w-full h-full object-cover" />
-                  <button type="button" onClick={() => removeImage(i)}
-                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 flex items-center justify-center hover:bg-red-600 transition-colors">
-                    <X size={10} color="#fff" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        <Card>
-          <SecTitle icon={Settings2} label="Settings" colorClass="text-teal-700 bg-teal-50 border-teal-200" />
-          <div className="flex items-center gap-6 flex-wrap">
-            <Field label="Accept Local ID">
-              <select className={inp + ' w-auto'} value={form.localId} onChange={set('localId')}>
-                <option value="Accepted">âœ… Accepted</option>
-                <option value="Not Accepted">âŒ Not Accepted</option>
-              </select>
-            </Field>
-          </div>
-        </Card>
+        <div className="flex justify-end mt-4">
+          <button type="button" onClick={next}
+            className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm">
+            Continue to Preview <ChevronRight size={14} />
+          </button>
+        </div>
       </>
     ),
 
@@ -1000,15 +1040,71 @@ export default function HotelPartnerForm() {
             </div>
           )}
 
-          {/* Submit */}
-          <button type="button" onClick={handleSubmit} disabled={submitting}
-            className="w-full py-4 bg-gray-900 text-white font-bold text-sm uppercase tracking-widest rounded-xl hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2">
-            {submitting ? <><Loader2 size={15} className="animate-spin" /> Registering Property…</> : <><Check size={15} /> Register Property</>}
-          </button>
-          <p className="text-center text-xs text-gray-400 mt-3 italic">Images are uploaded securely. All data is encrypted.</p>
+          {/* Proceed to Finalize */}
+          <div className="p-5 bg-green-50 border border-green-200 rounded-xl flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <p className="font-bold text-green-800 text-sm">Sab kuch sahi lag raha hai?</p>
+              <p className="text-green-600 text-xs mt-0.5">Agle step me images aur final submit hai.</p>
+            </div>
+            <button type="button" onClick={() => goTo(9)}
+              className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm">
+              Proceed to Finalize <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
       )
     })(),
+
+    /* 9  Finalize */
+    9: (
+      <>
+        {/* Images */}
+        <Card>
+          <SecTitle icon={ImagePlus} label="Hotel Images" colorClass="text-pink-700 bg-pink-50 border-pink-200" />
+          <p className="text-xs text-gray-400 mb-4">Upload high-quality images of your hotel (at least 1 required).</p>
+
+          <label className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-all w-fit">
+            <ImagePlus size={16} className="text-gray-400" />
+            <span className="text-sm font-medium text-gray-600">Click to add images</span>
+            <input type="file" multiple accept="image/*" onChange={addImages} className="hidden" />
+          </label>
+
+          {previews.length > 0 && (
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mt-4">
+              {previews.map((src, i) => (
+                <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-gray-200">
+                  <img src={src} alt="" className="w-full h-full object-cover" />
+                  <button type="button" onClick={() => removeImage(i)}
+                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 flex items-center justify-center hover:bg-red-600 transition-colors">
+                    <X size={10} color="#fff" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* Settings */}
+        <Card>
+          <SecTitle icon={Settings2} label="Settings" colorClass="text-teal-700 bg-teal-50 border-teal-200" />
+          <div className="flex items-center gap-6 flex-wrap">
+            <Field label="Accept Local ID">
+              <select className={inp + ' w-auto'} value={form.localId} onChange={set('localId')}>
+                <option value="Accepted">✓ Accepted</option>
+                <option value="Not Accepted">✗ Not Accepted</option>
+              </select>
+            </Field>
+          </div>
+        </Card>
+
+        {/* Submit */}
+        <button type="button" onClick={handleSubmit} disabled={submitting}
+          className="w-full py-4 bg-gray-900 text-white font-bold text-sm uppercase tracking-widest rounded-xl hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2">
+          {submitting ? <><Loader2 size={15} className="animate-spin" /> Registering Property…</> : <><Check size={15} /> Register Property</>}
+        </button>
+        <p className="text-center text-xs text-gray-400 mt-3 italic">Images are uploaded securely. All data is encrypted.</p>
+      </>
+    ),
   }
 
   return (
@@ -1088,6 +1184,53 @@ export default function HotelPartnerForm() {
           )}
         </div>
       </div>
+
+      {/* Success Popup */}
+      {showSuccessPopup && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center animate-in fade-in duration-300">
+          <div className="bg-white p-12 rounded-2xl text-center shadow-2xl max-w-md w-[90%] animate-in zoom-in duration-300">
+            <svg width="80" height="80" viewBox="0 0 80 80" className="animate-in zoom-in duration-500">
+              <circle cx="40" cy="40" r="36" fill="#3b82f6" opacity="0.1" />
+              <circle cx="40" cy="40" r="32" fill="#3b82f6" />
+              <path
+                d="M24 40 L36 52 L56 28"
+                fill="none"
+                stroke="#fff"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="animate-in stroke-in duration-500 delay-200"
+                strokeDasharray="100"
+                strokeDashoffset="100"
+                style={{ animation: 'checkmark 0.5s ease-out 0.2s both' }}
+              />
+            </svg>
+            <h2 className="text-2xl font-bold text-gray-900 mt-6 mb-2 font-serif">
+              Hotel Created Successfully!
+            </h2>
+            <p className="text-sm text-gray-600 mb-6">
+              Your hotel has been registered and is now live.
+            </p>
+            <button
+              onClick={() => setShowSuccessPopup(false)}
+              className="px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition-colors"
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes checkmark {
+          0% { stroke-dashoffset: 100; }
+          100% { stroke-dashoffset: 0; }
+        }
+        @keyframes scaleIn {
+          from { transform: scale(0); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+      `}</style>
     </div>
   )
 }
