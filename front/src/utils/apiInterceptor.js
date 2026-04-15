@@ -5,13 +5,21 @@ const LOGIN_PATH = '/login';
 const PUBLIC_PATH_PREFIXES = [
   '/health',
   '/auth/me',
+  '/auth/refresh',
+  '/auth/refresh/dashboard',
+  '/mail',
+  '/login/dashboard/user',
+  '/forgot-password/dashboard/user',
+  '/change-password/dashboard/user',
+  '/create/dashboard/user',
+  '/signup',
   '/signIn',
-  '/Signup',
   '/signIn/google',
   '/send-otp',
   '/verify-otp',
   '/mail/send-otp',
   '/mail/verify-otp',
+  '/get/',
   '/get/offers/main/hotels',
   '/get-all/travel/location',
   '/hotels/filters',
@@ -32,6 +40,7 @@ const PUBLIC_PATH_PREFIXES = [
   '/sort-tour/by-themes',
   '/sort-tour/by-order',
   '/get-tour/',
+  '/tours/',
 ];
 
 const clearAuthStorage = () => {
@@ -111,8 +120,7 @@ const onRefreshed = (token) => {
 
 // Store reference to update server status
 let updateServerStatus = null;
-let updateLoaderStatus = null;
-
+let updateLoaderStatus = null
 // Set the callback function to update Redux store
 export const setServerStatusCallback = (callback) => {
   updateServerStatus = callback;

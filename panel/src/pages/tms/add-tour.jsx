@@ -17,7 +17,7 @@ const initialVehicleState = {
   vehicleNumber: '',
   totalSeats: '',
   seatConfig: {
-    rows: '',
+    rows: 1,
     left: 2,
     right: 2,
     aisle: true
@@ -203,10 +203,9 @@ export default function TourForm() {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
     
-    const newImageUrls = files.map(file => URL.createObjectURL(file));
     setFormData(prev => ({
       ...prev,
-      images: [...prev.images, ...newImageUrls]
+      images: [...prev.images, ...files]  // Store actual File objects
     }));
   };
 
@@ -219,17 +218,51 @@ export default function TourForm() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const payload = {
-      ...formData,
-      inclusion: formData.inclusion.split(',').map((i) => i.trim()).filter(Boolean),
-      exclusion: formData.exclusion.split(',').map((i) => i.trim()).filter(Boolean),
-      termsAndConditions: formData.termsAndConditions.reduce((acc, curr) => {
-        if (curr.key && curr.value) acc[curr.key] = curr.value;
-        return acc;
-      }, {})
-    };
+    const formDataToSend = new FormData();
+    
+    // Basic fields
+    formDataToSend.append("travelAgencyName", formData.travelAgencyName);
+    formDataToSend.append("agencyId", formData.agencyId);
+    formDataToSend.append("agencyPhone", formData.agencyPhone);
+    formDataToSend.append("agencyEmail", formData.agencyEmail);
+    formDataToSend.append("isAccepted", formData.isAccepted ? "true" : "false");
+    formDataToSend.append("country", formData.country);
+    formDataToSend.append("state", formData.state);
+    formDataToSend.append("city", formData.city);
+    formDataToSend.append("visitngPlaces", formData.visitngPlaces);
+    formDataToSend.append("themes", formData.themes);
+    formDataToSend.append("price", formData.price);
+    formDataToSend.append("nights", formData.nights);
+    formDataToSend.append("days", formData.days);
+    formDataToSend.append("from", formData.from);
+    formDataToSend.append("to", formData.to);
+    formDataToSend.append("tourStartDate", formData.tourStartDate);
+    formDataToSend.append("tourEndDate", formData.tourEndDate);
+    formDataToSend.append("isCustomizable", formData.isCustomizable ? "true" : "false");
+    formDataToSend.append("starRating", formData.starRating);
 
-    dispatch(addTour(payload));
+    // Arrays as JSON.stringify
+    formDataToSend.append("amenities", JSON.stringify(formData.amenities));
+    formDataToSend.append("inclusion", JSON.stringify(formData.inclusion.split(',').map(i => i.trim()).filter(Boolean)));
+    formDataToSend.append("exclusion", JSON.stringify(formData.exclusion.split(',').map(i => i.trim()).filter(Boolean)));
+    formDataToSend.append("dayWise", JSON.stringify(formData.dayWise));
+    formDataToSend.append("vehicles", JSON.stringify(formData.vehicles));
+    
+    // Terms as JSON.stringify object
+    const termsObject = formData.termsAndConditions.reduce((acc, curr) => {
+      if (curr.key && curr.value) acc[curr.key] = curr.value;
+      return acc;
+    }, {});
+    formDataToSend.append("termsAndConditions", JSON.stringify(termsObject));
+
+    // Images
+    formData.images.forEach((image) => {
+      if (image instanceof File) {
+        formDataToSend.append("images", image);
+      }
+    });
+
+    dispatch(addTour(formDataToSend));
   };
 
   const filteredAmenities = predefinedAmenities.filter(a => 

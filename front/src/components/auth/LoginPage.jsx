@@ -62,12 +62,13 @@ const DOODLE_ICONS = [
 
 const saveUserSession = (data, dispatch) => {
   const token = data?.rsToken || data?.token || "";
+  const refreshToken = data?.refreshToken || "";
   const userId = data?.userId || data?._id || "";
 
   localStorage.setItem("authToken", token);
   localStorage.setItem("isSignedIn", "true");
   localStorage.setItem("rsUserId", userId);
-  localStorage.setItem("rsToken", token);
+  localStorage.setItem("rsRefreshToken", refreshToken);
   localStorage.setItem("roomsstayUserEmail", data?.email || "");
   localStorage.setItem("rsUserMobile", data?.mobile || "");
   localStorage.setItem("rsUserName", data?.name || "");
@@ -81,6 +82,7 @@ const saveUserSession = (data, dispatch) => {
         mobile: data?.mobile || "",
       },
       token,
+      refreshToken,
     }),
   );
 };

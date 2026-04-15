@@ -6,7 +6,7 @@ import {
   Building2, ImagePlus, Loader2, Plus, X,
   MapPin, Star, Calendar, CheckCircle2,
   AlertCircle, Settings2, UtensilsCrossed, ShieldCheck, Layers, Trash2, BedDouble,
-  ChevronRight, ChevronLeft, Check, Eye,
+  ChevronRight, ChevronLeft, Check, Eye, Phone,
 } from "lucide-react";
 import baseURL from "../../utils/baseURL";
 import alert from "../../utils/custom_alert/custom_alert";

@@ -14,6 +14,11 @@ export const fetchMonthlyData = createAsyncThunk(
       const response = await apiClient.get(`/monthly-set-room-price/get/by/${hotelId}`);
       return normalizeResponse(response);
     } catch (error) {
+      // If 404 (no monthly prices found), return null instead of error
+      // Monthly pricing is optional for hotels
+      if (error.response?.status === 404) {
+        return null;
+      }
       const message = error.response?.data?.message || error.message || 'Failed to fetch monthly price data';
       return rejectWithValue(message);
     }

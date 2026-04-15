@@ -1764,13 +1764,16 @@ const getHotelsByFilters = async (req, res) => {
     // but if caller is searching by owner email, allow both accepted and
     // unaccepted hotels so owners/admins can find unpublished entries.
     const filters = {};
-    if (acceptedRequired !== null) {
+    // If search is "all", only filter by isAccepted=true
+    if (searchTrim === "all") {
+      filters.isAccepted = true;
+    } else if (acceptedRequired !== null) {
       filters.isAccepted = acceptedRequired;
     } else if (!hotelEmail && !req.query.hotelOwnerEmail) {
       filters.isAccepted = true;
     }
 
-    if (searchTrim) {
+    if (searchTrim && searchTrim !== "all") {
       filters.$or = [
         { city: { $regex: escapeRegex(searchTrim), $options: "i" } },
         { state: { $regex: escapeRegex(searchTrim), $options: "i" } },
