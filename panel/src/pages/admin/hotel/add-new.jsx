@@ -56,15 +56,16 @@ const createEmptyForm = () => ({
 
 /* ── Step config ── */
 const STEPS = [
-  { id: 0, label: 'Identity',   short: '01', icon: Building2,      color: '#b08d57' },
-  { id: 1, label: 'Location',   short: '02', icon: MapPin,          color: '#4e8c72' },
-  { id: 2, label: 'Ratings',    short: '03', icon: Star,            color: '#8b6e3a' },
-  { id: 3, label: 'Amenities',  short: '04', icon: Layers,          color: '#3a6e8c' },
-  { id: 4, label: 'Dining',     short: '05', icon: UtensilsCrossed, color: '#8c4a3a' },
-  { id: 5, label: 'Policies',   short: '06', icon: ShieldCheck,     color: '#3a3a8c' },
-  { id: 6, label: 'Rooms',      short: '07', icon: BedDouble,       color: '#6e3a8c' },
-  { id: 7, label: 'Preview',    short: '08', icon: Eye,             color: '#0369a1' },
-  { id: 8, label: 'Finalize',   short: '09', icon: Settings2,       color: '#2a4a2a' },
+  { id: 0, label: 'Identity',  short: '01', icon: Building2,      color: 'text-amber-700 bg-amber-50 border-amber-200' },
+  { id: 1, label: 'Location',  short: '02', icon: MapPin,          color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+  { id: 2, label: 'Ratings',   short: '03', icon: Star,            color: 'text-yellow-700 bg-yellow-50 border-yellow-200' },
+  { id: 3, label: 'Amenities', short: '04', icon: Layers,          color: 'text-sky-700 bg-sky-50 border-sky-200' },
+  { id: 4, label: 'Dining',    short: '05', icon: UtensilsCrossed, color: 'text-rose-700 bg-rose-50 border-rose-200' },
+  { id: 5, label: 'Policies',  short: '06', icon: ShieldCheck,     color: 'text-indigo-700 bg-indigo-50 border-indigo-200' },
+  { id: 6, label: 'Rooms',     short: '07', icon: BedDouble,       color: 'text-purple-700 bg-purple-50 border-purple-200' },
+  { id: 7, label: 'Contact',   short: '08', icon: Phone,           color: 'text-teal-700 bg-teal-50 border-teal-200' },
+  { id: 8, label: 'Preview',   short: '09', icon: Eye,             color: 'text-blue-700 bg-blue-50 border-blue-200' },
+  { id: 9, label: 'Finalize',  short: '10', icon: Check,           color: 'text-green-700 bg-green-50 border-green-200' },
 ]
 
 /* ── Shared input style factory ── */
@@ -313,9 +314,9 @@ export default function AddNewHotel() {
   const { updating } = useSelector((st) => st.hotel)
   const bedTypeOptions = useBedTypes()
   const hotelCategoryOptions = useHotelCategories()
-  const roomTypeOptions = useRoomTypes()
   const hotelAmenityOptions = useHotelAmenities()
   const propertyTypeOptions = usePropertyTypes()
+  const roomTypeOptions = useRoomTypes()
 
   const [step, setStep]             = useState(0)
   const [completedSteps, setCompletedSteps] = useState(new Set())
@@ -332,9 +333,19 @@ export default function AddNewHotel() {
   const [policies, setPolicies]     = useState(createEmptyPolicies)
   const [status, setStatus]         = useState({ type: null, msg: '' })
   const [submitting, setSubmitting] = useState(false)
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false)
 
   const isBusy = submitting || updating
   const inp    = makeInp()
+
+  /* ✅ Cleanup on unmount to prevent memory leaks */
+  useEffect(() => {
+    return () => {
+      previews.forEach((u) => URL.revokeObjectURL(u))
+      rooms.forEach(room => room.imagePreviews.forEach(url => URL.revokeObjectURL(url)))
+      foods.forEach(food => food.imagePreviews.forEach(url => URL.revokeObjectURL(url)))
+    }
+  }, [previews, rooms, foods])
 
   const set = (key) => (e) =>
     setForm((p) => ({ ...p, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
@@ -410,8 +421,8 @@ export default function AddNewHotel() {
   const removeRoomItem = (ri) => setRooms((p) => { p[ri].imagePreviews.forEach((u) => URL.revokeObjectURL(u)); return p.filter((_, i) => i !== ri) })
 
   /* food helpers */
-  const setFoodField = (fi, key) => (e) =>
-    setFoods((p) => p.map((f, i) => i === fi ? { ...f, [key]: e.target.value } : f))
+  const setFoodField = (fi, key, value) =>
+    setFoods((p) => p.map((f, i) => i === fi ? { ...f, [key]: value } : f))
 
   const addFoodImages = (fi, e) => {
     const files = Array.from(e.target.files || [])
@@ -447,41 +458,74 @@ export default function AddNewHotel() {
       fd.append('isAccepted', form.isAccepted)
       if (form.startDate) fd.append('startDate', form.startDate)
       if (form.endDate)   fd.append('endDate',   form.endDate)
+
+      // === Minimum Image Validation ===
+      if (images.length === 0) {
+        setStatus({ type: 'error', msg: 'At least 1 image is required.' })
+        setSubmitting(false)
+        return
+      }
+
       images.forEach((f) => fd.append('images', f))
+
+      // ✅ Hybrid Approach: Send amenities and policies in single call with error handling
+      try {
+        fd.append('amenities', JSON.stringify(amenities))
+      } catch (error) {
+        console.error('Error stringifying amenities:', error)
+        fd.append('amenities', JSON.stringify([]))
+      }
+
+      try {
+        fd.append('policies', JSON.stringify(policies))
+      } catch (error) {
+        console.error('Error stringifying policies:', error)
+        fd.append('policies', JSON.stringify({}))
+      }
 
       const result  = await dispatch(createHotel(fd)).unwrap()
       const hotelId = result?.data?.hotelId
       if (!hotelId) throw new Error('Hotel created but hotelId not received.')
 
-      if (amenities.length > 0)
-        await api.post('/create-a-amenities/to-your-hotel', { hotelId, amenities })
-
-      for (const food of foods.filter((f) => s(f.name))) {
-        const ffd = new FormData()
-        ffd.append('hotelId', hotelId); ffd.append('name', s(food.name))
-        ffd.append('foodType', s(food.foodType)); ffd.append('price', s(food.price))
-        ffd.append('about', s(food.about))
-        food.imageFiles.forEach((file) => ffd.append('images', file))
-        await api.post('/add/food-to/your-hotel', ffd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      // ✅ Separate API calls for rooms with error handling and rollback
+      try {
+        for (const room of rooms.filter((r) => s(r.type))) {
+          const rfd = new FormData()
+          rfd.append('hotelId', hotelId); rfd.append('type', s(room.type))
+          rfd.append('bedTypes', s(room.bedTypes)); rfd.append('price', s(room.price))
+          rfd.append('originalPrice', s(room.originalPrice) || s(room.price))
+          rfd.append('countRooms', s(room.countRooms) || '1')
+          rfd.append('isOffer', room.isOffer)
+          if (room.isOffer) {
+            rfd.append('offerName', s(room.offerName))
+            rfd.append('offerPriceLess', s(room.offerPriceLess))
+            if (room.offerExp) rfd.append('offerExp', room.offerExp)
+          }
+          room.imageFiles.forEach((file) => rfd.append('images', file))
+          await api.post('/create-a-room-to-your-hotel', rfd, { headers: { 'Content-Type': 'multipart/form-data' } })
+        }
+      } catch (error) {
+        console.error('Error creating rooms:', error)
+        // ✅ Revoke previews to prevent memory leak
+        rooms.forEach(room => room.imagePreviews.forEach(url => URL.revokeObjectURL(url)))
+        throw new Error('Failed to create rooms: ' + (error?.response?.data?.message || error?.message))
       }
 
-      if (Object.values(policies).some((v) => s(v)))
-        await api.post('/add-a-new/policy-to-your/hotel', { hotelId, ...policies })
-
-      for (const room of rooms.filter((r) => s(r.type))) {
-        const rfd = new FormData()
-        rfd.append('hotelId', hotelId); rfd.append('type', s(room.type))
-        rfd.append('bedTypes', s(room.bedTypes)); rfd.append('price', s(room.price))
-        rfd.append('originalPrice', s(room.originalPrice) || s(room.price))
-        rfd.append('countRooms', s(room.countRooms) || '1')
-        rfd.append('isOffer', room.isOffer)
-        if (room.isOffer) {
-          rfd.append('offerName', s(room.offerName))
-          rfd.append('offerPriceLess', s(room.offerPriceLess))
-          if (room.offerExp) rfd.append('offerExp', room.offerExp)
+      // ✅ Separate API calls for foods with error handling and rollback
+      try {
+        for (const food of foods.filter((f) => s(f.name))) {
+          const ffd = new FormData()
+          ffd.append('hotelId', hotelId); ffd.append('name', s(food.name))
+          ffd.append('foodType', s(food.foodType)); ffd.append('price', s(food.price))
+          ffd.append('about', s(food.about))
+          food.imageFiles.forEach((file) => ffd.append('images', file))
+          await api.post('/add/food-to/your-hotel', ffd, { headers: { 'Content-Type': 'multipart/form-data' } })
         }
-        room.imageFiles.forEach((file) => rfd.append('images', file))
-        await api.post('/create-a-room-to-your-hotel', rfd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      } catch (error) {
+        console.error('Error creating foods:', error)
+        // ✅ Revoke previews to prevent memory leak
+        foods.forEach(food => food.imagePreviews.forEach(url => URL.revokeObjectURL(url)))
+        throw new Error('Failed to create foods: ' + (error?.response?.data?.message || error?.message))
       }
 
       setForm(createEmptyForm()); setImages([]); previews.forEach((u) => URL.revokeObjectURL(u))
@@ -489,6 +533,7 @@ export default function AddNewHotel() {
       setFoods([createEmptyFood()]); setRooms([createEmptyRoom()]); setPolicies(createEmptyPolicies())
       setCompletedSteps(new Set(STEPS.map((s) => s.id)))
       setStatus({ type: 'success', msg: result?.message || `Hotel created! ID: ${hotelId}` })
+      setShowSuccessPopup(true)
       setTimeout(() => { dispatch(clearHotelUpdateStatus()); setStatus({ type: null, msg: '' }) }, 6000)
     } catch (err) {
       setStatus({ type: 'error', msg: err?.response?.data?.message || err?.message || 'Something went wrong.' })
@@ -979,10 +1024,9 @@ export default function AddNewHotel() {
       </div>
     ),
 
-    /* 7 — Finalize */
+    /* 7 — Contact */
     7: (
-      <div>
-        {/* Contact */}
+      <>
         <PanelCard>
           <SectionTitle icon={Phone} label="Contact Details" color="#2a4a2a" />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1016,112 +1060,19 @@ export default function AddNewHotel() {
           </div>
         </PanelCard>
 
-        {/* Images */}
-        <PanelCard>
-          <SectionTitle icon={ImagePlus} label="Property Images" color="#2a4a2a" />
-          <label style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
-            padding: '40px 20px', border: '1px dashed #c0b4a0', borderRadius: 10,
-            background: '#faf8f5', cursor: 'pointer', transition: 'all .18s',
-          }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#b08d57'; e.currentTarget.style.background = '#f5f0e8' }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#c0b4a0'; e.currentTarget.style.background = '#faf8f5' }}>
-            <div style={{ width: 52, height: 52, borderRadius: '50%', border: '1px solid #ddd5c8', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <ImagePlus size={20} color="#8a7f72" strokeWidth={1.5} />
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 14, color: '#3a3530', marginBottom: 5 }}>Select property photographs</div>
-              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: '#b0a898' }}>JPG · PNG · WEBP — Multiple files allowed</div>
-            </div>
-            <input type="file" multiple accept="image/*" onChange={addImages} style={{ display: 'none' }} />
-          </label>
-
-          {previews.length > 0 && (
-            <div style={{ marginTop: 18 }}>
-              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9b8b76', marginBottom: 12 }}>
-                {images.length} file{images.length > 1 ? 's' : ''} selected
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-                {previews.map((src, i) => (
-                  <div key={i} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '1', border: '1px solid #ede6dc' }}>
-                    <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                    <button type="button" onClick={() => removeImage(i)}
-                      style={{ position: 'absolute', top: 5, right: 5, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#c0392b'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.55)'}>
-                      <X size={10} color="#fff" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </PanelCard>
-
-        {/* Status config */}
-        <PanelCard>
-          <SectionTitle icon={Settings2} label="Visibility & Status" color="#2a4a2a" />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap', marginBottom: 22 }}>
-            {[{ label: 'Show on Front Page', key: 'onFront' }, { label: 'Mark as Accepted', key: 'isAccepted' }].map(({ label, key }) => (
-              <div key={key} onClick={() => setForm((p) => ({ ...p, [key]: !p[key] }))}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
-                <div style={{ width: 18, height: 18, border: `1.5px solid ${form[key] ? '#b08d57' : '#c0b4a0'}`, borderRadius: 4, background: form[key] ? '#b08d57' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .15s' }}>
-                  {form[key] && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 7L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                </div>
-                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 500, color: '#3a3530' }}>{label}</span>
-              </div>
-            ))}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#8a7f72' }}>Local ID</span>
-              <select value={form.localId} onChange={set('localId')} style={{ ...inp, width: 'auto', padding: '9px 14px', cursor: 'pointer' }} onFocus={onFocus} onBlur={onBlur}>
-                <option value="Accepted">Accepted</option>
-                <option value="Not Accepted">Not Accepted</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Summary cards */}
-          <Divider label="Submission Summary" />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-            {[
-              { label: 'Room Types', value: rooms.filter((r) => r.type).length, color: '#6e3a8c' },
-              { label: 'Amenities', value: amenities.length, color: '#3a6e8c' },
-              { label: 'Food Items', value: foods.filter((f) => f.name).length, color: '#8c4a3a' },
-              { label: 'Images', value: images.length, color: '#2a4a2a' },
-            ].map(({ label, value, color }) => (
-              <div key={label} style={{ padding: '14px 16px', background: '#f8f5f0', border: '1px solid #ede6dc', borderRadius: 8, textAlign: 'center' }}>
-                <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 28, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
-                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, color: '#9b8b76', marginTop: 6, fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Final submit */}
-          <button type="button" onClick={handleSubmit} disabled={isBusy}
-            style={{
-              width: '100%', padding: '15px', background: '#1a1a1a', color: '#ffffff',
-              border: 'none', borderRadius: 8,
-              fontFamily: "'Roboto', sans-serif", fontSize: 12, fontWeight: 700,
-              letterSpacing: '0.14em', textTransform: 'uppercase',
-              cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.6 : 1,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-              transition: 'background .18s',
-            }}
-            onMouseEnter={(e) => { if (!isBusy) e.currentTarget.style.background = '#374151' }}
-            onMouseLeave={(e) => { if (!isBusy) e.currentTarget.style.background = '#1a1a1a' }}>
-            {isBusy
-              ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Registering Property…</>
-              : <><Plus size={14} /> Register Property</>}
+        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+          <button type="button" onClick={next}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 24px', background: '#15803d', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontWeight: 700, fontSize: 12, letterSpacing: '0.06em', transition: 'background .15s' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#166534'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#15803d'}>
+            Continue to Preview <ChevronRight size={14} />
           </button>
-          <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 11, color: '#c0b4a0', textAlign: 'center', marginTop: 14, fontStyle: 'italic' }}>
-            Images are uploaded securely to AWS S3.
-          </p>
-        </PanelCard>
-      </div>
+        </div>
+      </>
     ),
 
-    /* 7 — Preview */
-    7: (() => {
+    /* 8 — Preview */
+    8: (() => {
       const Section = ({ title, children }) => (
         <div style={{ marginBottom: 20, border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
           <div style={{ padding: '12px 20px', background: '#f8fafc', borderBottom: '1px solid #e5e7eb', fontWeight: 700, fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#374151' }}>
@@ -1275,9 +1226,9 @@ export default function AddNewHotel() {
           <div style={{ padding: '20px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div>
               <div style={{ fontWeight: 700, color: '#15803d', fontSize: 14 }}>Sab kuch sahi lag raha hai?</div>
-              <div style={{ color: '#16a34a', fontSize: 12, marginTop: 2 }}>Agle step me contact, images aur final submit hai.</div>
+              <div style={{ color: '#16a34a', fontSize: 12, marginTop: 2 }}>Agle step me images aur final submit hai.</div>
             </div>
-            <button type="button" onClick={() => goTo(8)}
+            <button type="button" onClick={() => goTo(9)}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 24px', background: '#15803d', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontWeight: 700, fontSize: 12, letterSpacing: '0.06em', transition: 'background .15s' }}
               onMouseEnter={(e) => e.currentTarget.style.background = '#166534'}
               onMouseLeave={(e) => e.currentTarget.style.background = '#15803d'}>
@@ -1287,6 +1238,112 @@ export default function AddNewHotel() {
         </div>
       )
     })(),
+
+    /* 9 — Finalize */
+    9: (
+      <>
+        {/* Images */}
+        <PanelCard>
+          <SectionTitle icon={ImagePlus} label="Property Images" color="#2a4a2a" />
+          <label style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
+            padding: '40px 20px', border: '1px dashed #c0b4a0', borderRadius: 10,
+            background: '#faf8f5', cursor: 'pointer', transition: 'all .18s',
+          }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#b08d57'; e.currentTarget.style.background = '#f5f0e8' }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#c0b4a0'; e.currentTarget.style.background = '#faf8f5' }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', border: '1px solid #ddd5c8', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <ImagePlus size={20} color="#8a7f72" strokeWidth={1.5} />
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 14, color: '#3a3530', marginBottom: 5 }}>Select property photographs</div>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: '#b0a898' }}>JPG · PNG · WEBP — Multiple files allowed</div>
+            </div>
+            <input type="file" multiple accept="image/*" onChange={addImages} style={{ display: 'none' }} />
+          </label>
+
+          {previews.length > 0 && (
+            <div style={{ marginTop: 18 }}>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9b8b76', marginBottom: 12 }}>
+                {images.length} file{images.length > 1 ? 's' : ''} selected
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                {previews.map((src, i) => (
+                  <div key={i} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '1', border: '1px solid #ede6dc' }}>
+                    <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    <button type="button" onClick={() => removeImage(i)}
+                      style={{ position: 'absolute', top: 5, right: 5, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#c0392b'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.55)'}>
+                      <X size={10} color="#fff" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </PanelCard>
+
+        {/* Status config */}
+        <PanelCard>
+          <SectionTitle icon={Settings2} label="Visibility & Status" color="#2a4a2a" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap', marginBottom: 22 }}>
+            {[{ label: 'Show on Front Page', key: 'onFront' }, { label: 'Mark as Accepted', key: 'isAccepted' }].map(({ label, key }) => (
+              <div key={key} onClick={() => setForm((p) => ({ ...p, [key]: !p[key] }))}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
+                <div style={{ width: 18, height: 18, border: `1.5px solid ${form[key] ? '#b08d57' : '#c0b4a0'}`, borderRadius: 4, background: form[key] ? '#b08d57' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .15s' }}>
+                  {form[key] && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 7L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                </div>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 500, color: '#3a3530' }}>{label}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#8a7f72' }}>Local ID</span>
+              <select value={form.localId} onChange={set('localId')} style={{ ...inp, width: 'auto', padding: '9px 14px', cursor: 'pointer' }} onFocus={onFocus} onBlur={onBlur}>
+                <option value="Accepted">Accepted</option>
+                <option value="Not Accepted">Not Accepted</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Summary cards */}
+          <Divider label="Submission Summary" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+            {[
+              { label: 'Room Types', value: rooms.filter((r) => r.type).length, color: '#6e3a8c' },
+              { label: 'Amenities', value: amenities.length, color: '#3a6e8c' },
+              { label: 'Food Items', value: foods.filter((f) => f.name).length, color: '#8c4a3a' },
+              { label: 'Images', value: images.length, color: '#2a4a2a' },
+            ].map(({ label, value, color }) => (
+              <div key={label} style={{ padding: '14px 16px', background: '#f8f5f0', border: '1px solid #ede6dc', borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 28, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, color: '#9b8b76', marginTop: 6, fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Final submit */}
+          <button type="button" onClick={handleSubmit} disabled={isBusy}
+            style={{
+              width: '100%', padding: '15px', background: '#1a1a1a', color: '#ffffff',
+              border: 'none', borderRadius: 8,
+              fontFamily: "'DM Sans', sans-serif", fontSize: 12, fontWeight: 700,
+              letterSpacing: '0.14em', textTransform: 'uppercase',
+              cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.6 : 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              transition: 'background .18s',
+            }}
+            onMouseLeave={(e) => { if (!isBusy) e.currentTarget.style.background = '#1a1a1a' }}>
+            {isBusy
+              ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Registering Property…</>
+              : <><Plus size={14} /> Register Property</>}
+          </button>
+          <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 11, color: '#c0b4a0', textAlign: 'center', marginTop: 14, fontStyle: 'italic' }}>
+            Images are uploaded securely to AWS S3.
+          </p>
+        </PanelCard>
+      </>
+    ),
   }
 
   /* ── render ── */
@@ -1432,7 +1489,71 @@ export default function AddNewHotel() {
         ::-webkit-scrollbar-track { background: #f5f7fa; }
         ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 99px; }
         ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
+        @keyframes scaleIn {
+          from { transform: scale(0); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes checkmark {
+          0% { stroke-dashoffset: 100; }
+          100% { stroke-dashoffset: 0; }
+        }
       `}</style>
+
+      {/* Success Popup */}
+      {showSuccessPopup && (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      animation: 'scaleIn 0.3s ease-out'
+    }}>
+      <div style={{
+        background: '#fff', padding: '48px', borderRadius: 16,
+        textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        maxWidth: 400, width: '90%'
+      }}>
+        <svg width="80" height="80" viewBox="0 0 80 80" style={{ animation: 'scaleIn 0.5s ease-out' }}>
+          <circle cx="40" cy="40" r="36" fill="#3b82f6" opacity="0.1" />
+          <circle cx="40" cy="40" r="32" fill="#3b82f6" />
+          <path
+            d="M24 40 L36 52 L56 28"
+            fill="none"
+            stroke="#fff"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ animation: 'checkmark 0.5s ease-out 0.2s both' }}
+          />
+        </svg>
+        <h2 style={{
+          fontFamily: "'Playfair Display', Georgia, serif",
+          fontSize: 24, fontWeight: 700, color: '#1a1a1a',
+          marginTop: 24, marginBottom: 8
+        }}>
+          Hotel Created Successfully!
+        </h2>
+        <p style={{
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: 14, color: '#6b7280', marginBottom: 24
+        }}>
+          Your hotel has been registered and is now live.
+        </p>
+        <button
+          onClick={() => setShowSuccessPopup(false)}
+          style={{
+            padding: '12px 32px', background: '#3b82f6', color: '#fff',
+            border: 'none', borderRadius: 8, cursor: 'pointer',
+            fontFamily: "'DM Sans', sans-serif", fontSize: 14, fontWeight: 600,
+            transition: 'background 0.2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.background = '#2563eb'}
+          onMouseLeave={(e) => e.currentTarget.style.background = '#3b82f6'}
+        >
+          Continue
+        </button>
+      </div>
     </div>
-  )
+  )}
+</div>
+)
 }

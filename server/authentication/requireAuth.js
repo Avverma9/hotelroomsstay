@@ -5,6 +5,7 @@ const SKIP_PATH_PREFIXES = [
   '/health',
   '/auth/me',
   '/auth/refresh',
+  '/auth/refresh/dashboard',
   '/mail',
   '/login/dashboard/user',
   '/forgot-password/dashboard/user',
