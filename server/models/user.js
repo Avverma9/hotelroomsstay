@@ -19,6 +19,8 @@ const users = new mongoose.Schema(
     email: { type: String, required: false },
     mobile: { type: String, required: false },
     password: { type: String, required: false },
+    resetOtpHash: { type: String, default: null },
+    resetOtpExpiry: { type: Date, default: null },
     refreshToken: { type: String, default: null },
   },
   { timestamps: true },

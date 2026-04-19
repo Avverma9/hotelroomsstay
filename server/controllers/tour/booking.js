@@ -371,9 +371,65 @@ exports.getVehicleSeats = async (req, res) => {
 /* =========================================================
    GET BOOKINGS
 ========================================================= */
-exports.getBookings = async (_, res) => {
+exports.getBookings = async (req, res) => {
   try {
-    const bookings = await TourBooking.find().sort({ createdAt: -1 });
+    const {
+      status,
+      bookingCode,
+      agencyEmail,
+      userId,
+      bookingSource,
+      tourId,
+      agencyName,
+      date,
+      bookingId,
+    } = req.query;
+
+    const filter = {};
+
+    if (status) {
+      filter.status = status;
+    }
+    if (bookingCode) {
+      filter.bookingCode = { $regex: new RegExp(bookingCode.trim(), "i") };
+    }
+    if (bookingId) {
+      // In tour bookings, bookingId might be used interchangeably with bookingCode or mongodb _id
+      if (mongoose.Types.ObjectId.isValid(bookingId)) {
+        filter._id = bookingId;
+      } else {
+        filter.bookingCode = { $regex: new RegExp(bookingId.trim(), "i") };
+      }
+    }
+    if (agencyEmail) {
+      filter.agencyEmail = { $regex: new RegExp(agencyEmail.trim(), "i") };
+    }
+    if (agencyName) {
+      filter.travelAgencyName = { $regex: new RegExp(agencyName.trim(), "i") };
+    }
+    if (userId) {
+      filter.userId = userId;
+    }
+    if (bookingSource) {
+      filter.bookingSource = { $regex: new RegExp(bookingSource.trim(), "i") };
+    }
+    if (tourId) {
+      filter.tourId = tourId;
+    }
+
+    if (date) {
+      const queryDate = new Date(date);
+      const startOfDay = new Date(queryDate.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(queryDate.setHours(23, 59, 59, 999));
+
+      filter.$or = [
+        { tourStartDate: { $gte: startOfDay, $lte: endOfDay } },
+        { from: { $gte: startOfDay, $lte: endOfDay } },
+        { createdAt: { $gte: startOfDay, $lte: endOfDay } },
+      ];
+    }
+
+    const bookings = await TourBooking.find(filter).sort({ createdAt: -1 });
     res.json({ success: true, data: bookings });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });

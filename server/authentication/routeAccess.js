@@ -9,6 +9,7 @@ const SKIP_PATH_PREFIXES = [
   "/auth/me",
   "/auth/refresh",
   "/auth/refresh/dashboard",
+  "/auth/user/forgot-password/",
   "/mail",
   "/signup",
   "/signIn",
@@ -104,6 +105,11 @@ const routeAccess = async (req, res, next) => {
       .lean();
 
     if (!user) {
+      return next();
+    }
+
+    // Superadmins bypass all route-permission checks
+    if (user.role === "superadmin") {
       return next();
     }
 

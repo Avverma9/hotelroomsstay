@@ -41,7 +41,7 @@ const escapeRegex = (value) => {
 
 const toRegexPattern = (pattern) => {
   const escaped = escapeRegex(pattern)
-    .replace(/\\:[a-zA-Z0-9_]+/g, "[^/]+")
+    .replace(/:[a-zA-Z0-9_]+/g, "[^/]+")
     .replace(/\*/g, ".*");
   return new RegExp(`^${escaped}$`);
 };

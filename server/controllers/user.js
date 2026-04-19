@@ -9,8 +9,11 @@ const TourBooking = require("../models/tour/booking");
 const Review = require('../models/review');
 const DashUser = require('../models/dashboardUser');
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 require("dotenv").config();
 const otpAuth = require("../authentication/otpLogin");
+const { generateOtp, sendOtpEmail } = require("../nodemailer/nodemailer");
 const {
   createUserNotificationSafe,
 } = require("./notification/helpers");
@@ -96,6 +99,54 @@ const ensureWelcomeCouponForUserSafe = async ({ email, userId }) => {
   }
 };
 
+const isBcryptHash = (value) => typeof value === "string" && value.startsWith("$2");
+
+const sanitizeUser = (user) => {
+  if (!user) return user;
+  const obj = user.toObject ? user.toObject() : { ...user };
+  delete obj.password;
+  delete obj.refreshToken;
+  return obj;
+};
+
+const hashPassword = async (plain) => {
+  // bcrypt with cost 10 is a reasonable baseline for this project.
+  return bcrypt.hash(String(plain), 10);
+};
+
+const passwordsMatch = async (stored, candidate) => {
+  if (!stored) return false;
+  const storedStr = String(stored);
+  const candStr = String(candidate ?? "");
+  if (!candStr) return false;
+  if (isBcryptHash(storedStr)) {
+    return bcrypt.compare(candStr, storedStr);
+  }
+  // Legacy plaintext support (will be migrated on successful sign-in).
+  return storedStr === candStr;
+};
+
+const generateTempPassword = (length = 10) => {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = crypto.randomBytes(length);
+  let out = "";
+  for (let i = 0; i < length; i++) {
+    out += alphabet[bytes[i] % alphabet.length];
+  }
+  return out;
+};
+
+const OTP_EXPIRY_MS = 10 * 60 * 1000;
+const hashOtp = (otp) =>
+  crypto.createHash("sha256").update(String(otp)).digest("hex");
+
+const buildPasswordResetToken = (userId) =>
+  jwt.sign(
+    { userId: String(userId), purpose: "user_password_reset" },
+    process.env.JWT_SECRET,
+    { expiresIn: "10m" },
+  );
+
 const createSignup = async function (req, res) {
   try {
     const { email, mobile } = req.body;
@@ -118,10 +169,10 @@ const createSignup = async function (req, res) {
 
     const images = req.files ? req.files.map((file) => file.location) : [];
 
-    const userData = {
-      images,
-      ...req.body,
-    };
+    const userData = { images, ...req.body };
+    if (userData.password) {
+      userData.password = await hashPassword(userData.password);
+    }
 
     const savedUser = await userModel.create(userData);
     await ensureWelcomeCouponForUserSafe({
@@ -132,7 +183,7 @@ const createSignup = async function (req, res) {
     return res.status(201).json({
       status: true,
       message: "User has been created successfully",
-      data: savedUser,
+      data: sanitizeUser(savedUser),
     });
   } catch (error) {
     console.error(error);
@@ -140,6 +191,176 @@ const createSignup = async function (req, res) {
       error: "Internal Server Error",
       message: error.message || "Something went wrong while creating the user",
     });
+  }
+};
+
+// User auth: forgot password (send OTP via email or mobile)
+// POST /auth/user/forgot-password/send-otp
+const userForgotPasswordSendOtp = async (req, res) => {
+  try {
+    const { email, phoneNumber } = req.body || {};
+
+    if (!email && !phoneNumber) {
+      return res.status(400).json({ message: "Email or phoneNumber is required" });
+    }
+
+    if (email) {
+      const normalizedEmail = String(email).trim();
+      const emailRegex = new RegExp("^" + normalizedEmail + "$", "i");
+      const found = await userModel.findOne({ email: emailRegex });
+      if (!found) {
+        return res.status(400).json({ message: "No user account found with this email" });
+      }
+
+      const otp = String(generateOtp());
+      found.resetOtpHash = hashOtp(otp);
+      found.resetOtpExpiry = new Date(Date.now() + OTP_EXPIRY_MS);
+      await found.save();
+
+      await sendOtpEmail(normalizedEmail, otp, { skipRegisteredCheck: true });
+      return res.status(200).json({ message: "OTP sent successfully" });
+    }
+
+    // Mobile flow uses Twilio Verify (no need to store OTP).
+    const raw = String(phoneNumber || "").trim();
+    if (!raw) return res.status(400).json({ message: "phoneNumber is required" });
+
+    const modifiedNumber = raw.replace(/\D/g, "").slice(-10);
+    const user = await userModel.findOne({ mobile: { $regex: `${modifiedNumber}$` } });
+    if (!user) {
+      return res.status(404).json({ message: "Please register yourself" });
+    }
+
+    const result = await otpAuth.sendOtp(raw);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("userForgotPasswordSendOtp error:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// User auth: forgot password (verify OTP, returns resetToken)
+// POST /auth/user/forgot-password/verify-otp
+const userForgotPasswordVerifyOtp = async (req, res) => {
+  try {
+    const { email, otp, phoneNumber } = req.body || {};
+
+    if (!otp || (!email && !phoneNumber)) {
+      return res.status(400).json({ message: "OTP and (email or phoneNumber) are required" });
+    }
+
+    if (email) {
+      const normalizedEmail = String(email).trim();
+      const emailRegex = new RegExp("^" + normalizedEmail + "$", "i");
+      const found = await userModel.findOne({ email: emailRegex });
+      if (!found) {
+        return res.status(400).json({ message: "No user account found with this email" });
+      }
+
+      if (!found.resetOtpHash || !found.resetOtpExpiry) {
+        return res.status(400).json({ message: "OTP not requested. Please request a new OTP." });
+      }
+      if (new Date() > new Date(found.resetOtpExpiry)) {
+        found.resetOtpHash = null;
+        found.resetOtpExpiry = null;
+        await found.save();
+        return res.status(400).json({ message: "OTP has expired" });
+      }
+
+      if (hashOtp(otp) !== found.resetOtpHash) {
+        return res.status(400).json({ message: "Invalid OTP" });
+      }
+
+      // Consume OTP; issue short-lived reset token
+      found.resetOtpHash = null;
+      found.resetOtpExpiry = null;
+      await found.save();
+
+      return res.status(200).json({
+        message: "OTP verified",
+        resetToken: buildPasswordResetToken(found.userId),
+      });
+    }
+
+    // Mobile verify via Twilio
+    const raw = String(phoneNumber || "").trim();
+    const result = await otpAuth.verifyOtp(raw, String(otp));
+    if (!result || result?.success === false) {
+      return res.status(400).json({ message: result?.message || "Invalid or expired OTP." });
+    }
+
+    const modifiedNumber = raw.replace(/\D/g, "").slice(-10);
+    const user = await userModel.findOne({ mobile: { $regex: `${modifiedNumber}$` } });
+    if (!user) {
+      return res.status(404).json({ message: "Please register yourself" });
+    }
+
+    return res.status(200).json({
+      message: "OTP verified",
+      resetToken: buildPasswordResetToken(user.userId),
+    });
+  } catch (error) {
+    console.error("userForgotPasswordVerifyOtp error:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// User auth: forgot password (reset with confirm)
+// POST /auth/user/forgot-password/reset
+const userForgotPasswordReset = async (req, res) => {
+  try {
+    const { resetToken, newPassword, confirmPassword } = req.body || {};
+
+    if (!resetToken || !newPassword || !confirmPassword) {
+      return res.status(400).json({ message: "resetToken, newPassword, confirmPassword are required" });
+    }
+    if (String(newPassword) !== String(confirmPassword)) {
+      return res.status(400).json({ message: "Passwords do not match" });
+    }
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(String(resetToken), process.env.JWT_SECRET);
+    } catch (e) {
+      return res.status(403).json({ message: "Invalid or expired reset token" });
+    }
+
+    if (!decoded?.userId || decoded?.purpose !== "user_password_reset") {
+      return res.status(403).json({ message: "Invalid reset token" });
+    }
+
+    const canonicalUserId = await resolveToUserId(decoded.userId);
+    if (!canonicalUserId) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const hashed = await hashPassword(newPassword);
+    const updated = await userModel.findOneAndUpdate(
+      { userId: String(canonicalUserId) },
+      { $set: { password: hashed, refreshToken: null, resetOtpHash: null, resetOtpExpiry: null } },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    await createUserNotificationSafe({
+      name: "Password Reset",
+      message: "Your password was reset successfully. If this was not you, contact support immediately.",
+      path: "/app/profile/security",
+      eventType: "password_reset",
+      metadata: { resetAt: new Date() },
+      userIds: [String(updated.userId)],
+    });
+
+    return res.status(200).json({ message: "Password reset successful" });
+  } catch (error) {
+    console.error("userForgotPasswordReset error:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
@@ -267,8 +488,13 @@ const signIn = async function (req, res) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    if (user.password !== password) {
+    const ok = await passwordsMatch(user.password, password);
+    if (!ok) {
       return res.status(401).json({ message: "Invalid email or password" });
+    }
+    // Migrate legacy plaintext passwords to bcrypt on successful login.
+    if (user.password && !isBcryptHash(user.password)) {
+      user.password = await hashPassword(password);
     }
 
     const { accessToken, refreshToken } = generateUserTokens(user.userId);
@@ -297,7 +523,7 @@ const getUserById = async function (req, res) {
 
     const isObjId = mongoose.Types.ObjectId.isValid(userId) && String(userId).length === 24;
     const userQuery = isObjId ? { $or: [{ userId }, { _id: userId }] } : { userId };
-    const checkData = await userModel.findOne(userQuery);
+    const checkData = await userModel.findOne(userQuery).select("-password -refreshToken");
 
     if (!checkData) {
       return res.status(404).json({
@@ -371,8 +597,9 @@ const update = async (req, res) => {
       req.body,
       "password"
     );
+    const passwordProvided = password !== undefined && String(password ?? "").trim() !== "";
     const isPasswordChanged =
-      hasPasswordField && password !== existingUser.password;
+      hasPasswordField && passwordProvided && !(await passwordsMatch(existingUser.password, password));
 
     let images = existingUser.images || [];
     if (req.files && req.files.length > 0) {
@@ -384,7 +611,7 @@ const update = async (req, res) => {
     if (address !== undefined) updateData.address = address;
     if (email !== undefined) updateData.email = email;
     if (mobile !== undefined) updateData.mobile = mobile;
-    if (password !== undefined) updateData.password = password;
+    if (passwordProvided) updateData.password = await hashPassword(password);
 
     const updatedUser = await userModel.findOneAndUpdate(
       { userId: canonicalUserId },
@@ -404,7 +631,7 @@ const update = async (req, res) => {
           userIds: [String(updatedUser.userId)],
         });
       }
-      return res.json(updatedUser);
+      return res.json(sanitizeUser(updatedUser));
     } else {
       return res.status(404).json({ message: "User not found" });
     }
@@ -414,10 +641,76 @@ const update = async (req, res) => {
   }
 };
 
+// Admin-only: generate a new temporary password and return it once.
+// This avoids exposing stored passwords and fixes legacy plaintext handling.
+const adminResetUserPassword = async (req, res) => {
+  try {
+    const actorId = req.user?.id;
+    if (!actorId) {
+      return res.status(401).json({ message: "Access denied: No token provided" });
+    }
+
+    const claimedRole = String(req.user?.role || "").toLowerCase();
+    const allowedRoles = new Set(["admin", "superadmin"]);
+
+    // Prefer role embedded in the dashboard JWT (generated by dashboard login).
+    // Fallback to DB lookup if role claim is missing.
+    if (!allowedRoles.has(claimedRole)) {
+      const isObjId = mongoose.Types.ObjectId.isValid(actorId) && String(actorId).length === 24;
+      const actor = isObjId
+        ? await DashUser.findById(actorId).select("role").lean()
+        : null;
+      const dbRole = String(actor?.role || "").toLowerCase();
+      if (!allowedRoles.has(dbRole)) {
+        return res.status(403).json({ message: "Access denied: admin only" });
+      }
+    }
+
+    const { userId, length } = req.body || {};
+    const canonicalUserId = await resolveToUserId(userId);
+    if (!canonicalUserId) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const len = Math.max(8, Math.min(Number(length) || 10, 32));
+    const tempPassword = generateTempPassword(len);
+    const hashed = await hashPassword(tempPassword);
+
+    const updated = await userModel.findOneAndUpdate(
+      { userId: String(canonicalUserId) },
+      { $set: { password: hashed, refreshToken: null } },
+      { new: true }
+    ).lean();
+
+    if (!updated) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    await createUserNotificationSafe({
+      name: "Password Reset",
+      message: "Your account password was reset by an administrator. Please sign in again.",
+      path: "/app/profile/security",
+      eventType: "password_reset_admin",
+      metadata: { resetAt: new Date() },
+      userIds: [String(canonicalUserId)],
+    });
+
+    return res.status(200).json({
+      success: true,
+      userId: String(canonicalUserId),
+      tempPassword,
+      message: "Temporary password generated. Share it securely with the user.",
+    });
+  } catch (error) {
+    console.error("adminResetUserPassword error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 const getAllUsers = async (req, res) => {
   try {
     // Load all users (note: for large datasets this may need pagination)
-    const users = await userModel.find().lean();
+    const users = await userModel.find().select("-password -refreshToken").lean();
 
     if (!users || users.length === 0) {
       return res.status(200).json({ message: 'No users found', data: [] });
@@ -570,7 +863,7 @@ const findUser = async (req, res) => {
       query.email = { $regex: `^${email}$`, $options: "i" };
     }
 
-    const findUserData = await userModel.find(query);
+    const findUserData = await userModel.find(query).select("-password -refreshToken").lean();
 
     if (findUserData.length > 0) {
       return res.status(200).json({ success: true, data: findUserData });
@@ -603,7 +896,7 @@ const getAllUserBulkById = async (req, res) => {
 
 const getAllUserDetails = async (req, res) => {
   try {
-    const users = await userModel.find();
+    const users = await userModel.find().select("-password -refreshToken").lean();
 
     if (!users || users.length === 0) {
       return res.status(404).json({ message: "No users found" });
@@ -1008,6 +1301,10 @@ module.exports = {
   signIn,
   GoogleSignIn,
   update,
+  adminResetUserPassword,
+  userForgotPasswordSendOtp,
+  userForgotPasswordVerifyOtp,
+  userForgotPasswordReset,
   getAllUserBulkById,
   getAllUsers,
   totalUser,
