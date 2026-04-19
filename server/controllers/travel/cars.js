@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Car = require('../../models/travel/cars');
 const CarOwner = require('../../models/travel/carOwner');
 const User = require('../../models/user');
+const DashboardUser = require('../../models/dashboardUser');
 
 const toDate = (value) => {
   if (!value) {
@@ -347,19 +348,27 @@ exports.filterCar = async (req, res) => {
 
 exports.getMyCars = async (req, res) => {
   try {
-    const loggedInUserId = req.user.id;
-    const user = await User.findOne({ userId: loggedInUserId });
-    if (!user || !user.email) {
-      return res.status(403).json({ message: 'Access denied: User not found or email is missing.' });
+    const loggedInUserId = req.user.id; // DashboardUser _id from JWT
+
+    // Riders log in via DashboardUser
+    const dashUser = await DashboardUser.findById(loggedInUserId);
+    console.log('[getMyCars] req.user:', req.user);
+    console.log('[getMyCars] dashUser:', dashUser ? { _id: dashUser._id, email: dashUser.email, role: dashUser.role } : null);
+
+    if (!dashUser || !dashUser.email) {
+      return res.status(403).json({ message: 'Access denied: Rider account not found or email is missing.' });
     }
 
-    const carOwner = await CarOwner.findOne({ email: user.email });
+    // Case-insensitive email match to handle any casing differences
+    const carOwner = await CarOwner.findOne({ email: new RegExp(`^${dashUser.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+    console.log('[getMyCars] carOwner:', carOwner ? { _id: carOwner._id, email: carOwner.email } : null);
+
     if (!carOwner) {
-      // If the user is not a car owner, they have no cars. Return an empty array.
       return res.status(200).json([]);
     }
 
     const cars = await Car.find({ ownerId: carOwner._id });
+    console.log('[getMyCars] cars found:', cars.length);
     return res.status(200).json(cars);
   } catch (error) {
     console.error('getMyCars error:', error);

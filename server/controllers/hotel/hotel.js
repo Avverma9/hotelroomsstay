@@ -508,6 +508,29 @@ const UpdateHotelMaster = async function (req, res) {
   }
 
   try {
+    const roomUploadMap = new Map();
+    const foodUploadMap = new Map();
+    const hotelUploads = [];
+
+    if (Array.isArray(req.files)) {
+      for (const file of req.files) {
+        const fieldName = String(file.fieldname || "");
+        if (fieldName.startsWith("roomImages:")) {
+          const key = fieldName.slice("roomImages:".length);
+          if (!roomUploadMap.has(key)) roomUploadMap.set(key, []);
+          roomUploadMap.get(key).push(file.location);
+          continue;
+        }
+        if (fieldName.startsWith("foodImages:")) {
+          const key = fieldName.slice("foodImages:".length);
+          if (!foodUploadMap.has(key)) foodUploadMap.set(key, []);
+          foodUploadMap.get(key).push(file.location);
+          continue;
+        }
+        hotelUploads.push(file.location);
+      }
+    }
+
     // ── 1. Load current hotel ───────────────────────────────────────────────
     const hotel = await hotelModel.findOne(buildHotelQuery(hotelId));
     if (!hotel) {
@@ -538,7 +561,9 @@ const UpdateHotelMaster = async function (req, res) {
           } else {
             // Merge only provided fields onto the existing room
             const existing = hotel.rooms[idx].toObject ? hotel.rooms[idx].toObject() : { ...hotel.rooms[idx] };
-            const { _delete: _d, roomId: _r, ...updatableFields } = roomInput;
+            const { _delete: _d, roomId: _r, _clientKey, ...updatableFields } = roomInput;
+            const uploadKey = String(roomInput.roomId || _clientKey || "");
+            const roomUploads = roomUploadMap.get(uploadKey) || [];
 
             // Normalise numeric fields
             if (updatableFields.price !== undefined)        updatableFields.price        = Number(updatableFields.price) || existing.price;
@@ -551,6 +576,15 @@ const UpdateHotelMaster = async function (req, res) {
             if (updatableFields.originalPrice === undefined && updatableFields.price !== undefined) {
               updatableFields.originalPrice = updatableFields.price;
             }
+            if (updatableFields.images !== undefined && !Array.isArray(updatableFields.images)) {
+              updatableFields.images = Array.isArray(existing.images) ? existing.images : [];
+            }
+            if (roomUploads.length > 0) {
+              const baseImages = Array.isArray(updatableFields.images)
+                ? updatableFields.images
+                : Array.isArray(existing.images) ? existing.images : [];
+              updatableFields.images = [...baseImages, ...roomUploads];
+            }
 
             Object.assign(hotel.rooms[idx], updatableFields);
             // Also use .set() for each field so Mongoose tracks strict:false fields (e.g. amenities, description)
@@ -562,18 +596,19 @@ const UpdateHotelMaster = async function (req, res) {
           // ADD new room
           const price = Number(roomInput.price) || 0;
           const countRooms = Number(roomInput.countRooms) || 1;
-          const { _delete: _d, ...roomFields } = roomInput;
+          const { _delete: _d, _clientKey, ...roomFields } = roomInput;
+          const roomUploads = roomUploadMap.get(String(_clientKey || "")) || [];
 
           hotel.rooms.push({
             roomId: uuidv4().substr(0, 8),
             hotelId: String(hotelId),
-            images: [],
             soldOut: false,
             isOffer: false,
             offerName: "N/A",
             offerPriceLess: 0,
             offerExp: null,
             ...roomFields,
+            images: [...(Array.isArray(roomFields.images) ? roomFields.images : []), ...roomUploads],
             price,
             originalPrice: price,
             countRooms,
@@ -600,16 +635,29 @@ const UpdateHotelMaster = async function (req, res) {
           if (foodInput._delete === true || foodInput._delete === "true") {
             hotel.foods.splice(idx, 1);
           } else {
-            const { _delete: _d, foodId: _f, ...updatableFields } = foodInput;
+            const { _delete: _d, foodId: _f, _clientKey, ...updatableFields } = foodInput;
+            const uploadKey = String(foodInput.foodId || _clientKey || "");
+            const foodUploads = foodUploadMap.get(uploadKey) || [];
+            if (updatableFields.images !== undefined && !Array.isArray(updatableFields.images)) {
+              updatableFields.images = Array.isArray(hotel.foods[idx]?.images) ? hotel.foods[idx].images : [];
+            }
+            if (foodUploads.length > 0) {
+              const baseImages = Array.isArray(updatableFields.images)
+                ? updatableFields.images
+                : Array.isArray(hotel.foods[idx]?.images) ? hotel.foods[idx].images : [];
+              updatableFields.images = [...baseImages, ...foodUploads];
+            }
             Object.assign(hotel.foods[idx], updatableFields);
           }
         } else {
           // ADD new food
           if (!hotel.foods) hotel.foods = [];
-          const { _delete: _d, ...foodFields } = foodInput;
+          const { _delete: _d, _clientKey, ...foodFields } = foodInput;
+          const foodUploads = foodUploadMap.get(String(_clientKey || "")) || [];
           hotel.foods.push({
             foodId: uuidv4().substr(0, 8),
             ...foodFields,
+            images: [...(Array.isArray(foodFields.images) ? foodFields.images : []), ...foodUploads],
           });
         }
       }
@@ -622,6 +670,11 @@ const UpdateHotelMaster = async function (req, res) {
     }
     if (Array.isArray(amenitiesInput)) {
       hotel.amenities = amenitiesInput;
+      await amenitiesModel.findOneAndUpdate(
+        { hotelId: String(hotelId) },
+        { hotelId: String(hotelId), amenities: amenitiesInput },
+        { upsert: true, new: true }
+      );
     }
 
     // ── 6. Policies (full replace if provided) ──────────────────────────────
@@ -644,9 +697,8 @@ const UpdateHotelMaster = async function (req, res) {
     }
 
     // 7b. Append new uploaded files (multipart)
-    if (req.files && req.files.length > 0) {
-      const newImageUrls = req.files.map((f) => f.location);
-      hotel.images = [...(hotel.images || []), ...newImageUrls];
+    if (hotelUploads.length > 0) {
+      hotel.images = [...(hotel.images || []), ...hotelUploads];
     }
 
     // ── 8. Save ─────────────────────────────────────────────────────────────
@@ -1301,11 +1353,19 @@ const getHotelsById = async (req, res) => {
     }
 
     // Map policies (supports legacy and detailed policy schema)
-    const policyEntries = Array.isArray(hotel.policies)
+    // If no policies are embedded in the hotel doc, fall back to the separate policyModel collection
+    let rawPolicyList = Array.isArray(hotel.policies)
       ? hotel.policies.filter((p) => p && typeof p === "object")
       : hotel.policies && typeof hotel.policies === "object"
         ? [hotel.policies]
         : [];
+
+    if (rawPolicyList.length === 0) {
+      const separatePolicy = await policyModel.findOne({ hotelId: hotel.hotelId });
+      if (separatePolicy) rawPolicyList = [separatePolicy.toObject ? separatePolicy.toObject() : separatePolicy];
+    }
+
+    const policyEntries = rawPolicyList;
 
     const detailedPolicyKeys = [
       "hotelId",
@@ -1464,6 +1524,7 @@ const getHotelsById = async (req, res) => {
       startDate:    hotel.startDate    || null,
       endDate:      hotel.endDate      || null,
       customerWelcomeNote: hotel.customerWelcomeNote || '',
+      numRooms:    hotel.numRooms    || 0,
       // ── Availability summary ───────────────────────────────────────────────
       availability: {
         totalRooms,
@@ -1509,7 +1570,7 @@ const getHotelsById = async (req, res) => {
       amenities:  mappedAmenities,
       policies:   policiesObj,
       // Raw policies array for admin editing
-      rawPolicies: hotel.policies || [],
+      rawPolicies: policyEntries,
       gstConfig: gstData ? {
         enabled:  true,
         rate:     gstData.gstPrice,

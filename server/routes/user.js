@@ -16,8 +16,14 @@ router.get("/get-all-users-booking-details/full-details",userController.getAllUs
 router.post("/send-otp", userController.loginWithOtp);
 router.post("/verify-otp", userController.verifyOTP);
 
+// User auth: forgot-password flow (OTP -> verify -> reset)
+router.post("/auth/user/forgot-password/send-otp", userController.userForgotPasswordSendOtp);
+router.post("/auth/user/forgot-password/verify-otp", userController.userForgotPasswordVerifyOtp);
+router.post("/auth/user/forgot-password/reset", userController.userForgotPasswordReset);
+
 // Admin: filter users with bookings, coupons, complaints
 router.get("/admin/users/filter", userController.filterUsers);
+router.post("/admin/users/reset-password", userController.adminResetUserPassword);
 
 // Refresh token
 router.post("/auth/refresh", userController.refreshUserToken);
