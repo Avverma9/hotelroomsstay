@@ -191,6 +191,28 @@ function HotelDetails({ listPath, listLabel }) {
     return () => clearTimeout(timeout)
   }, [dispatch, id, updateSuccess])
 
+  const handleAcceptHotel = async () => {
+    try {
+      await dispatch(updateHotelInfo({ 
+        hotelId: displayHotelId, 
+        hotelData: { isAccepted: true } 
+      })).unwrap()
+    } catch (error) {
+      console.error('Failed to accept hotel:', error)
+    }
+  }
+
+  const handleDeclineHotel = async () => {
+    try {
+      await dispatch(updateHotelInfo({ 
+        hotelId: displayHotelId, 
+        hotelData: { isAccepted: false } 
+      })).unwrap()
+    } catch (error) {
+      console.error('Failed to decline hotel:', error)
+    }
+  }
+
   const hotelData = selectedHotel?.data || selectedHotel
   const basicInfo = hotelData?.basicInfo || {}
   const location = basicInfo?.location || {}
@@ -327,14 +349,38 @@ function HotelDetails({ listPath, listLabel }) {
               )}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => navigate(`${resolvedListPath}/${displayHotelId}/edit`, { state: { from: resolvedListPath } })}
-            className="inline-flex w-full md:w-auto items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-900/15 transition hover:bg-slate-800"
-          >
-            <PencilLine size={16} />
-            Update Hotel
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            {!hotelData.isAccepted && (
+              <button
+                type="button"
+                onClick={handleAcceptHotel}
+                disabled={updating}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-600/15 transition hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {updating ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                Accept Hotel
+              </button>
+            )}
+            {hotelData.isAccepted && (
+              <button
+                type="button"
+                onClick={handleDeclineHotel}
+                disabled={updating}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-rose-600/15 transition hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {updating ? <Loader2 size={16} className="animate-spin" /> : <X size={16} />}
+                Decline Hotel
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => navigate(`${resolvedListPath}/${displayHotelId}/edit`, { state: { from: resolvedListPath } })}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-900/15 transition hover:bg-slate-800"
+            >
+              <PencilLine size={16} />
+              Update Hotel
+            </button>
+          </div>
         </div>
 
         {updateSuccess && (

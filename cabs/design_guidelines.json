@@ -1,0 +1,124 @@
+{
+  "theme_and_archetype": {
+    "domain": "Travel / Mobility",
+    "theme": "Light Theme",
+    "archetype": "Archetype 1 (Organic & Earthy) mixed with Vibrant Travel Energy",
+    "vibe": "Approachable, energetic, tactile, and highly legible for on-the-go riders.",
+    "reasoning": "A car booking app needs to feel trustworthy (Archetype 1) but also exciting and forward-moving (Vibrant). We avoid the standard dull 'SaaS blue' and instead use a 'Sunset Coral' mixed with deep 'Midnight Navy' to create a premium, travel-ready aesthetic."
+  },
+  "typography": {
+    "anti_default_rule": "Do not use System default fonts or Roboto/Inter for headings.",
+    "fonts": {
+      "headings": {
+        "family": "Outfit, sans-serif",
+        "weight": "700",
+        "character": "Geometric, modern, adventurous."
+      },
+      "body": {
+        "family": "Plus Jakarta Sans, sans-serif",
+        "weight": "400",
+        "character": "Clean, highly legible on mobile."
+      }
+    },
+    "hierarchy": {
+      "h1": "text-4xl (32px) sm:text-5xl - tracking-tight, leading-none",
+      "h2": "text-2xl (24px) sm:text-3xl - tracking-tight",
+      "h3": "text-xl (20px)",
+      "body": "text-base (16px) - leading-relaxed",
+      "label_overline": "text-xs (12px) uppercase tracking-[0.1em] text-slate-500"
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "name": "Sunset Coral",
+        "hex": "#FF5A5F",
+        "usage": "Main CTAs, Active Tabs, Selected Seats."
+      },
+      "background": {
+        "name": "Cloud White",
+        "hex": "#F9FAFB",
+        "usage": "Main app background (screen wrapper)."
+      },
+      "surface": {
+        "name": "Pure White",
+        "hex": "#FFFFFF",
+        "usage": "Cards, Bottom Sheets, Navigational Headers."
+      },
+      "text_primary": {
+        "name": "Midnight Navy",
+        "hex": "#0A1128",
+        "usage": "Headings, core content."
+      },
+      "text_secondary": {
+        "name": "Slate Gray",
+        "hex": "#64748B",
+        "usage": "Subtitles, placeholder text, inactive icons."
+      },
+      "border": {
+        "hex": "#E2E8F0"
+      }
+    },
+    "status_tags": {
+      "Pending": { "bg": "#FEF3C7", "text": "#D97706" },
+      "Confirmed": { "bg": "#D1FAE5", "text": "#059669" },
+      "InProgress": { "bg": "#DBEAFE", "text": "#2563EB" },
+      "Completed": { "bg": "#E0E7FF", "text": "#4F46E5" },
+      "Cancelled": { "bg": "#FEE2E2", "text": "#DC2626" }
+    }
+  },
+  "layout_and_spacing": {
+    "spacing_scale": "Use generous padding. p-6 (24px) or p-8 (32px) for screen margins to avoid edge-hugging.",
+    "border_radius": "Rounded UI. Use rounded-3xl (24px) for main cards, rounded-full for buttons and tags.",
+    "shadows": "Diffuse ambient shadows. shadow-[0_8px_30px_rgba(10,17,40,0.06)] for floating cards. No hard harsh drop shadows.",
+    "alignment": "Left-align dense data. Center-align empty states and hero sections."
+  },
+  "component_strategies": {
+    "forms_and_inputs": "Large hit areas (min-h 56px). Floating labels or clear bold above-input labels. Background: #F1F5F9, Border: None. On focus: border-2 border-primary.",
+    "car_listing_card": "Vertical flow: large cutout-style image (transparent or light gray background) taking up top 60% of card, title + specs (fuel, seats) below. Specs as minimal icons + text.",
+    "seat_picker_visual": "A container representing the car interior. Render rows (e.g., 2-3-3). Seat styling: Available (White bg, Navy border), Selected (Sunset Coral bg, White text), Booked (Gray bg, Gray text, disabled). Use uniform square shapes with heavily rounded corners.",
+    "bottom_sheet": "Extensively used for filters, route selection, and booking confirmation. Needs a 4px high, 40px wide pill handle at the top. Top corners rounded-3xl.",
+    "booking_history_card": "Clean bento-style card. Route on top with a visual line connecting pickup to drop-off dots. Status pill on top right. Driver info and price at the bottom."
+  },
+  "motion_and_interaction": {
+    "buttons": "Opacity or slight scale down (0.98) on press (using TouchableOpacity).",
+    "lists": "Staggered fade-in for car listings.",
+    "page_transitions": "Standard smooth slide-in. Bottom sheets must slide up with a spring effect."
+  },
+  "image_urls": {
+    "auth_backgrounds": [
+      {
+        "url": "https://images.unsplash.com/photo-1721499774867-c00b65036c35?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwyfHxyb2FkJTIwdHJpcCUyMGNhciUyMHN1bnNldHxlbnwwfHx8fDE3NzY0OTI1MzN8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Sunset over a mountain road, used for Auth/Login header or Onboarding hero."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1630999871248-2ed7a10d26ee?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwzfHxyb2FkJTIwdHJpcCUyMGNhciUyMHN1bnNldHxlbnwwfHx8fDE3NzY0OTI1MzN8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Yellow camaro on road, alternative vibrant travel image."
+      }
+    ],
+    "empty_states": [
+      {
+        "url": "https://images.unsplash.com/photo-1562804239-0bd8346b9eaa?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwxfHxlbXB0eSUyMHJvYWQlMjBsYW5kc2NhcGV8ZW58MHx8fHwxNzc2NDkyNTM1fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Empty concrete road. Use as a background or circular mask for 'No Bookings Found' or 'No Cars Available'."
+      }
+    ]
+  },
+  "data_testid_guidelines": {
+    "rule": "Every interactive element MUST have a testID prop in React Native (which maps to data-testid in React Native Web).",
+    "examples": {
+      "login_button": "testID='login-submit-button'",
+      "car_card": "testID='car-listing-item-{id}'",
+      "seat_button": "testID='seat-picker-{seatNumber}'",
+      "book_now_button": "testID='confirm-booking-button'",
+      "route_search_input": "testID='route-search-input-pickup'"
+    }
+  },
+  "instructions_to_main_agent": [
+    "You are building a React Native mobile app using Expo Router (.js files).",
+    "Rely heavily on NativeWind (Tailwind for RN) or standard StyleSheet mapped to the variables in this JSON.",
+    "Do NOT use HTML elements (div, span). Use View, Text, ScrollView, TouchableOpacity.",
+    "Implement the Seat Picker as a visual layout, not just a dropdown. Show seats graphically.",
+    "For the API endpoints at hotelroomsstay.com/api/travel, handle errors gracefully using the specified empty state images if no cars are returned.",
+    "Maintain the Sunset Coral (#FF5A5F) primary color consistently for all primary actions to guide the user naturally."
+  ]
+}
