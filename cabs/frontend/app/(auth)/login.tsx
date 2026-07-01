@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -25,6 +26,16 @@ export default function LoginScreen() {
   const [show, setShow] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const onLogin = async () => {
     setErr(null);
@@ -50,14 +61,16 @@ export default function LoginScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.heroWrap}>
-            <Image source={{ uri: IMAGES.authHero }} style={styles.hero} resizeMode="cover" />
-            <View style={styles.heroOverlay} />
-            <View style={styles.heroTextWrap}>
-              <Text style={styles.heroBadge} testID="brand-badge">HRS CABS · RIDER</Text>
-              <Text style={styles.heroTitle}>Rider{"\n"}Portal</Text>
+          {!keyboardVisible && (
+            <View style={styles.heroWrap}>
+              <Image source={{ uri: IMAGES.authHero }} style={styles.hero} resizeMode="cover" />
+              <View style={styles.heroOverlay} />
+              <View style={styles.heroTextWrap}>
+                <Text style={styles.heroBadge} testID="brand-badge">HRS CABS · RIDER</Text>
+                <Text style={styles.heroTitle}>Rider{"\n"}Portal</Text>
+              </View>
             </View>
-          </View>
+          )}
 
           <View style={styles.form}>
             <Text style={styles.title}>Rider Login</Text>

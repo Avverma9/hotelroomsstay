@@ -155,6 +155,36 @@ const notifyTravelEventSafe = async ({
   });
 };
 
+const resolveCallerOwner = async (req) => {
+  const dashboardUserId = req.user?.id;
+  if (!dashboardUserId) {
+    return null;
+  }
+
+  const dashUser = await DashboardUser.findById(dashboardUserId).lean();
+  if (!dashUser?.email) {
+    return null;
+  }
+
+  return CarOwner.findOne({
+    email: new RegExp(`^${String(dashUser.email).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+  }).lean();
+};
+
+const ensureBookingBelongsToCaller = async (req, booking) => {
+  const callerOwner = await resolveCallerOwner(req);
+  if (!callerOwner) {
+    return { allowed: false, status: 403, message: "Access denied: Rider account not found." };
+  }
+
+  const bookingCar = await Car.findById(booking.carId).lean();
+  if (!bookingCar || String(bookingCar.ownerId) !== String(callerOwner._id)) {
+    return { allowed: false, status: 403, message: "Access denied: You do not own this booking." };
+  }
+
+  return { allowed: true, callerOwner };
+};
+
 const applyPaymentDetails = (booking, { isPaid, paymentId } = {}) => {
   if (paymentId !== undefined) {
     booking.paymentId = String(paymentId || "").trim();
@@ -574,6 +604,10 @@ exports.confirmTravelBooking = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
+    const access = await ensureBookingBelongsToCaller(req, booking);
+    if (!access.allowed) {
+      return res.status(access.status).json({ message: access.message });
+    }
 
     ensureLifecycleFields(booking);
     applyPaymentDetails(booking, { isPaid, paymentId });
@@ -635,6 +669,10 @@ exports.changeBookingStatus = async (req, res) => {
     const booking = await CarBooking.findById(id);
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
+    }
+    const access = await ensureBookingBelongsToCaller(req, booking);
+    if (!access.allowed) {
+      return res.status(access.status).json({ message: access.message });
     }
     ensureLifecycleFields(booking);
     if (
@@ -737,6 +775,10 @@ exports.verifyPickupCode = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
+    const access = await ensureBookingBelongsToCaller(req, booking);
+    if (!access.allowed) {
+      return res.status(access.status).json({ message: access.message });
+    }
     ensureLifecycleFields(booking);
     if (booking.bookingStatus !== "Confirmed") {
       return res.status(400).json({
@@ -792,6 +834,10 @@ exports.verifyDropCode = async (req, res) => {
     const booking = await CarBooking.findById(id);
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
+    }
+    const access = await ensureBookingBelongsToCaller(req, booking);
+    if (!access.allowed) {
+      return res.status(access.status).json({ message: access.message });
     }
     ensureLifecycleFields(booking);
     if (booking.bookingStatus !== "Confirmed") {
@@ -936,6 +982,10 @@ exports.updateBooking = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
+    const access = await ensureBookingBelongsToCaller(req, booking);
+    if (!access.allowed) {
+      return res.status(access.status).json({ message: access.message });
+    }
     ensureLifecycleFields(booking);
     if (data.bookingStatus === "Completed" && !booking.dropCodeVerifiedAt) {
       return res.status(400).json({
@@ -1030,6 +1080,11 @@ exports.getBookingsOfOwner = async (req, res) => {
     const { ownerId } = req.params;
     if (!ownerId || !isValidObjectId(ownerId)) {
       return res.status(400).json({ message: "Invalid ownerId" });
+    }
+
+    const callerOwner = await resolveCallerOwner(req);
+    if (!callerOwner || String(callerOwner._id) !== String(ownerId)) {
+      return res.status(403).json({ message: "Access denied: You do not own these bookings." });
     }
 
     const ownerCars = await Car.find({ ownerId }).lean();

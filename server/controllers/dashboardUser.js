@@ -1,6 +1,7 @@
 const Dashboard = require("../models/dashboardUser");
 const Hotel = require("../models/hotel/basicDetails");
 const jwt = require("jsonwebtoken"); // Import the JWT library
+const bcrypt = require("bcryptjs");
 const { sendCustomEmail, generateOtp, sendOtpEmail } = require("../nodemailer/nodemailer");
 const {
   getEffectiveSidebarLinksForUser,
@@ -95,6 +96,10 @@ const registerUser = async (req, res) => {
       pinCode,
       address,
     } = req.body;
+    const normalizedRole = String(role || "Rider").trim() || "Rider";
+    if (normalizedRole !== "Rider") {
+      return res.status(403).json({ message: "Only Rider accounts can register from this portal." });
+    }
     const emailExist = await Dashboard.findOne({ email: email });
     const mobileExist = await Dashboard.findOne({ mobile: mobile });
     if (emailExist) {
@@ -103,26 +108,27 @@ const registerUser = async (req, res) => {
     if (mobileExist) {
       return res.status(400).json({ message: "Mobile already existed" });
     }
-    const images = req.files.map((file) => file.location);
+    const images = Array.isArray(req.files) ? req.files.map((file) => file.location) : [];
+    const hashedPassword = await bcrypt.hash(String(password || ""), 10);
     const created = await Dashboard.create({
       images,
       name,
       email,
-      role,
+      role: normalizedRole,
       address,
       mobile,
       city,
       state,
       pinCode,
-      password,
+      password: hashedPassword,
     });
-    const subject = `Congratulations! You are now a ${role} partner of HotelRoomsstay`;
+    const subject = `Congratulations! You are now a ${normalizedRole} partner of HotelRoomsstay`;
     const message = `Hello,
-Welcome to HotelRoomsstay! We are excited to have you as a ${role} partner.
+Welcome to HotelRoomsstay! We are excited to have you as a ${normalizedRole} partner.
 You can now log in to your dashboard using the following credentials:
 Email: ${email}
-Password: ${password}
-Please log in and change your password at your earliest convenience. You can access the partner portal by clicking the button below.`;
+Please log in using the password you set during registration.
+You can access the partner portal by clicking the button below.`;
     const link = process.env.ADMIN_PANEL;
     await sendCustomEmail({ email, subject, message, link });
     res.status(201).json({ message: "Registration Done", created });
@@ -177,7 +183,7 @@ const changePassword = async (req, res) => {
     }
 
     // Save the new password and clear OTP
-    user.password = newPassword;
+    user.password = await bcrypt.hash(String(newPassword), 10);
     user.resetOtp = undefined;
     user.otpExpiry = undefined;
 
@@ -196,12 +202,16 @@ const loginUser = async function (req, res) {
   const emailRegex = new RegExp("^" + email + "$", "i");
 
   try {
-    let loggedUser = await Dashboard.findOne({
+    const loggedUser = await Dashboard.findOne({
       email: emailRegex,
-      password: password,
     });
 
     if (!loggedUser) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    const passwordMatches = await bcrypt.compare(String(password || ""), String(loggedUser.password || ""));
+    if (!passwordMatches) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 

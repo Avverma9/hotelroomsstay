@@ -59,6 +59,16 @@ const normalizeSeatConfig = (seatConfig = []) => {
   }));
 };
 
+const resolveCallerOwner = async (req) => {
+  const dashboardUserId = req.user?.id;
+  if (!dashboardUserId) return null;
+  const dashUser = await DashboardUser.findById(dashboardUserId).lean();
+  if (!dashUser?.email) return null;
+  return CarOwner.findOne({
+    email: new RegExp(`^${String(dashUser.email).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+  }).lean();
+};
+
 exports.addCar = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -268,6 +278,10 @@ exports.getCarByOwnerId = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(ownerId)) {
       return res.status(400).json({ message: 'Invalid ownerId' });
     }
+    const callerOwner = await resolveCallerOwner(req);
+    if (!callerOwner || String(callerOwner._id) !== String(ownerId)) {
+      return res.status(403).json({ message: 'Access denied: You do not own these cars.' });
+    }
 
     const cars = await Car.find({ ownerId });
     if (!cars.length) {
@@ -387,6 +401,10 @@ exports.updateCar = async (req, res) => {
     if (!existingCar) {
       return res.status(404).json({ message: 'Car not found' });
     }
+    const callerOwner = await resolveCallerOwner(req);
+    if (!callerOwner || String(callerOwner._id) !== String(existingCar.ownerId)) {
+      return res.status(403).json({ message: 'Access denied: You do not own this car.' });
+    }
 
     const data = { ...req.body };
     const images = req.files?.map((file) => file.location) || [];
@@ -465,6 +483,10 @@ exports.deleteCarById = async (req, res) => {
     const findCar = await Car.findById(id);
     if (!findCar) {
       return res.status(404).json({ message: 'Car not found' });
+    }
+    const callerOwner = await resolveCallerOwner(req);
+    if (!callerOwner || String(callerOwner._id) !== String(findCar.ownerId)) {
+      return res.status(403).json({ message: 'Access denied: You do not own this car.' });
     }
 
     await Car.findByIdAndDelete(id);

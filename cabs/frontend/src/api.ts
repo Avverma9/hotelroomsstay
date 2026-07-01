@@ -62,7 +62,7 @@ export async function register(params: {
   mobile: string;
 }) {
   const { data } = await authApi.post<any>(
-    "/auth/register",
+    "/create/dashboard/user",
     params,
   );
   return data;

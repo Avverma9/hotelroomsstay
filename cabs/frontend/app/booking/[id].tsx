@@ -12,6 +12,8 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -140,175 +142,184 @@ export default function RiderBookingDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-        {/* Header bar */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} testID="booking-detail-back">
-            <Ionicons name="chevron-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Booking Detail</Text>
-        </View>
-
-        <View style={styles.content}>
-          {/* Car + Status */}
-          <View style={styles.topCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.carName}>
-                {booking.carDetails?.make || booking.make || "—"}{" "}
-                {booking.carDetails?.model || booking.model || ""}
-              </Text>
-              <Text style={styles.bookingId}>#{booking.bookingId || booking._id?.slice(-6)}</Text>
-            </View>
-            <View style={[styles.statusChip, { backgroundColor: bStatusCfg.bg }]}>
-              <Text style={[styles.statusText, { color: bStatusCfg.text }]}>{booking.bookingStatus || "Pending"}</Text>
-            </View>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 40 }}
+        >
+          {/* Header bar */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} testID="booking-detail-back">
+              <Ionicons name="chevron-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Booking Detail</Text>
           </View>
 
-          {/* Ride status */}
-          {booking.rideStatus && (
-            <View style={styles.rideStatusRow}>
-              <Ionicons name="navigate-circle" size={16} color={colors.primary} />
-              <Text style={styles.rideStatusText}>Ride: {booking.rideStatus}</Text>
-            </View>
-          )}
-
-          {/* Passenger info */}
-          <SectionCard title="Passenger">
-            <InfoRow icon="person-outline" label="Name" value={booking.passengerName || booking.bookedBy || "—"} />
-            <InfoRow icon="call-outline" label="Mobile" value={booking.customerMobile || "—"} />
-            <InfoRow icon="mail-outline" label="Email" value={booking.customerEmail || "—"} />
-          </SectionCard>
-
-          {/* Route */}
-          <SectionCard title="Route">
-            <View style={styles.routeBox}>
-              <View style={styles.routeCol}>
-                <View style={[styles.routeDot, { backgroundColor: colors.primary }]} />
-                <View style={styles.routeLine} />
-                <View style={[styles.routeDot, { backgroundColor: colors.text }]} />
+          <View style={styles.content}>
+            {/* Car + Status */}
+            <View style={styles.topCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.carName}>
+                  {booking.carDetails?.make || booking.make || "—"}{" "}
+                  {booking.carDetails?.model || booking.model || ""}
+                </Text>
+                <Text style={styles.bookingId}>#{booking.bookingId || booking._id?.slice(-6)}</Text>
               </View>
-              <View style={{ flex: 1, gap: 18 }}>
-                <View>
-                  <Text style={styles.routeLabel}>PICKUP</Text>
-                  <Text style={styles.routeVal}>{booking.pickupP || "—"}</Text>
-                  <Text style={styles.routeDate}>{booking.pickupD ? new Date(booking.pickupD).toLocaleString() : "—"}</Text>
-                </View>
-                <View>
-                  <Text style={styles.routeLabel}>DROP</Text>
-                  <Text style={styles.routeVal}>{booking.dropP || "—"}</Text>
-                  <Text style={styles.routeDate}>{booking.dropD ? new Date(booking.dropD).toLocaleString() : "—"}</Text>
-                </View>
+              <View style={[styles.statusChip, { backgroundColor: bStatusCfg.bg }]}>
+                <Text style={[styles.statusText, { color: bStatusCfg.text }]}>{booking.bookingStatus || "Pending"}</Text>
               </View>
             </View>
-          </SectionCard>
 
-          {/* Payment */}
-          <SectionCard title="Payment">
-            <InfoRow icon="cash-outline" label="Amount" value={`₹${Math.round(booking.price || 0)}`} />
-            <InfoRow icon="card-outline" label="Method" value={booking.paymentMethod || "—"} />
-            <InfoRow icon="checkmark-circle-outline" label="Paid" value={booking.isPaid ? "Yes" : "No"} />
-          </SectionCard>
+            {/* Ride status */}
+            {booking.rideStatus && (
+              <View style={styles.rideStatusRow}>
+                <Ionicons name="navigate-circle" size={16} color={colors.primary} />
+                <Text style={styles.rideStatusText}>Ride: {booking.rideStatus}</Text>
+              </View>
+            )}
 
-          {/* Seats */}
-          {booking.seats && booking.seats.length > 0 && (
-            <SectionCard title={`Seats (${booking.totalSeatsBooked || booking.seats.length})`}>
-              <View style={styles.seatRow}>
-                {booking.seats.map((s: any) => (
-                  <View key={s._id || s.seatNumber} style={styles.seatBadge}>
-                    <Text style={styles.seatBadgeText}>{s.seatNumber}</Text>
+            {/* Passenger info */}
+            <SectionCard title="Passenger">
+              <InfoRow icon="person-outline" label="Name" value={booking.passengerName || booking.bookedBy || "—"} />
+              <InfoRow icon="call-outline" label="Mobile" value={booking.customerMobile || "—"} />
+              <InfoRow icon="mail-outline" label="Email" value={booking.customerEmail || "—"} />
+            </SectionCard>
+
+            {/* Route */}
+            <SectionCard title="Route">
+              <View style={styles.routeBox}>
+                <View style={styles.routeCol}>
+                  <View style={[styles.routeDot, { backgroundColor: colors.primary }]} />
+                  <View style={styles.routeLine} />
+                  <View style={[styles.routeDot, { backgroundColor: colors.text }]} />
+                </View>
+                <View style={{ flex: 1, gap: 18 }}>
+                  <View>
+                    <Text style={styles.routeLabel}>PICKUP</Text>
+                    <Text style={styles.routeVal}>{booking.pickupP || "—"}</Text>
+                    <Text style={styles.routeDate}>{booking.pickupD ? new Date(booking.pickupD).toLocaleString() : "—"}</Text>
                   </View>
-                ))}
+                  <View>
+                    <Text style={styles.routeLabel}>DROP</Text>
+                    <Text style={styles.routeVal}>{booking.dropP || "—"}</Text>
+                    <Text style={styles.routeDate}>{booking.dropD ? new Date(booking.dropD).toLocaleString() : "—"}</Text>
+                  </View>
+                </View>
               </View>
             </SectionCard>
-          )}
 
-          {/* ── ACTION ZONE ── */}
-
-          {/* Confirm / Cancel (when Pending) */}
-          {booking.bookingStatus === "Pending" && (
-            <SectionCard title="Actions">
-              <Text style={styles.actionHint}>Confirm or cancel this booking:</Text>
-              <View style={styles.actionBtns}>
-                <Button
-                  title={actioning ? "..." : "Confirm"}
-                  onPress={() => handleStatusChange("Confirmed")}
-                  disabled={actioning}
-                  testID="confirm-booking-btn"
-                  style={{ flex: 1 }}
-                />
-                <TouchableOpacity
-                  style={styles.cancelBtn}
-                  disabled={actioning}
-                  onPress={() => handleStatusChange("Cancelled")}
-                  testID="cancel-booking-btn"
-                >
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
+            {/* Payment */}
+            <SectionCard title="Payment">
+              <InfoRow icon="cash-outline" label="Amount" value={`₹${Math.round(booking.price || 0)}`} />
+              <InfoRow icon="card-outline" label="Method" value={booking.paymentMethod || "—"} />
+              <InfoRow icon="checkmark-circle-outline" label="Paid" value={booking.isPaid ? "Yes" : "No"} />
             </SectionCard>
-          )}
 
-          {/* Verify Pickup Code — only when Confirmed + rideStatus Available */}
-          {booking.bookingStatus === "Confirmed" &&
-            booking.rideStatus === "Available" && (
-              <SectionCard title="Verify Pickup Code">
+            {/* Seats */}
+            {booking.seats && booking.seats.length > 0 && (
+              <SectionCard title={`Seats (${booking.totalSeatsBooked || booking.seats.length})`}>
+                <View style={styles.seatRow}>
+                  {booking.seats.map((s: any) => (
+                    <View key={s._id || s.seatNumber} style={styles.seatBadge}>
+                      <Text style={styles.seatBadgeText}>{s.seatNumber}</Text>
+                    </View>
+                  ))}
+                </View>
+              </SectionCard>
+            )}
+
+            {/* ── ACTION ZONE ── */}
+
+            {/* Confirm / Cancel (when Pending) */}
+            {booking.bookingStatus === "Pending" && (
+              <SectionCard title="Actions">
+                <Text style={styles.actionHint}>Confirm or cancel this booking:</Text>
+                <View style={styles.actionBtns}>
+                  <Button
+                    title={actioning ? "..." : "Confirm"}
+                    onPress={() => handleStatusChange("Confirmed")}
+                    disabled={actioning}
+                    testID="confirm-booking-btn"
+                    style={{ flex: 1 }}
+                  />
+                  <TouchableOpacity
+                    style={styles.cancelBtn}
+                    disabled={actioning}
+                    onPress={() => handleStatusChange("Cancelled")}
+                    testID="cancel-booking-btn"
+                  >
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </SectionCard>
+            )}
+
+            {/* Verify Pickup Code — only when Confirmed + rideStatus Available */}
+            {booking.bookingStatus === "Confirmed" &&
+              booking.rideStatus === "Available" && (
+                <SectionCard title="Verify Pickup Code">
+                  <Text style={styles.actionHint}>
+                    Ask passenger for their 6-digit pickup code to start the ride.
+                  </Text>
+                  <TextInput
+                    style={styles.codeInput}
+                    value={pickupCode}
+                    onChangeText={setPickupCode}
+                    placeholder="Enter pickup code"
+                    placeholderTextColor={colors.textLight}
+                    keyboardType="numeric"
+                    maxLength={6}
+                    testID="pickup-code-input"
+                  />
+                  <Button
+                    title={verifying ? "Verifying…" : "Start Ride"}
+                    onPress={handleVerifyPickup}
+                    disabled={verifying || pickupCode.length < 4}
+                    testID="verify-pickup-btn"
+                  />
+                </SectionCard>
+              )}
+
+            {/* Verify Drop Code (rideStatus Ride in Progress) */}
+            {booking.rideStatus === "Ride in Progress" && (
+              <SectionCard title="Verify Drop Code">
                 <Text style={styles.actionHint}>
-                  Ask passenger for their 6-digit pickup code to start the ride.
+                  Ask passenger for their 6-digit drop code to complete the ride.
                 </Text>
                 <TextInput
                   style={styles.codeInput}
-                  value={pickupCode}
-                  onChangeText={setPickupCode}
-                  placeholder="Enter pickup code"
+                  value={dropCode}
+                  onChangeText={setDropCode}
+                  placeholder="Enter drop code"
                   placeholderTextColor={colors.textLight}
                   keyboardType="numeric"
                   maxLength={6}
-                  testID="pickup-code-input"
+                  testID="drop-code-input"
                 />
                 <Button
-                  title={verifying ? "Verifying…" : "Start Ride"}
-                  onPress={handleVerifyPickup}
-                  disabled={verifying || pickupCode.length < 4}
-                  testID="verify-pickup-btn"
+                  title={verifying ? "Verifying…" : "Complete Ride"}
+                  onPress={handleVerifyDrop}
+                  disabled={verifying || dropCode.length < 4}
+                  testID="verify-drop-btn"
                 />
               </SectionCard>
             )}
 
-          {/* Verify Drop Code (rideStatus Ride in Progress) */}
-          {booking.rideStatus === "Ride in Progress" && (
-            <SectionCard title="Verify Drop Code">
-              <Text style={styles.actionHint}>
-                Ask passenger for their 6-digit drop code to complete the ride.
-              </Text>
-              <TextInput
-                style={styles.codeInput}
-                value={dropCode}
-                onChangeText={setDropCode}
-                placeholder="Enter drop code"
-                placeholderTextColor={colors.textLight}
-                keyboardType="numeric"
-                maxLength={6}
-                testID="drop-code-input"
-              />
-              <Button
-                title={verifying ? "Verifying…" : "Complete Ride"}
-                onPress={handleVerifyDrop}
-                disabled={verifying || dropCode.length < 4}
-                testID="verify-drop-btn"
-              />
-            </SectionCard>
-          )}
-
-          {/* Completed */}
-          {booking.rideStatus === "Ride Completed" && (
-            <View style={styles.completedBanner}>
-              <Ionicons name="checkmark-circle" size={32} color="#059669" />
-              <Text style={styles.completedText}>Ride Completed</Text>
-              <Text style={styles.completedSub}>This booking has been successfully completed.</Text>
-            </View>
-          )}
-        </View>
-      </ScrollView>
+            {/* Completed */}
+            {booking.rideStatus === "Ride Completed" && (
+              <View style={styles.completedBanner}>
+                <Ionicons name="checkmark-circle" size={32} color="#059669" />
+                <Text style={styles.completedText}>Ride Completed</Text>
+                <Text style={styles.completedSub}>This booking has been successfully completed.</Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
