@@ -1,0 +1,8 @@
+node_modules
+android
+android-ndk-r27-linux.zip
+commandlinetools-linux-11076708_latest.zip
+.metro-cache
+.expo
+dist
+ios
