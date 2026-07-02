@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Switch,
@@ -27,6 +28,7 @@ import { colors, IMAGES, radii, spacing } from "../../../src/theme";
 import Button from "../../../src/ui";
 
 const { width } = Dimensions.get("window");
+const RUNNING_STATUS_OPTIONS = ["Available", "On A Trip", "Trip Completed", "Unavailable"];
 
 export default function CarEditScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -43,6 +45,7 @@ export default function CarEditScreen() {
   const [price, setPrice] = useState("");
   const [runningStatus, setRunningStatus] = useState("");
   const [isAvailable, setIsAvailable] = useState(true);
+  const [runningStatusOpen, setRunningStatusOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -52,7 +55,7 @@ export default function CarEditScreen() {
         setPickupP(data.pickupP || "");
         setDropP(data.dropP || "");
         setPrice(String(data.price || data.perPersonCost || 0));
-        setRunningStatus(data.runningStatus || "");
+        setRunningStatus(data.runningStatus || "Available");
         setIsAvailable(data.isAvailable ?? true);
       } catch {
         setCar(null);
@@ -70,7 +73,7 @@ export default function CarEditScreen() {
         pickupP: pickupP.trim(),
         dropP: dropP.trim(),
         price: Number(price),
-        runningStatus: runningStatus.trim(),
+        runningStatus: runningStatus.trim() || "Available",
         isAvailable,
       });
       const updated = await getCarById(car._id);
@@ -198,14 +201,17 @@ export default function CarEditScreen() {
                   testID="input-price"
                 />
                 <Label>Running Status</Label>
-                <TextInput
-                  style={styles.input}
-                  value={runningStatus}
-                  onChangeText={setRunningStatus}
-                  placeholder="e.g. Active / Maintenance"
-                  placeholderTextColor={colors.textLight}
+                <TouchableOpacity
+                  style={styles.select}
+                  onPress={() => setRunningStatusOpen(true)}
+                  activeOpacity={0.85}
                   testID="input-runningStatus"
-                />
+                >
+                  <Text style={[styles.selectText, !runningStatus && { color: colors.textLight }]}>
+                    {runningStatus || "Choose status"}
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
                 <View style={styles.switchRow}>
                   <Text style={styles.switchLabel}>Mark as Available</Text>
                   <Switch
@@ -246,6 +252,39 @@ export default function CarEditScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={runningStatusOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRunningStatusOpen(false)}
+      >
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setRunningStatusOpen(false)}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Select running status</Text>
+            {RUNNING_STATUS_OPTIONS.map((option) => {
+              const active = runningStatus === option;
+              return (
+                <TouchableOpacity
+                  key={option}
+                  style={[styles.optionRow, active && styles.optionRowActive]}
+                  onPress={() => {
+                    setRunningStatus(option);
+                    setRunningStatusOpen(false);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.optionText, active && styles.optionTextActive]}>{option}</Text>
+                  {active ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setRunningStatusOpen(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Bottom bar */}
       <View style={styles.bottomBar}>
@@ -329,6 +368,8 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 15, fontWeight: "800", color: colors.text, marginBottom: spacing.sm },
   formBox: { backgroundColor: colors.surface, borderRadius: radii.xl, padding: spacing.md },
   input: { backgroundColor: colors.inputBg, borderRadius: radii.md, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, marginBottom: 4 },
+  select: { backgroundColor: colors.inputBg, borderRadius: radii.md, paddingHorizontal: 14, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  selectText: { fontSize: 15, color: colors.text, fontWeight: "600" },
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 },
   switchLabel: { fontSize: 14, fontWeight: "700", color: colors.text },
   infoBox: { backgroundColor: colors.surface, borderRadius: radii.xl, padding: spacing.md, gap: spacing.sm },
@@ -338,4 +379,13 @@ const styles = StyleSheet.create({
   bottomBar: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, padding: spacing.md, flexDirection: "row", gap: spacing.sm, paddingBottom: 28 },
   editFab: { backgroundColor: colors.primarySoft, borderRadius: radii.xl, paddingHorizontal: 20, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 6 },
   editFabText: { color: colors.primary, fontWeight: "800", fontSize: 14 },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.45)", justifyContent: "flex-end" },
+  modalCard: { backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: spacing.lg, gap: 10 },
+  modalTitle: { fontSize: 18, fontWeight: "800", color: colors.text, marginBottom: 4 },
+  optionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, paddingHorizontal: 12, borderRadius: 14, backgroundColor: colors.inputBg },
+  optionRowActive: { backgroundColor: colors.primarySoft },
+  optionText: { fontSize: 15, fontWeight: "600", color: colors.text },
+  optionTextActive: { color: colors.primary },
+  modalCancel: { alignItems: "center", paddingVertical: 12, borderRadius: 14, backgroundColor: "#F8FAFC", marginTop: 4 },
+  modalCancelText: { fontSize: 14, fontWeight: "700", color: colors.textMuted },
 });

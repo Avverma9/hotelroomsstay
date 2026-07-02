@@ -4,7 +4,7 @@ const connectDB = require("../config/db");
 const CarBooking = require("../models/travel/carBooking");
 
 const VALID_RIDE_STATUSES = new Set([
-  "AwaitingConfirmation",
+  "PickupPending",
   "Available",
   "Ride in Progress",
   "Ride Completed",
@@ -41,7 +41,7 @@ const resolveRideStatus = (booking) => {
     case "Failed":
       return "Failed";
     default:
-      return "AwaitingConfirmation";
+      return "PickupPending";
   }
 };
 

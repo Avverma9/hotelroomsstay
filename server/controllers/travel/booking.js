@@ -19,7 +19,7 @@ const BOOKING_STATUS = new Set([
   "Failed",
 ]);
 const RIDE_STATUS = new Set([
-  "AwaitingConfirmation",
+  "PickupPending",
   "Available",
   "Ride in Progress",
   "Ride Completed",
@@ -35,7 +35,7 @@ const BOOKING_STATUS_TRANSITIONS = new Map([
   ["Failed", new Set()],
 ]);
 const RIDE_STATUS_TRANSITIONS = new Map([
-  ["AwaitingConfirmation", new Set(["Available", "Cancelled", "Failed"])],
+  ["PickupPending", new Set(["Available", "Cancelled", "Failed"])],
   ["Available", new Set(["Ride in Progress", "Cancelled", "Failed"])],
   ["Ride in Progress", new Set(["Ride Completed", "Failed"])],
   ["Ride Completed", new Set()],
@@ -218,7 +218,7 @@ const ensureLifecycleFields = (booking) => {
     } else if (booking.bookingStatus === "Failed") {
       booking.rideStatus = "Failed";
     } else {
-      booking.rideStatus = "AwaitingConfirmation";
+      booking.rideStatus = "PickupPending";
     }
   }
 
@@ -482,7 +482,7 @@ exports.bookCar = async (req, res) => {
       ? "Confirmed"
       : "Pending";
     const initialRideStatus =
-      initialBookingStatus === "Confirmed" ? "Available" : "AwaitingConfirmation";
+      initialBookingStatus === "Confirmed" ? "Available" : "PickupPending";
     const now = new Date();
 
     let newBooking;

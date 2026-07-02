@@ -41,10 +41,24 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="my-ride"
+        options={{
+          title: "My Ride",
+          tabBarIcon: ({ color, size }) => <Ionicons name="ellipse" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: "Calendar",
+          tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="bookings"
         options={{
-          title: "Bookings",
-          tabBarIcon: ({ color, size }) => <Ionicons name="ticket" size={size} color={color} />,
+          title: "Ride History",
+          tabBarIcon: ({ color, size }) => <Ionicons name="time" size={size} color={color} />,
         }}
       />
       <Tabs.Screen

@@ -1,6 +1,6 @@
 /**
- * Bookings Tab — Rider (owner) view.
- * Lists all bookings across the Rider's cars.
+ * Ride History Tab — Rider (owner) view.
+ * Lists all bookings across the Rider's cars with quick access to new rides.
  * Rider can confirm/cancel pending bookings.
  */
 import { Ionicons } from "@expo/vector-icons";
@@ -32,6 +32,7 @@ export default function RiderBookingsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState("All");
   const [actioning, setActioning] = useState<string | null>(null);
+  const gotoNewRide = () => router.push("/cars");
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -79,8 +80,14 @@ export default function RiderBookingsScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Bookings</Text>
-        <Text style={styles.subtitle}>{bookings.length} total</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Ride History</Text>
+          <Text style={styles.subtitle}>{bookings.length} rides tracked across your cars</Text>
+        </View>
+        <TouchableOpacity style={styles.newRideBtn} onPress={gotoNewRide} activeOpacity={0.85}>
+          <Ionicons name="add" size={16} color="#fff" />
+          <Text style={styles.newRideText}>New Ride</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Filter pills with count badges */}
@@ -116,13 +123,16 @@ export default function RiderBookingsScreen() {
         <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
       ) : sorted.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons name="ticket-outline" size={52} color={colors.textLight} />
-          <Text style={styles.emptyTitle}>No bookings found</Text>
+          <Ionicons name="time-outline" size={52} color={colors.textLight} />
+          <Text style={styles.emptyTitle}>No ride history yet</Text>
           <Text style={styles.emptyText}>
             {filter === "All"
-              ? "Your cars have no bookings yet."
-              : `No ${filter.toLowerCase()} bookings.`}
+              ? "Once riders book your cars, the history will appear here."
+              : `No ${filter.toLowerCase()} rides found.`}
           </Text>
+          <TouchableOpacity style={styles.emptyBtn} onPress={gotoNewRide} activeOpacity={0.85}>
+            <Text style={styles.emptyBtnText}>Create new ride</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -229,7 +239,7 @@ export default function RiderBookingsScreen() {
               )}
 
               {/* Ride status chip */}
-              {item.rideStatus && item.rideStatus !== "AwaitingConfirmation" && (
+              {item.rideStatus && item.rideStatus !== "PickupPending" && (
                 <View style={styles.rideRow}>
                   <Ionicons name="navigate-outline" size={13} color={colors.textMuted} />
                   <Text style={styles.rideText}>{item.rideStatus}</Text>
@@ -257,6 +267,8 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   title: { fontSize: 28, fontWeight: "800", color: colors.text, letterSpacing: -0.5 },
   subtitle: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
+  newRideBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, alignSelf: "flex-start", marginLeft: spacing.sm },
+  newRideText: { color: "#fff", fontSize: 13, fontWeight: "800" },
   filters: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm, flexDirection: "row", alignItems: "center" },
   filterPill: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.inputBg, marginRight: 8, gap: 6, borderWidth: 1.5, borderColor: "transparent" },
   filterPillActive: { backgroundColor: colors.primary + "15", borderColor: colors.primary },
@@ -269,6 +281,8 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.lg, gap: spacing.sm },
   emptyTitle: { fontSize: 18, fontWeight: "800", color: colors.text },
   emptyText: { color: colors.textMuted, textAlign: "center", fontSize: 14 },
+  emptyBtn: { marginTop: spacing.sm, backgroundColor: colors.primary, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12 },
+  emptyBtnText: { color: "#fff", fontWeight: "800", fontSize: 13 },
   card: { backgroundColor: colors.surface, borderRadius: radii.xxl, padding: spacing.md, shadowColor: "#0A1128", shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 1 },
   cardTop: { flexDirection: "row", alignItems: "center", marginBottom: spacing.sm },
   carName: { fontSize: 16, fontWeight: "800", color: colors.text },

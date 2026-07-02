@@ -23,7 +23,7 @@ export const statusColors: Record<string, { bg: string; text: string }> = {
   Confirmed: { bg: "#D1FAE5", text: "#059669" },
   InProgress: { bg: "#DBEAFE", text: "#2563EB" },
   AwaitingPickup: { bg: "#DBEAFE", text: "#2563EB" },
-  AwaitingConfirmation: { bg: "#FEF3C7", text: "#D97706" },
+  PickupPending: { bg: "#FEF3C7", text: "#D97706" },
   Completed: { bg: "#E0E7FF", text: "#4F46E5" },
   Cancelled: { bg: "#FEE2E2", text: "#DC2626" },
   Failed: { bg: "#FEE2E2", text: "#DC2626" },

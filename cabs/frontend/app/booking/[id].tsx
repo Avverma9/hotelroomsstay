@@ -14,6 +14,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -33,6 +34,9 @@ import { useAuth } from "../../src/auth";
 import { colors, radii, spacing, statusColors } from "../../src/theme";
 import Button from "../../src/ui";
 
+const BOOKING_STATUSES = ["Pending", "Confirmed", "Completed", "Cancelled", "Failed"];
+const RIDE_STATUSES = ["PickupPending", "Available", "Ride in Progress", "Ride Completed", "Cancelled", "Failed"];
+
 export default function RiderBookingDetailScreen() {
   const { id, data } = useLocalSearchParams<{ id: string; data?: string }>();
   const router = useRouter();
@@ -43,6 +47,7 @@ export default function RiderBookingDetailScreen() {
   const [dropCode, setDropCode] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [actioning, setActioning] = useState(false);
+  const [statusMenu, setStatusMenu] = useState<null | "booking" | "ride">(null);
 
   useEffect(() => {
     (async () => {
@@ -139,6 +144,8 @@ export default function RiderBookingDetailScreen() {
   }
 
   const bStatusCfg = statusColors[booking.bookingStatus || "Pending"] || { bg: "#F1F5F9", text: "#64748B" };
+  const bookingStatus = booking.bookingStatus || "Pending";
+  const rideStatus = booking.rideStatus || "PickupPending";
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -174,13 +181,25 @@ export default function RiderBookingDetailScreen() {
               </View>
             </View>
 
-            {/* Ride status */}
-            {booking.rideStatus && (
-              <View style={styles.rideStatusRow}>
-                <Ionicons name="navigate-circle" size={16} color={colors.primary} />
-                <Text style={styles.rideStatusText}>Ride: {booking.rideStatus}</Text>
+            {/* Status controls */}
+            <SectionCard title="Status">
+              <View style={styles.statusGrid}>
+                <TouchableOpacity style={styles.statusPicker} onPress={() => setStatusMenu("booking")} activeOpacity={0.85}>
+                  <Text style={styles.statusPickerLabel}>Booking Status</Text>
+                  <View style={styles.statusPickerValueRow}>
+                    <Text style={styles.statusPickerValue}>{bookingStatus}</Text>
+                    <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.statusPicker} onPress={() => setStatusMenu("ride")} activeOpacity={0.85}>
+                  <Text style={styles.statusPickerLabel}>Ride Status</Text>
+                  <View style={styles.statusPickerValueRow}>
+                    <Text style={styles.statusPickerValue}>{rideStatus}</Text>
+                    <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+                  </View>
+                </TouchableOpacity>
               </View>
-            )}
+            </SectionCard>
 
             {/* Passenger info */}
             <SectionCard title="Passenger">
@@ -234,7 +253,7 @@ export default function RiderBookingDetailScreen() {
 
             {/* ── ACTION ZONE ── */}
 
-            {/* Confirm / Cancel (when Pending) */}
+            {/* Quick actions */}
             {booking.bookingStatus === "Pending" && (
               <SectionCard title="Actions">
                 <Text style={styles.actionHint}>Confirm or cancel this booking:</Text>
@@ -320,6 +339,42 @@ export default function RiderBookingDetailScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={statusMenu !== null} transparent animationType="fade" onRequestClose={() => setStatusMenu(null)}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setStatusMenu(null)}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {statusMenu === "booking" ? "Booking Status" : "Ride Status"}
+            </Text>
+            <View style={styles.modalList}>
+              {(statusMenu === "booking" ? BOOKING_STATUSES : RIDE_STATUSES).map((status) => (
+                <TouchableOpacity
+                  key={status}
+                  style={styles.modalItem}
+                  onPress={async () => {
+                    if (!booking) return;
+                    if (statusMenu === "booking" && status !== booking.bookingStatus) {
+                      await handleStatusChange(status);
+                    }
+                    setStatusMenu(null);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.modalItemText}>{status}</Text>
+                  {(statusMenu === "booking" ? bookingStatus : rideStatus) === status && (
+                    <Ionicons name="checkmark" size={18} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+            {statusMenu === "ride" && (
+              <Text style={styles.modalNote}>
+                Ride status is shown here for reference. The server controls the allowed transitions through pickup/drop code verification.
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -357,6 +412,11 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 12, fontWeight: "700" },
   rideStatusRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingLeft: spacing.sm },
   rideStatusText: { fontSize: 13, fontWeight: "700", color: colors.primary },
+  statusGrid: { gap: spacing.sm },
+  statusPicker: { backgroundColor: colors.inputBg, borderRadius: radii.lg, padding: spacing.md },
+  statusPickerLabel: { fontSize: 11, fontWeight: "800", color: colors.textMuted, textTransform: "uppercase", letterSpacing: 0.8 },
+  statusPickerValueRow: { marginTop: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  statusPickerValue: { fontSize: 15, fontWeight: "800", color: colors.text },
   sectionCard: { backgroundColor: colors.surface, borderRadius: radii.xl, padding: spacing.md, shadowColor: "#0A1128", shadowOpacity: 0.03, shadowRadius: 6, elevation: 1 },
   sectionTitle: { fontSize: 13, fontWeight: "800", color: colors.textMuted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: spacing.sm },
   sectionBody: { gap: spacing.sm },
@@ -381,4 +441,11 @@ const styles = StyleSheet.create({
   completedBanner: { backgroundColor: "#D1FAE5", borderRadius: radii.xl, padding: spacing.lg, alignItems: "center", gap: spacing.sm },
   completedText: { fontSize: 18, fontWeight: "800", color: "#059669" },
   completedSub: { fontSize: 13, color: "#047857", textAlign: "center" },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(10,17,40,0.45)", justifyContent: "flex-end" },
+  modalCard: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, maxHeight: "70%" },
+  modalTitle: { fontSize: 18, fontWeight: "800", color: colors.text, marginBottom: spacing.md },
+  modalList: { gap: 8 },
+  modalItem: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: colors.inputBg, borderRadius: radii.lg, paddingHorizontal: spacing.md, paddingVertical: 14 },
+  modalItemText: { fontSize: 14, fontWeight: "700", color: colors.text },
+  modalNote: { marginTop: spacing.sm, color: colors.textMuted, fontSize: 12, lineHeight: 18 },
 });

@@ -9,7 +9,7 @@ const BOOKING_STATUSES = [
 ];
 
 const RIDE_STATUSES = [
-  "AwaitingConfirmation",
+  "PickupPending",
   "Available",
   "Ride in Progress",
   "Ride Completed",
@@ -139,7 +139,7 @@ const travelBookingSchema = new mongoose.Schema(
     },
     rideStatus: {
       type: String,
-      default: "AwaitingConfirmation",
+      default: "PickupPending",
       enum: RIDE_STATUSES,
     },
     confirmedAt: { type: Date },

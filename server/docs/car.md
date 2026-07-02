@@ -651,7 +651,7 @@ GET hotelroomsstay.com/api/travel/filter-car/by-query?pickupP=delhi&dropP=jaipur
     "gstAmount": 22.5,
     "price": 472.5,
     "bookingStatus": "Pending",
-    "rideStatus": "AwaitingConfirmation",
+    "rideStatus": "PickupPending",
     "pickupCode": "348921",
     "dropCode": "774102"
   }
@@ -1335,7 +1335,7 @@ Content-Type: application/json
     "paymentId": "",
     "isPaid": false,
     "bookingStatus": "Pending",
-    "rideStatus": "AwaitingConfirmation",
+    "rideStatus": "PickupPending",
     "assignedDriverId": "owner_mongo_id",
     "assignedDriverName": "Ramesh Kumar",
     "pickupCode": "A1B2C3",
@@ -1385,7 +1385,7 @@ GET /travel/get-bookings-by/user/:userId
 
 | `bookingStatus` | `rideStatus` | App mein kya dikhao |
 |---|---|---|
-| `Pending` | `AwaitingConfirmation` | "Payment pending" |
+| `Pending` | `PickupPending` | "Payment pending" |
 | `Confirmed` | `AwaitingPickup` | "Booking confirmed — Driver aa raha hai" |
 | `Confirmed` | `InProgress` | "Trip chal rahi hai" |
 | `Completed` | `Completed` | "Trip completed" |

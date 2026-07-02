@@ -1749,7 +1749,7 @@ Single car object (same structure as list item).
     "paymentMode": "online",
     "isPaid": false,
     "bookingStatus": "Pending",
-    "rideStatus": "AwaitingConfirmation",
+    "rideStatus": "PickupPending",
     "pickupCode": "345921",
     "dropCode": "671283",
     "createdAt": "2026-04-01T12:00:00.000Z"
@@ -1766,7 +1766,7 @@ Pending → Confirmed → Completed
 
 ### Ride Status Flow
 ```
-AwaitingConfirmation → AwaitingPickup → InProgress → Completed
+PickupPending → AwaitingPickup → InProgress → Completed
           ↓                  ↓             ↓
         Cancelled          Cancelled      Failed
 ```
