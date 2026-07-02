@@ -105,15 +105,15 @@ export default function RiderHomeScreen() {
             {/* Stats row */}
             <View style={styles.statsRow}>
               <StatCard icon="car-sport" label="My Cars" value={cars.length} color="#6366F1" bg="#EEF2FF" onPress={() => router.push("/(tabs)/cars")} />
-              <StatCard icon="today" label="Today" value={todayBookings.length} color="#D97706" bg="#FEF3C7" onPress={() => router.push("/(tabs)/calendar")} />
-              <StatCard icon="flash" label="Active" value={activeRides.length} color="#059669" bg="#D1FAE5" onPress={() => router.push("/(tabs)/my-ride")} />
+              <StatCard icon="today" label="Today" value={todayBookings.length} color="#D97706" bg="#FEF3C7" onPress={() => router.push("/(tabs)/bookings")} />
+              <StatCard icon="flash" label="Active" value={activeRides.length} color="#059669" bg="#D1FAE5" onPress={() => router.push("/(tabs)/bookings")} />
             </View>
 
             {/* Quick Actions */}
             <Text style={styles.sectionTitle}>Quick Actions</Text>
             <View style={styles.actionsGrid}>
               <ActionBtn icon="car-sport-outline" label="My Cars" color={colors.primary} onPress={() => router.push("/(tabs)/cars")} testID="qa-cars" />
-              <ActionBtn icon="flash-outline" label="My Ride" color="#6366F1" onPress={() => router.push("/(tabs)/my-ride")} testID="qa-bookings" />
+              <ActionBtn icon="flash-outline" label="My Ride" color="#6366F1" onPress={() => router.push("/(tabs)/bookings")} testID="qa-bookings" />
               <ActionBtn icon="person-circle-outline" label="Profile" color="#0EA5E9" onPress={() => router.push("/(tabs)/profile")} testID="qa-profile" />
               <ActionBtn icon="refresh-outline" label="Refresh" color="#059669" onPress={() => { setRefreshing(true); load(); }} testID="qa-refresh" />
             </View>

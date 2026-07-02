@@ -80,16 +80,31 @@ export default function CarsListScreen() {
           keyExtractor={(it) => it._id}
           contentContainerStyle={{ padding: spacing.lg }}
           ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
-          renderItem={({ item }) => <CarCard car={item} onPress={() => router.push(`/cars/${item._id}`)} />}
+          renderItem={({ item }) => (
+            <CarCard
+              car={item}
+              onPress={() => router.push(`/cars/${item._id}`)}
+              onBook={() =>
+                router.push({
+                  pathname: "/booking/confirm",
+                  params: {
+                    carId: item._id,
+                    sharingType: item.sharingType,
+                  },
+                })
+              }
+            />
+          )}
         />
       )}
     </SafeAreaView>
   );
 }
 
-function CarCard({ car, onPress }: { car: Car; onPress: () => void }) {
+function CarCard({ car, onPress, onBook }: { car: Car; onPress: () => void; onBook: () => void }) {
   const img = car.images?.[0] || IMAGES.carPlaceholder;
   const price = car.sharingType === "Shared" ? car.perPersonCost || 0 : car.price || 0;
+  const canBookDirectly = car.sharingType !== "Shared";
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9} testID={`car-listing-item-${car._id}`}>
       <Image source={{ uri: img }} style={styles.cardImg} />
@@ -125,9 +140,30 @@ function CarCard({ car, onPress }: { car: Car; onPress: () => void }) {
             </Text>
             <Text style={styles.price}>₹{price}</Text>
           </View>
-          <View style={styles.cta}>
-            <Text style={styles.ctaText}>View</Text>
-            <Ionicons name="chevron-forward" size={16} color="#fff" />
+          <View style={styles.ctaRow}>
+            <TouchableOpacity
+              style={styles.secondaryCta}
+              onPress={onPress}
+              activeOpacity={0.85}
+              testID={`car-view-btn-${car._id}`}
+            >
+              <Text style={styles.secondaryCtaText}>View</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.cta, !canBookDirectly && styles.ctaDisabled]}
+              onPress={() => {
+                if (!canBookDirectly) {
+                  onPress();
+                  return;
+                }
+                onBook();
+              }}
+              activeOpacity={0.85}
+              testID={`car-book-btn-${car._id}`}
+            >
+              <Text style={styles.ctaText}>{canBookDirectly ? "Book" : "Seats"}</Text>
+              <Ionicons name={canBookDirectly ? "calendar-outline" : "chevron-forward"} size={16} color="#fff" />
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -191,6 +227,16 @@ const styles = StyleSheet.create({
   routeText: { fontSize: 13, color: colors.textMuted, flex: 1 },
   priceLabel: { fontSize: 10, color: colors.textMuted, textTransform: "uppercase", letterSpacing: 1 },
   price: { fontSize: 20, fontWeight: "800", color: colors.primary, marginTop: 2 },
+  ctaRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  secondaryCta: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  secondaryCtaText: { color: colors.text, fontWeight: "700" },
   cta: {
     flexDirection: "row",
     alignItems: "center",
@@ -200,5 +246,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     gap: 4,
   },
+  ctaDisabled: { backgroundColor: colors.textLight },
   ctaText: { color: "#fff", fontWeight: "700" },
 });
