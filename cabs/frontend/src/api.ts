@@ -232,6 +232,12 @@ export async function updateCar(id: string, body: Partial<Car>) {
   return data as { success?: boolean; message?: string; car?: Car } & Car;
 }
 
+/** POST /travel/add-a-car */
+export async function addCar(body: Record<string, any>) {
+  const { data } = await travelApi.post("/add-a-car", body);
+  return data as { message: string; car: Car };
+}
+
 /** PATCH /travel/change-booking-status/:id */
 export async function changeBookingStatus(bookingId: string, bookingStatus: string) {
   const { data } = await travelApi.patch(`/change-booking-status/${bookingId}`, { bookingStatus });

@@ -5,9 +5,10 @@ import React, {
   useEffect,
   useState,
 } from "react";
-import { TOKEN_KEY } from "./api";
+import { TOKEN_KEY, fetchMe, login as apiLogin, register as apiRegister } from "./api";
 import { storageDelete, storageGet, storageSet } from "./storage";
-import { fetchMe, login as apiLogin, register as apiRegister } from "./api";
+
+const USER_KEY = "auth_user";
 
 type User = {
   id: string;
@@ -37,10 +38,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const persistUser = useCallback(async (nextUser: User | null) => {
+    if (!nextUser) {
+      await storageDelete(USER_KEY);
+      return;
+    }
+    await storageSet(USER_KEY, JSON.stringify(nextUser));
+  }, []);
+
+  const readCachedUser = useCallback(async () => {
+    try {
+      const raw = await storageGet(USER_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as User;
+      if (parsed && parsed.id) return parsed;
+    } catch {
+      // Ignore malformed cache and continue with a fresh bootstrap.
+    }
+    return null;
+  }, []);
+
   const bootstrap = useCallback(async () => {
     try {
       const token = await storageGet(TOKEN_KEY);
       const storedUserId = await storageGet("user_id");
+      const cachedUser = await readCachedUser();
+
+      if (cachedUser && !token && !storedUserId) {
+        setUser(cachedUser);
+        return;
+      }
+
       if (token && storedUserId) {
         const res = await fetchMe(storedUserId);
         // getPartnersById returns the user object directly (not wrapped in sessionData.user)
@@ -51,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (role && role !== "Rider") {
             await storageDelete(TOKEN_KEY);
             await storageDelete("user_id");
+            await storageDelete(USER_KEY);
             setUser(null);
             return;
           }
@@ -62,20 +91,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             mobile: userData.mobile || userData.loggedUserMobile,
             image: userData.images || userData.image || userData.loggedUserImage,
           });
+          await persistUser({
+            id: String(userData._id || userData.id || userData.loggedUserId),
+            email: userData.email || userData.loggedUserEmail || "",
+            name: userData.name || userData.loggedUserName || "",
+            role: role || "Rider",
+            mobile: userData.mobile || userData.loggedUserMobile,
+            image: userData.images || userData.image || userData.loggedUserImage,
+          });
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Auth bootstrap error:", error);
-      await storageDelete(TOKEN_KEY);
-      await storageDelete("user_id");
-      setUser(null);
+      if (error?.response) {
+        await storageDelete(TOKEN_KEY);
+        await storageDelete("user_id");
+        await storageDelete(USER_KEY);
+        setUser(null);
+        return;
+      }
+
+      const cachedUser = await readCachedUser();
+      if (cachedUser) {
+        setUser(cachedUser);
+        return;
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [persistUser, readCachedUser]);
 
   useEffect(() => {
-    bootstrap();
+    void (async () => {
+      await bootstrap();
+    })();
   }, [bootstrap]);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -92,16 +141,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     await storageSet(TOKEN_KEY, token);
     await storageSet("user_id", userId);
-
-    setUser({
+    const nextUser = {
       id: res.loggedUserId,
       email: res.loggedUserEmail,
       name: res.loggedUserName,
       role: res.loggedUserRole,
       mobile: (res as any).loggedUserMobile,
       image: res.loggedUserImage,
-    });
-  }, []);
+    };
+    setUser(nextUser);
+    await persistUser(nextUser);
+  }, [persistUser]);
 
   const register = useCallback(
     async (params: {
@@ -119,20 +169,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (userId) await storageSet("user_id", userId);
 
       if (res.loggedUserId) {
-        setUser({
+        const nextUser = {
           id: res.loggedUserId,
           email: res.loggedUserEmail,
           name: res.loggedUserName,
           role: res.loggedUserRole,
           image: res.loggedUserImage,
-        });
+        };
+        setUser(nextUser);
+        await persistUser(nextUser);
       }
     },
-    [],
+    [persistUser],
   );
 
   const logout = useCallback(async () => {
     await storageDelete(TOKEN_KEY);
+    await storageDelete("user_id");
+    await storageDelete(USER_KEY);
     setUser(null);
   }, []);
 

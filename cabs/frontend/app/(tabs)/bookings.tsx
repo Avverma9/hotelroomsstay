@@ -33,7 +33,7 @@ export default function RiderBookingsScreen() {
   const [filter, setFilter] = useState("All");
   const [actioning, setActioning] = useState<string | null>(null);
 
-  const gotoNewRide = () => router.push("/(tabs)/cars");
+  const gotoNewRide = () => router.push("/cars/create");
 
   const load = useCallback(async () => {
     if (!user) return;
