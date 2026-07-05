@@ -139,13 +139,7 @@ apiClient.interceptors.request.use(
     // Get token from localStorage if available
     const token = localStorage.getItem('authToken') || localStorage.getItem('rsToken');
     
-    console.log('🔑 Token check:', {
-      url: config.url,
-      hasAuthToken: !!localStorage.getItem('authToken'),
-      hasRsToken: !!localStorage.getItem('rsToken'),
-      token: token ? `${token.substring(0, 20)}...` : 'none',
-      isProtected: isProtectedRequest(config.url)
-    });
+    undefined;
     
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -163,7 +157,7 @@ apiClient.interceptors.request.use(
     }
 
     // Log request for debugging (remove in production)
-    console.log(`🚀 API Request: ${config.method.toUpperCase()} ${config.url}`);
+    undefined;
     
     return config;
   },
@@ -186,7 +180,7 @@ apiClient.interceptors.response.use(
       updateServerStatus(true, null);
     }
 
-    console.log(`✅ API Response: ${response.config.url}`, response.status);
+    undefined;
     return response;
   },
   (error) => {
@@ -369,14 +363,14 @@ export const startHealthCheck = (intervalMs = 30000) => {
     checkServerHealth();
   }, intervalMs);
   
-  console.log(`🏥 Health check started (every ${intervalMs / 1000}s)`);
+  undefined;
 };
 
 export const stopHealthCheck = () => {
   if (healthCheckInterval) {
     clearInterval(healthCheckInterval);
     healthCheckInterval = null;
-    console.log('🏥 Health check stopped');
+    undefined;
   }
 };
 

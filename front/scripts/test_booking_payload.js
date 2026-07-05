@@ -72,8 +72,8 @@ if (errors.length) {
   errors.forEach((e) => console.error('- ' + e));
   process.exit(1);
 } else {
-  console.log('VALIDATION PASSED: Front booking payload shape looks correct.');
-  console.log('Payload snapshot:');
-  console.log(JSON.stringify(payload, null, 2));
+  undefined;
+  undefined;
+  undefined;
   process.exit(0);
 }

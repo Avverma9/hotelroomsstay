@@ -30,43 +30,43 @@ const B = "\x1b[31m✗ BUG \x1b[0m";
 async function run() {
   const login = await post("/login/dashboard/user", { email: "Av95766@gmail.com", password: "Avverma@1" });
   const T = login.rsToken;
-  console.log("Logged in ✓\n");
+  undefined;
 
   // ── Confirm amenities data structure ──────────────────────────────────────
   const all = await get("/hotels/filters?limit=50", T);
   const hotels = all.data;
-  console.log("=== Amenities data structures in DB ===");
+  undefined;
   hotels.filter(h => h.amenities && h.amenities.length > 0).forEach(h => {
     const t = typeof h.amenities[0];
-    console.log(`  ${h.hotelName}: type=${t} | ${JSON.stringify(h.amenities).substring(0, 80)}`);
+    undefined;
   });
 
   // ── BUG 1: amenities=WiFi (string array structure) ────────────────────────
-  console.log("\n=== BUG 1: amenities=WiFi (Grand Palace has ['Free WiFi','Swimming Pool']) ===");
+  undefined;
   const r1 = await get("/hotels/filters?amenities=WiFi&limit=30", T);
   const gpInResult = (r1.data || []).some(h => h.hotelName === "Grand Palace Hotel");
-  console.log(`  API returned ${r1.total} hotels for amenities=WiFi`);
-  console.log(`  Grand Palace Hotel in results: ${gpInResult}`);
+  undefined;
+  undefined;
   if (r1.total === 0 || !gpInResult) {
-    console.log(`  ${B} CONFIRMED: amenities=WiFi returns 0 / excludes Grand Palace despite having 'Free WiFi'`);
+    undefined;
   } else {
-    console.log(`  ${G}`);
+    undefined;
   }
 
   // ── BUG 1b: amenities=Spa ─────────────────────────────────────────────────
-  console.log("\n=== BUG 1b: amenities=Spa ===");
+  undefined;
   const r1b = await get("/hotels/filters?amenities=Spa&limit=30", T);
-  console.log(`  API returned ${r1b.total} hotels for amenities=Spa`);
+  undefined;
   const gpInSpa = (r1b.data || []).some(h => h.hotelName === "Grand Palace Hotel");
-  console.log(`  Grand Palace in result (has Spa): ${gpInSpa}`);
-  if (!gpInSpa) console.log(`  ${B} Grand Palace excluded despite having 'Spa' in string amenities array`);
+  undefined;
+  if (!gpInSpa) undefined;
 
   // ── BUG 2: amenities=Fan (object array with multiple values) ──────────────
-  console.log("\n=== BUG 2: amenities=Fan (Amaravati has {amenities:['Drinking Water','CCTV','Fan','TV']}) ===");
+  undefined;
   const r2 = await get("/hotels/filters?amenities=Fan&limit=30", T);
-  console.log(`  API returned ${r2.total} hotels for amenities=Fan`);
+  undefined;
   const amarInResult = (r2.data || []).some(h => h.hotelName === "Amaravati Residency");
-  console.log(`  Amaravati Residency in results: ${amarInResult}`);
+  undefined;
   
   // What SHOULD match:
   const shouldMatchFan = hotels.filter(h => {
@@ -79,17 +79,17 @@ async function run() {
       return false;
     });
   });
-  console.log(`  Hotels that SHOULD match: ${shouldMatchFan.map(h => h.hotelName).join(", ")}`);
+  undefined;
   if (r2.total !== shouldMatchFan.length || !amarInResult) {
-    console.log(`  ${B} Expected ${shouldMatchFan.length}, got ${r2.total}`);
+    undefined;
   } else {
-    console.log(`  ${G}`);
+    undefined;
   }
 
   // ── BUG 3: amenities=TV (single-element object array - may work) ──────────
-  console.log("\n=== BUG 3: amenities=TV ===");
+  undefined;
   const r3 = await get("/hotels/filters?amenities=TV&limit=30", T);
-  console.log(`  API returned ${r3.total} hotels for amenities=TV`);
+  undefined;
   const shouldMatchTV = hotels.filter(h =>
     (h.amenities || []).some(item => {
       if (typeof item === "string") return item.toLowerCase().includes("tv");
@@ -100,39 +100,39 @@ async function run() {
       return false;
     })
   );
-  console.log(`  Hotels SHOULD match TV: ${shouldMatchTV.map(h => h.hotelName).join(", ")}`);
+  undefined;
   if (r3.total !== shouldMatchTV.length) {
-    console.log(`  ${B} Expected ${shouldMatchTV.length}, got ${r3.total}`);
+    undefined;
   } else {
-    console.log(`  ${G}`);
+    undefined;
   }
 
   // ── BUG 4: propertyType partial substring bug ─────────────────────────────
-  console.log("\n=== BUG 4: propertyType=Budget (should match 'Budget Hotel') ===");
+  undefined;
   const r4 = await get("/hotels/filters?propertyType=Budget&limit=30", T);
-  console.log(`  API returned ${r4.total} for propertyType=Budget`);
+  undefined;
   const shouldMatchBudget = hotels.filter(h =>
     (h.propertyType || []).some(pt => pt.toLowerCase().includes("budget"))
   );
-  console.log(`  Hotels with 'Budget' in propertyType: ${shouldMatchBudget.map(h => h.hotelName + " [" + h.propertyType + "]").join(", ")}`);
+  undefined;
   if (r4.total !== shouldMatchBudget.length) {
-    console.log(`  ${B} Expected ${shouldMatchBudget.length}, got ${r4.total}`);
-    console.log(`  Root cause: arrayContainsAnyText uses exact Array.includes() but MongoDB uses $regex partial match`);
+    undefined;
+    undefined;
   } else {
-    console.log(`  ${G}`);
+    undefined;
   }
 
   // ── objectArrayContainsAnyText manual simulation ──────────────────────────
-  console.log("\n=== Simulating objectArrayContainsAnyText for Amaravati amenities ===");
+  undefined;
   const amenitiesArr = [{"hotelId":"20394857","amenities":["Drinking Water","CCTV","Fan","TV"]}];
   const normalizedValues = amenitiesArr
     .flatMap(item => Object.values(item || {}))
     .map(item => String(item).trim().toLowerCase())
     .filter(Boolean);
-  console.log("  Object.values result after flatMap:", normalizedValues);
-  console.log("  Searching for 'fan':", normalizedValues.includes("fan"));
-  console.log("  Searching for 'tv':", normalizedValues.includes("tv"));
-  console.log(`  → ${B} 'fan' is part of 'drinking water,cctv,fan,tv' string (the array got stringified)`);
+  undefined;
+  undefined;
+  undefined;
+  undefined;
 }
 
 run().catch(console.error);

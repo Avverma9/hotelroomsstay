@@ -8,7 +8,7 @@ async function gotoWithRetries(page, url, retries = 20, delay = 1000) {
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
       return;
     } catch (e) {
-      console.log(`Waiting for ${url} (${i + 1}/${retries})`);
+      undefined;
       await sleep(delay);
     }
   }
@@ -87,7 +87,7 @@ async function clickNextUntilSubmit(page) {
   const PANEL_URL = process.env.PANEL_URL || 'http://localhost:5174/admin-new-hotel';
   const FRONT_URL = process.env.FRONT_URL || 'http://localhost:5173/partner';
 
-  console.log('Logging in to API at', API_BASE + '/login/dashboard/user');
+  undefined;
   // Use global fetch available in Node 18+
   let loginJson;
   try {
@@ -132,11 +132,11 @@ async function clickNextUntilSubmit(page) {
   }, hrsadmin, loginJson.rsToken, loginJson.loggedUserId || (loginJson.sessionData && (loginJson.sessionData.user?.id || loginJson.sessionData.user?._id)), loginJson.loggedUserEmail || (loginJson.sessionData && loginJson.sessionData.user?.email), loginJson.loggedUserName || (loginJson.sessionData && loginJson.sessionData.user?.name));
 
   try {
-    console.log('--- Panel: visiting', PANEL_URL, '---');
+    undefined;
     await gotoWithRetries(page, PANEL_URL);
     await sleep(800);
 
-    console.log('Panel page snippet:', await page.evaluate(() => (document.body && document.body.innerText) ? document.body.innerText.slice(0,2000) : '<no body>'));
+    undefined;
 
     const hNameEl = await fillByLabelText(page, 'Hotel Name');
     if (hNameEl) { await hNameEl.click({ clickCount: 3 }); await hNameEl.type('REAL UI Test Hotel - Panel'); }
@@ -147,12 +147,12 @@ async function clickNextUntilSubmit(page) {
 
     const submitHandle = await clickNextUntilSubmit(page);
     await submitHandle.click();
-    console.log('After submit snippet:', await page.evaluate(() => (document.body && document.body.innerText) ? document.body.innerText.slice(0,2000) : '<no body>'));
+    undefined;
     await sleep(2000);
-    console.log('Panel test: completed (hotel create request was sent to live API)');
+    undefined;
 
     // Front test
-    console.log('--- Front: visiting', FRONT_URL, '---');
+    undefined;
     const page2 = await browser.newPage();
     await page2.evaluateOnNewDocument((hrsadminObj, rsToken, loggedUserId, userEmail, userName) => {
       try {
@@ -168,7 +168,7 @@ async function clickNextUntilSubmit(page) {
 
     await gotoWithRetries(page2, FRONT_URL);
     await sleep(800);
-    console.log('Front page snippet:', await page2.evaluate(() => (document.body && document.body.innerText) ? document.body.innerText.slice(0,2000) : '<no body>'));
+    undefined;
 
     // Attempt to fill visible inputs and navigate through steps
     await page2.evaluate(() => { window.confirm = () => true; });
@@ -211,9 +211,9 @@ async function clickNextUntilSubmit(page) {
     }
 
     await waitForUrlContains(page2, '/partner/second-step', 20000).catch(() => {});
-    console.log('Front test: navigated to second-step (or finished)');
+    undefined;
 
-    console.log('\nReal-mode UI tests completed');
+    undefined;
     await browser.close();
     process.exit(0);
   } catch (err) {

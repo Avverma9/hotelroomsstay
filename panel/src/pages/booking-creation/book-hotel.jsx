@@ -306,10 +306,10 @@ export default function BookHotel() {
     if (!trimmedCouponCode || !selectedRoom) return
 
     // Debug logging to check hotelData structure
-    console.log('hotelData:', hotelData)
-    console.log('selectedHotel:', selectedHotel)
-    console.log('storedHotel:', storedHotel)
-    console.log('trimmedCouponCode:', trimmedCouponCode)
+    undefined
+    undefined
+    undefined
+    undefined
 
     // Extract hotelId from multiple possible sources
     let extractedHotelId = 
@@ -326,12 +326,12 @@ export default function BookHotel() {
       storedHotel?.raw?.hotelId ||
       storedHotel?.raw?._id
 
-    console.log('extractedHotelId:', extractedHotelId)
+    undefined
 
     // If still no hotelId, try to get from storedHotel directly
     if (!extractedHotelId && storedHotel) {
       extractedHotelId = storedHotel.hotelId || storedHotel.id || '48291034' // Fallback for testing
-      console.log('Fallback hotelId:', extractedHotelId)
+      undefined
     }
 
     if (!extractedHotelId) {
@@ -351,8 +351,8 @@ export default function BookHotel() {
       return
     }
 
-    console.log('Final hotelId for coupon:', extractedHotelId)
-    console.log('Final coupon code:', trimmedCouponCode)
+    undefined
+    undefined
 
     await dispatch(
       applyCoupon({

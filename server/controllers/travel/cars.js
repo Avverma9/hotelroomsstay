@@ -59,14 +59,76 @@ const normalizeSeatConfig = (seatConfig = []) => {
   }));
 };
 
+const resolveDashboardUserFromRequest = async (req) => {
+  const candidateValues = [
+    req.user?.id,
+    req.user?._id,
+    req.user?.userId,
+    req.user?.dashboardUserId,
+    req.user?.email,
+    req.params?.ownerId,
+    req.query?.ownerId,
+    req.body?.ownerId,
+  ].filter(Boolean);
+
+  const seen = new Set();
+  for (const value of candidateValues) {
+    const rawValue = String(value).trim();
+    if (!rawValue || seen.has(rawValue)) continue;
+    seen.add(rawValue);
+
+    if (mongoose.Types.ObjectId.isValid(rawValue)) {
+      const dashUser = await DashboardUser.findById(rawValue).lean();
+      if (dashUser) return dashUser;
+    }
+
+    const dashUserByQuery = await DashboardUser.findOne({
+      $or: [{ _id: rawValue }, { userId: rawValue }, { email: rawValue }],
+    }).lean();
+
+    if (dashUserByQuery) return dashUserByQuery;
+  }
+
+  return null;
+};
+
+const resolveOwnerByDashboardUser = async (dashUser) => {
+  if (!dashUser) return null;
+
+  const normalizedEmail = String(dashUser.email || "").trim().toLowerCase();
+  const normalizedMobile = String(dashUser.mobile || "").trim();
+  const normalizedName = String(dashUser.name || "").trim().toLowerCase();
+
+  const ownerQueryParts = [];
+
+  if (normalizedEmail) {
+    ownerQueryParts.push({ email: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+  }
+
+  if (normalizedMobile) {
+    ownerQueryParts.push({ mobile: normalizedMobile });
+  }
+
+  if (normalizedName) {
+    ownerQueryParts.push({ name: new RegExp(`^${normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+  }
+
+  if (dashUser.carOwnerId && mongoose.Types.ObjectId.isValid(dashUser.carOwnerId)) {
+    const carOwner = await CarOwner.findById(dashUser.carOwnerId).lean();
+    if (carOwner) return carOwner;
+  }
+
+  if (ownerQueryParts.length > 0) {
+    const carOwner = await CarOwner.findOne({ $or: ownerQueryParts }).lean();
+    if (carOwner) return carOwner;
+  }
+
+  return null;
+};
+
 const resolveCallerOwner = async (req) => {
-  const dashboardUserId = req.user?.id;
-  if (!dashboardUserId) return null;
-  const dashUser = await DashboardUser.findById(dashboardUserId).lean();
-  if (!dashUser?.email) return null;
-  return CarOwner.findOne({
-    email: new RegExp(`^${String(dashUser.email).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
-  }).lean();
+  const dashUser = await resolveDashboardUserFromRequest(req);
+  return resolveOwnerByDashboardUser(dashUser);
 };
 
 exports.addCar = async (req, res) => {
@@ -362,27 +424,17 @@ exports.filterCar = async (req, res) => {
 
 exports.getMyCars = async (req, res) => {
   try {
-    const loggedInUserId = req.user.id; // DashboardUser _id from JWT
-
-    // Riders log in via DashboardUser
-    const dashUser = await DashboardUser.findById(loggedInUserId);
-    console.log('[getMyCars] req.user:', req.user);
-    console.log('[getMyCars] dashUser:', dashUser ? { _id: dashUser._id, email: dashUser.email, role: dashUser.role } : null);
-
-    if (!dashUser || !dashUser.email) {
-      return res.status(403).json({ message: 'Access denied: Rider account not found or email is missing.' });
+    const dashUser = await resolveDashboardUserFromRequest(req);
+    if (!dashUser) {
+      return res.status(200).json([]);
     }
 
-    // Case-insensitive email match to handle any casing differences
-    const carOwner = await CarOwner.findOne({ email: new RegExp(`^${dashUser.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
-    console.log('[getMyCars] carOwner:', carOwner ? { _id: carOwner._id, email: carOwner.email } : null);
-
+    const carOwner = await resolveOwnerByDashboardUser(dashUser);
     if (!carOwner) {
       return res.status(200).json([]);
     }
 
-    const cars = await Car.find({ ownerId: carOwner._id });
-    console.log('[getMyCars] cars found:', cars.length);
+    const cars = await Car.find({ ownerId: carOwner._id }).lean();
     return res.status(200).json(cars);
   } catch (error) {
     console.error('getMyCars error:', error);

@@ -33,7 +33,7 @@ const startAutoCancelJob = () => {
 
       if (!expiredBookings.length) return;
 
-      console.log(`[AutoCancel] Found ${expiredBookings.length} expired pending booking(s). Processing...`);
+      undefined;
 
       for (const booking of expiredBookings) {
         try {
@@ -92,7 +92,7 @@ const startAutoCancelJob = () => {
             console.error(`[AutoCancel] Notification error for booking ${updated.bookingId}:`, notifErr.message);
           }
 
-          console.log(`[AutoCancel] Cancelled booking ${updated.bookingId}`);
+          undefined;
         } catch (bookingErr) {
           console.error(`[AutoCancel] Error processing booking ${booking.bookingId}:`, bookingErr.message);
         }
@@ -102,7 +102,7 @@ const startAutoCancelJob = () => {
     }
   });
 
-  console.log("[AutoCancel] Auto-cancel pending bookings job scheduled (every 10 minutes)");
+  undefined;
 };
 
 module.exports = { startAutoCancelJob };

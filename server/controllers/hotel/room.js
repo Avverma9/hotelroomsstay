@@ -65,7 +65,7 @@ exports.getRoomsByEmailId = async (req, res) => {
         const { hotelEmail } = req.query;
         const hotels = await hotelModel.find({ hotelEmail: hotelEmail });
         if (hotels.length === 0) {
-            console.log('No hotels found for email:', hotelEmail);
+            undefined;
             return res.status(404).json({ message: 'Hotel not found' });
         }
         const rooms = hotels.flatMap((hotel) => hotel.rooms);

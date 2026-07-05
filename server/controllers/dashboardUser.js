@@ -1,7 +1,6 @@
 const Dashboard = require("../models/dashboardUser");
 const Hotel = require("../models/hotel/basicDetails");
 const jwt = require("jsonwebtoken"); // Import the JWT library
-const bcrypt = require("bcryptjs");
 const { sendCustomEmail, generateOtp, sendOtpEmail } = require("../nodemailer/nodemailer");
 const {
   getEffectiveSidebarLinksForUser,
@@ -109,7 +108,8 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: "Mobile already existed" });
     }
     const images = Array.isArray(req.files) ? req.files.map((file) => file.location) : [];
-    const hashedPassword = await bcrypt.hash(String(password || ""), 10);
+    
+    // BCrypt removed here - storing plain text password
     const created = await Dashboard.create({
       images,
       name,
@@ -120,7 +120,7 @@ const registerUser = async (req, res) => {
       city,
       state,
       pinCode,
-      password: hashedPassword,
+      password: password, 
     });
     const subject = `Congratulations! You are now a ${normalizedRole} partner of HotelRoomsstay`;
     const message = `Hello,
@@ -182,8 +182,8 @@ const changePassword = async (req, res) => {
       return res.status(400).json({ message: "Invalid or expired OTP." });
     }
 
-    // Save the new password and clear OTP
-    user.password = await bcrypt.hash(String(newPassword), 10);
+    // Save the new plain text password and clear OTP
+    user.password = newPassword; 
     user.resetOtp = undefined;
     user.otpExpiry = undefined;
 
@@ -210,7 +210,8 @@ const loginUser = async function (req, res) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    const passwordMatches = await bcrypt.compare(String(password || ""), String(loggedUser.password || ""));
+    // Direct plain text string comparison instead of bcrypt.compare
+    const passwordMatches = String(password || "") === String(loggedUser.password || "");
     if (!passwordMatches) {
       return res.status(400).json({ message: "Invalid credentials" });
     }

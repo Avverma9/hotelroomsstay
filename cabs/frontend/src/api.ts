@@ -1,11 +1,11 @@
-import axios from "axios";
+import { create as createAxios } from "axios";
 import { baseUrl } from "./url";
 import { storageGet } from "./storage";
 
 export const TOKEN_KEY = "auth_token";
 
 // --- Local Auth Backend ---
-export const authApi = axios.create({
+export const authApi = createAxios({
   baseURL: baseUrl,
   timeout: 15000,
 });
@@ -16,11 +16,13 @@ authApi.interceptors.request.use(async (config) => {
     config.headers = config.headers || {};
     (config.headers as any).Authorization = `Bearer ${token}`;
   }
+  // --- DEBUG LOG ---
+  undefined;
   return config;
 });
 
 // --- External Travel API ---
-export const travelApi = axios.create({
+export const travelApi = createAxios({
   baseURL: `${baseUrl}/travel`,
   timeout: 20000,
 });
@@ -31,6 +33,8 @@ travelApi.interceptors.request.use(async (config) => {
     config.headers = config.headers || {};
     (config.headers as any).Authorization = `Bearer ${token}`;
   }
+  
+  
   return config;
 });
 
@@ -203,22 +207,32 @@ export async function getBookingsByMobile(customerMobile: string) {
 }
 
 // ── Rider (Owner) APIs ────────────────────────────────────────
-/** GET /travel/get-a-car/by-owner/:ownerId — returns cars for the given owner _id */
-export async function getMyCars(ownerId: string) {
+/**
+ * GET /travel/get-my-cars — returns cars for the authenticated owner.
+ * This is used by the rider/profile screen to show the owner's assigned cars.
+ */
+export async function getMyCars() {
   try {
-    const { data } = await travelApi.get<Car[]>(`/get-a-car/by-owner/${ownerId}`);
+    const { data } = await travelApi.get<Car[]>('/get-my-cars');
     return Array.isArray(data) ? data : [];
   } catch (err: any) {
-    // 404 means no cars yet — treat as empty list
-    if (err?.response?.status === 404) return [];
+    if (err?.response?.status === 404 || err?.response?.status === 403 || err?.response?.status === 401) {
+      return [];
+    }
     throw err;
   }
 }
 
-/** GET /travel/get-bookings-by/owner/:ownerId */
-export async function getOwnerBookings(ownerId: string) {
+/**
+ * GET /travel/get-bookings-by/owner/:ownerId
+ * Fetches bookings for the cars of the currently authenticated owner.
+ * The backend uses the JWT token to identify the owner, so the ownerId param is technically redundant but kept for consistency.
+ * A dedicated `/get-my-bookings` endpoint would be a cleaner approach in the future.
+ */
+export async function getOwnerBookings(userId: string) {
   try {
-    const { data } = await travelApi.get<Booking[]>(`/get-bookings-by/owner/${ownerId}`);
+    // Pass the user's ID, but rely on the token-based authentication on the backend.
+    const { data } = await travelApi.get<Booking[]>(`/get-bookings-by/owner/${userId}`);
     return Array.isArray(data) ? data : [];
   } catch (err: any) {
     if (err?.response?.status === 404) return [];

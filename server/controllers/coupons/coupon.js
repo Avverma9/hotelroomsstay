@@ -152,12 +152,7 @@ const applyPartnerCoupon = async (req, res, coupon) => {
     const roomIds = normalizeIdList(req.body.roomIds || req.body.roomId || []).map(String);
     const userIds = normalizeIdList(req.body.userIds || []).map(String);
 
-    console.log("Partner Coupon Request:", {
-      hotelIds,
-      roomIds,
-      userIds,
-      body: req.body
-    });
+    undefined;
 
     if (!hotelIds.length) {
       return res.status(400).json({ message: "hotelIds required" });
@@ -184,52 +179,47 @@ const applyPartnerCoupon = async (req, res, coupon) => {
     const appliedHotelIds = [];
 
     for (const hotel of hotels) {
-      console.log(`Checking hotel: ${hotel.hotelId}, total rooms: ${hotel.rooms?.length || 0}`);
+      undefined;
       
       // Debug: Print all rooms for this hotel
       if (hotel.rooms && hotel.rooms.length > 0) {
-        console.log("Available rooms:", hotel.rooms.map(r => ({
-          roomId: r.roomId,
-          countRooms: r.countRooms,
-          isOffer: r.isOffer,
-          price: r.price
-        })));
+        undefined;
       }
       
       for (const room of hotel.rooms || []) {
         if (remainingQuota <= 0) break;
 
         const roomId = String(room.roomId || "").trim();
-        console.log(`Processing room: ${roomId}, requested: ${roomIds.join(', ')}`);
+        undefined;
 
         // Enhanced room eligibility checks with detailed logging
         if (!roomId) {
-          console.log("❌ Room ID is empty");
+          undefined;
           continue;
         }
         
         if (roomFilterSet.size && !roomFilterSet.has(roomId)) {
-          console.log(`❌ Room ${roomId} not in filter set`);
+          undefined;
           continue;
         }
         
         if (room.isOffer === true) {
-          console.log(`❌ Room ${roomId} is already on offer`);
+          undefined;
           continue;
         }
         
         const availableCount = Number(room.countRooms || 0);
         if (availableCount <= 0) {
-          console.log(`❌ Room ${roomId} has no availability (countRooms: ${availableCount})`);
+          undefined;
           continue;
         }
 
-        console.log(`✅ Found eligible room: ${roomId}, countRooms: ${availableCount}, price: ${room.price}`);
+        undefined;
 
         const basePrice = toSafeNumber(getRoomBasePrice(room));
         const finalPrice = Math.max(0, basePrice - discount);
 
-        console.log(`💰 Pricing: base=${basePrice}, discount=${discount}, final=${finalPrice}`);
+        undefined;
 
         // Simplified update query - remove redundant conditions
         const updateResult = await hotelModel.updateOne(
@@ -249,10 +239,10 @@ const applyPartnerCoupon = async (req, res, coupon) => {
           }
         );
 
-        console.log(`📝 Update result: modifiedCount=${updateResult.modifiedCount}`);
+        undefined;
 
         if (!updateResult.modifiedCount) {
-          console.log(`❌ Failed to update room ${roomId}`);
+          undefined;
           continue;
         }
 
@@ -544,7 +534,7 @@ const registerCouponUsageOnBooking = async (req, res) => {
 
     await coupon.save();
 
-    console.log(`✅ Coupon ${couponCode} used for booking ${bookingId}`);
+    undefined;
 
     return res.status(200).json({
       message: "Coupon usage registered successfully",

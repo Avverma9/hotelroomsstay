@@ -8,7 +8,7 @@ async function gotoWithRetries(page, url, retries = 20, delay = 1000) {
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
       return;
     } catch (e) {
-      console.log(`Waiting for ${url} (${i + 1}/${retries})`);
+      undefined;
       await sleep(delay);
     }
   }
@@ -90,31 +90,31 @@ async function clickNextUntilSubmit(page) {
     const url = req.url();
     // Intercept login request and return a mocked successful login payload
     if (req.method() === 'POST' && url.includes('/login/dashboard/user')) {
-      console.log('Intercepting login POST:', url);
+      undefined;
       req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ sessionData: { token: 'fake', user: { id: 'panel-ui-test', role: 'admin', name: 'Panel UI', email: 'ui-test@example.com' } }, loggedUserId: 'panel-ui-test', loggedUserRole: 'admin', loggedUserName: 'Panel UI', rsToken: 'fake', message: 'Logged in' }) });
       return;
     }
     // Intercept sidebar links request
     if (req.method() === 'GET' && url.includes('/additional/sidebar-links/for-user')) {
-      console.log('Intercepting sidebar-links GET:', url);
+      undefined;
       req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { admin: [{ route: '/admin-new-hotel', label: 'Add New Hotel' }] } }) });
       return;
     }
     // Intercept route permissions request
     if (req.method() === 'GET' && url.includes('/additional/route-permissions')) {
-      console.log('Intercepting route-permissions GET:', url);
+      undefined;
       req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { routePermissions: { mode: 'allow_all' } } }) });
       return;
     }
     // Intercept create hotel POST
     if (req.method() === 'POST' && url.includes('/data/hotels-new/post/upload/data')) {
-      console.log('Intercepting create hotel POST:', url);
+      undefined;
       req.respond({ status: 201, contentType: 'application/json', body: JSON.stringify({ data: { hotelId: 'MOCK_HOTEL_UI_123' }, message: 'Mock created' }) });
       return;
     }
     // Intercept other flow POSTs and return success
     if (req.method() === 'POST' && (url.includes('/create-a-amenities') || url.includes('/add/food-to/your-hotel') || url.includes('/create-a-room-to-your-hotel') || url.includes('/add-a-new/policy-to-your/hotel'))) {
-      console.log('Intercepting auxiliary POST:', url);
+      undefined;
       req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) });
       return;
     }
@@ -140,11 +140,11 @@ async function clickNextUntilSubmit(page) {
   });
 
   try {
-    console.log('--- Panel: visiting /admin-new-hotel (http://localhost:5174/admin-new-hotel) ---');
+    undefined;
     await gotoWithRetries(page, 'http://localhost:5174/admin-new-hotel');
     await sleep(800);
 
-    console.log('Panel page snippet:', await page.evaluate(() => (document.body && document.body.innerText) ? document.body.innerText.slice(0,2000) : '<no body>'));
+    undefined;
 
     // Fill some key fields on panel
     const hNameEl = await fillByLabelText(page, 'Hotel Name');
@@ -157,13 +157,13 @@ async function clickNextUntilSubmit(page) {
     // Navigate to final step and submit
     const submitHandle = await clickNextUntilSubmit(page);
     await submitHandle.click();
-    console.log('After submit snippet:', await page.evaluate(() => (document.body && document.body.innerText) ? document.body.innerText.slice(0,2000) : '<no body>'));
+    undefined;
     // Give the UI a moment to process the mocked response and update state
     await sleep(1500);
-    console.log('Panel test: success banner found');
+    undefined;
 
     // Front test (use a new page)
-    console.log('--- Front: visiting /partner (http://localhost:5173/partner) ---');
+    undefined;
     const page2 = await browser.newPage();
     await page2.setRequestInterception(true);
     page2.on('request', (req) => {
@@ -212,9 +212,9 @@ async function clickNextUntilSubmit(page) {
     await gotoWithRetries(page2, 'http://localhost:5173/partner');
     await sleep(800);
 
-    console.log('Front page snippet:', await page2.evaluate(() => (document.body && document.body.innerText) ? document.body.innerText.slice(0,2000) : '<no body>'));
+    undefined;
 
-    console.log('Front buttons:', await page2.evaluate(() => Array.from(document.querySelectorAll('button')).map(b => (b.innerText || '').trim()).filter(Boolean)));
+    undefined;
 
     // Try to automatically fill visible inputs on each step and navigate to final submit
     await page2.evaluate(() => { window.confirm = () => true; });
@@ -259,9 +259,9 @@ async function clickNextUntilSubmit(page) {
       await sleep(800);
     }
     await waitForUrlContains(page2, '/partner/second-step', 20000).catch(() => {});
-    console.log('Front test: navigated to second-step');
+    undefined;
 
-    console.log('\nAll UI tests passed');
+    undefined;
     await browser.close();
     process.exit(0);
   } catch (err) {

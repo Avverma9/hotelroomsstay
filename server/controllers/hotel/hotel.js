@@ -401,7 +401,7 @@ const getCount = async function (req, res) {
 const getCountPendingHotels = async function (req, res) {
   try {
     const count = await hotelModel.countDocuments({ isAccepted: false });
-    console.log("Count of pending hotels:", count);
+    undefined;
     res.status(200).json({ count });
   } catch (error) {
     console.error("Error while getting count:", error);

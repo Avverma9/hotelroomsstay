@@ -1,4 +1,5 @@
 const express = require('express');
+const auth = require('../../authentication/auth');
 const {
   bookCar,
   confirmTravelBooking,
@@ -15,13 +16,13 @@ const router = express.Router();
 
 router.post("/create-travel/booking", bookCar);
 router.patch("/confirm-booking/:id", confirmTravelBooking);
-router.patch("/change-booking-status/:id",changeBookingStatus)
-router.post("/verify-pickup-code/:id", verifyPickupCode);
-router.post("/verify-drop-code/:id", verifyDropCode);
-router.get('/get-travels-bookings', getTravelBookings)
-router.patch('/update-travel/booking',updateBooking)
-router.get("/get-bookings-by/owner/:ownerId",getBookingsOfOwner)
-router.post("/get-bookings-by/bookedBy",getBookingBookedBy);
-router.get("/get-bookings-by/user/:userId", getCarBookingByUserId);
+router.patch("/change-booking-status/:id", auth, changeBookingStatus)
+router.post("/verify-pickup-code/:id", auth, verifyPickupCode);
+router.post("/verify-drop-code/:id", auth, verifyDropCode);
+router.get('/get-travels-bookings', auth, getTravelBookings)
+router.patch('/update-travel/booking', auth, updateBooking)
+router.get("/get-bookings-by/owner/:ownerId", auth, getBookingsOfOwner)
+router.post("/get-bookings-by/bookedBy", auth, getBookingBookedBy);
+router.get("/get-bookings-by/user/:userId", auth, getCarBookingByUserId);
 
 module.exports = router;

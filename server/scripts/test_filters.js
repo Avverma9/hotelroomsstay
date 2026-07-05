@@ -68,21 +68,21 @@ const WARN = "\x1b[33mBUG \x1b[0m";
 
 function check(label, condition, expected, actual) {
   const ok = condition;
-  console.log(`  [${ok ? PASS : FAIL}] ${label}`);
+  undefined;
   if (!ok) {
-    console.log(`         Expected: ${JSON.stringify(expected)}`);
-    console.log(`         Actual  : ${JSON.stringify(actual)}`);
+    undefined;
+    undefined;
   }
   return ok;
 }
 
 async function runTests() {
-  console.log("=".repeat(70));
-  console.log("  /hotels/filters - Full Test Suite");
-  console.log("=".repeat(70));
+  undefined;
+  undefined;
+  undefined;
 
   // ─── Login ────────────────────────────────────────────────────────────────
-  console.log("\n[SETUP] Logging in...");
+  undefined;
   const loginResp = await httpPost("/login/dashboard/user", {
     email: "Av95766@gmail.com",
     password: "Avverma@1",
@@ -92,20 +92,20 @@ async function runTests() {
     console.error("Login failed:", loginResp);
     process.exit(1);
   }
-  console.log("  Token acquired ✓");
+  undefined;
 
   // ─── Baseline ─────────────────────────────────────────────────────────────
-  console.log("\n[TEST 1] Baseline — no filters");
+  undefined;
   const t1 = await httpGet("/hotels/filters?limit=50", TOKEN);
   const allHotels = t1.body.data || [];
   check("status 200", t1.status === 200, 200, t1.status);
   check("returns hotels", allHotels.length > 0, ">0", allHotels.length);
   check("has total field", typeof t1.body.total === "number", "number", typeof t1.body.total);
   check("only isAccepted=true by default", allHotels.every(h => h.isAccepted === true), true, allHotels.find(h => !h.isAccepted)?.hotelName);
-  console.log(`  Total accepted hotels in DB: ${t1.body.total}`);
+  undefined;
 
   // ─── Property Type Filter ──────────────────────────────────────────────────
-  console.log("\n[TEST 2] propertyType filter");
+  undefined;
 
   // Build a map of all unique property types in DB
   const propTypeMap = {};
@@ -114,7 +114,7 @@ async function runTests() {
       propTypeMap[pt] = (propTypeMap[pt] || 0) + 1;
     });
   });
-  console.log("  PropertyTypes in DB:", Object.keys(propTypeMap).join(", ") || "(none)");
+  undefined;
 
   // Test with a known type
   const knownType = Object.keys(propTypeMap)[0];
@@ -149,16 +149,16 @@ async function runTests() {
       );
     }
   } else {
-    console.log("  SKIP: No propertyType data in DB to test");
+    undefined;
   }
 
   // ─── Amenities Filter ─────────────────────────────────────────────────────
-  console.log("\n[TEST 3] amenities filter");
+  undefined;
 
   // Find a hotel with amenities
   const hotelWithAmenities = allHotels.find(h => h.amenities && h.amenities.length > 0);
   if (hotelWithAmenities) {
-    console.log(`  Sample hotel amenities (${hotelWithAmenities.hotelName}):`, JSON.stringify(hotelWithAmenities.amenities.slice(0, 2)));
+    undefined;
 
     // Extract an amenity value to test
     const firstAmenityObj = hotelWithAmenities.amenities[0];
@@ -178,10 +178,10 @@ async function runTests() {
     }
 
     if (testAmenity) {
-      console.log(`  Testing amenity: "${testAmenity}"`);
+      undefined;
       const t3 = await httpGet(`/hotels/filters?amenities=${encodeURIComponent(testAmenity)}&limit=50`, TOKEN);
       const t3Hotels = t3.body.data || [];
-      console.log(`  Hotels returned with amenities="${testAmenity}": ${t3Hotels.length}`);
+      undefined;
 
       // Manually check which hotels SHOULD match
       const shouldMatch = allHotels.filter(h => {
@@ -201,23 +201,23 @@ async function runTests() {
       );
 
       if (t3Hotels.length !== shouldMatch.length) {
-        console.log(`  ${WARN} BUG: 'objectArrayContainsAnyText' fails for nested arrays.`);
-        console.log(`         String(["WiFi","AC"]) = "WiFi,AC" — includes("WiFi") = false`);
+        undefined;
+        undefined;
       }
     } else {
-      console.log("  SKIP: Could not extract amenity value from structure");
+      undefined;
     }
   } else {
-    console.log("  SKIP: No hotels with amenities in DB");
+    undefined;
   }
 
   // ─── Star Rating Filter ────────────────────────────────────────────────────
-  console.log("\n[TEST 4] starRating filter");
+  undefined;
   const t4a = await httpGet("/hotels/filters?starRating=5&limit=20", TOKEN);
   const t4aHotels = t4a.body.data || [];
   const expected5Star = allHotels.filter(h => h.starRating === "5" || h.starRating === 5).length;
   check(`starRating=5 exact match (${expected5Star} expected)`, t4aHotels.length === expected5Star, expected5Star, t4aHotels.length);
-  t4aHotels.forEach(h => console.log(`    ${h.hotelName} - starRating: ${h.starRating}`));
+  t4aHotels.forEach(h => undefined);
 
   // Test range filter
   const t4b = await httpGet("/hotels/filters?minStarRating=3&maxStarRating=5&limit=20", TOKEN);
@@ -227,16 +227,16 @@ async function runTests() {
   check(`minStarRating=3&maxStarRating=5 count (${expectedRange} expected)`, t4bHotels.length === expectedRange, expectedRange, t4bHotels.length);
   check(`all returned hotels have starRating 3-5`, allInRange, true, t4bHotels.map(h=>h.starRating).join(","));
   if (!allInRange) {
-    console.log(`  ${WARN} BUG: String comparison for starRating range may be wrong`);
+    undefined;
     t4bHotels.filter(h => Number(h.starRating) < 3 || Number(h.starRating) > 5)
-      .forEach(h => console.log(`    WRONG: ${h.hotelName} has starRating=${h.starRating}`));
+      .forEach(h => undefined);
   }
 
   // ─── Price Filter ──────────────────────────────────────────────────────────
-  console.log("\n[TEST 5] price filter (minPrice/maxPrice)");
+  undefined;
   const t5 = await httpGet("/hotels/filters?minPrice=500&maxPrice=3000&limit=50", TOKEN);
   const t5Hotels = t5.body.data || [];
-  console.log(`  Hotels with price 500-3000: ${t5Hotels.length}`);
+  undefined;
   const allInPriceRange = t5Hotels.every(h => {
     const price = h.pricing?.startingFrom;
     return price === undefined || (price >= 500 && price <= 3000);
@@ -246,9 +246,9 @@ async function runTests() {
   }).map(h => `${h.hotelName}:${h.pricing?.startingFrom}`).join(", "));
 
   // ─── City Filter ────────────────────────────────────────────────────────────
-  console.log("\n[TEST 6] city filter");
+  undefined;
   const cities = [...new Set(allHotels.map(h => h.city).filter(Boolean))];
-  console.log("  Cities in DB:", cities.slice(0, 5).join(", "));
+  undefined;
   if (cities.length > 0) {
     const testCity = cities[0];
     const t6 = await httpGet(`/hotels/filters?city=${encodeURIComponent(testCity)}&limit=20`, TOKEN);
@@ -258,7 +258,7 @@ async function runTests() {
   }
 
   // ─── Search Filter ────────────────────────────────────────────────────────
-  console.log("\n[TEST 7] search filter");
+  undefined;
   if (allHotels.length > 0) {
     const searchTerm = allHotels[0].city || allHotels[0].hotelName?.split(" ")[0];
     const t7 = await httpGet(`/hotels/filters?search=${encodeURIComponent(searchTerm)}&limit=20`, TOKEN);
@@ -272,19 +272,19 @@ async function runTests() {
   }
 
   // ─── onlyAvailable Filter ─────────────────────────────────────────────────
-  console.log("\n[TEST 8] onlyAvailable filter with dates");
+  undefined;
   const today = new Date();
   const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
   const d1 = today.toISOString().slice(0, 10);
   const d2 = tomorrow.toISOString().slice(0, 10);
   const t8 = await httpGet(`/hotels/filters?checkInDate=${d1}&checkOutDate=${d2}&onlyAvailable=true&limit=20`, TOKEN);
   const t8Hotels = t8.body.data || [];
-  console.log(`  Available hotels on ${d1}: ${t8Hotels.length}`);
+  undefined;
   const allCanBook = t8Hotels.every(h => h.availability?.canBook === true);
   check("all returned hotels have canBook=true", allCanBook, true, t8Hotels.filter(h => !h.availability?.canBook).map(h => h.hotelName).join(", "));
 
   // ─── Pagination ────────────────────────────────────────────────────────────
-  console.log("\n[TEST 9] pagination");
+  undefined;
   const t9a = await httpGet("/hotels/filters?limit=2&page=1", TOKEN);
   const t9b = await httpGet("/hotels/filters?limit=2&page=2", TOKEN);
   const page1Ids = t9a.body.data.map(h => h.hotelId);
@@ -294,7 +294,7 @@ async function runTests() {
   check("totalPages correct", t9a.body.totalPages === Math.ceil(t9a.body.total / 2), Math.ceil(t9a.body.total / 2), t9a.body.totalPages);
 
   // ─── Sort ──────────────────────────────────────────────────────────────────
-  console.log("\n[TEST 10] sorting");
+  undefined;
   const t10asc = await httpGet("/hotels/filters?sortBy=price&sortOrder=asc&limit=20", TOKEN);
   const t10desc = await httpGet("/hotels/filters?sortBy=price&sortOrder=desc&limit=20", TOKEN);
   const prices_asc = t10asc.body.data.map(h => h.pricing?.startingFrom || 0);
@@ -305,25 +305,25 @@ async function runTests() {
   check("sortBy=price&sortOrder=desc — prices descending", isSortedDesc, "descending", JSON.stringify(prices_desc));
 
   // ─── hasOffer Filter ──────────────────────────────────────────────────────
-  console.log("\n[TEST 11] hasOffer filter");
+  undefined;
   const t11 = await httpGet("/hotels/filters?hasOffer=true&limit=20", TOKEN);
   const t11Hotels = t11.body.data || [];
-  console.log(`  Hotels with offer: ${t11Hotels.length}`);
+  undefined;
   const allHaveOffer = t11Hotels.every(h => (h.rooms || []).some(r => r.isOffer === true));
   if (t11Hotels.length > 0) {
     check("all returned hotels have at least one offer room", allHaveOffer, true, t11Hotels.filter(h => !(h.rooms||[]).some(r=>r.isOffer)).map(h=>h.hotelName).join(","));
   }
 
   // ─── GST Info ─────────────────────────────────────────────────────────────
-  console.log("\n[TEST 12] GST info in response");
+  undefined;
   const t12 = await httpGet("/hotels/filters?limit=1", TOKEN);
-  console.log("  gstInfo:", JSON.stringify(t12.body.gstInfo));
+  undefined;
   check("gstInfo field present in response", t12.body.hasOwnProperty("gstInfo"), true, "missing");
 
   // ─── Summary ──────────────────────────────────────────────────────────────
-  console.log("\n" + "=".repeat(70));
-  console.log("  Tests complete.");
-  console.log("=".repeat(70));
+  undefined;
+  undefined;
+  undefined;
 }
 
 runTests().catch(err => {

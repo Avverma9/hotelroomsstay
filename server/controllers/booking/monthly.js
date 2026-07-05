@@ -168,7 +168,7 @@ const _autoDeleteExpired = async () => {
 cron.schedule('0 0 * * *', async () => {
   try {
     const count = await _autoDeleteExpired();
-    console.log(`[cron] autoDelete: removed ${count} expired monthly price entries.`);
+    undefined;
   } catch (error) {
     console.error('[cron] autoDelete failed:', error.message);
   }

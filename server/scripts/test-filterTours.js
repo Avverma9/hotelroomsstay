@@ -62,14 +62,14 @@ const controller = require(controllerPath);
 const req = { query: {} };
 const res = {
   status(code) { this.code = code; return this; },
-  json(obj) { console.log('RESPONSE', JSON.stringify(obj, null, 2)); return obj; }
+  json(obj) { undefined; return obj; }
 };
 
 (async () => {
   try {
-    console.log('Calling filterTours with empty query (no filters)...');
+    undefined;
     await controller.filterTours(req, res);
-    console.log('Done.');
+    undefined;
   } catch (e) {
     console.error('ERROR', e);
   }

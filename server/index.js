@@ -50,7 +50,7 @@ const startServer = () => {
 
   connectDB()
     .then(() => {
-      console.log(`Database connected - PID ${process.pid}`);
+      undefined;
       startAutoCancelJob();
     })
     .catch((err) => console.error("Database connection error:", err));
@@ -76,12 +76,12 @@ const startServer = () => {
   });
 
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT} - PID ${process.pid}`);
+    undefined;
   });
 
   const gracefulShutdown = () => {
     server.close(() => {
-      console.log(`Worker ${process.pid} closed`);
+      undefined;
       process.exit(0);
     });
   };
@@ -91,14 +91,14 @@ const startServer = () => {
 };
 
 if (USE_CLUSTER && cluster.isMaster) {
-  console.log(`Master PID ${process.pid} starting ${numCPUs} workers`);
+  undefined;
 
   for (let i = 0; i < numCPUs; i++) {
     cluster.fork();
   }
 
   cluster.on("exit", (worker) => {
-    console.log(`Worker ${worker.process.pid} died. Restarting...`);
+    undefined;
     cluster.fork();
   });
 } else {

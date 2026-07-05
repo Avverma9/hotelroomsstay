@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const CarBooking = require("../../models/travel/carBooking");
 const Car = require("../../models/travel/cars");
 const CarOwner = require("../../models/travel/carOwner");
+const DashboardUser = require("../../models/dashboardUser");
 const User = require("../../models/user");
 const { resolveToUserId } = require("../../utils/resolveUserId");
 const { getGSTData } = require("../GST/gst");
@@ -155,20 +156,76 @@ const notifyTravelEventSafe = async ({
   });
 };
 
+const resolveDashboardUserFromRequest = async (req) => {
+  const candidateValues = [
+    req.user?.id,
+    req.user?._id,
+    req.user?.userId,
+    req.user?.dashboardUserId,
+    req.user?.email,
+    req.params?.ownerId,
+    req.query?.ownerId,
+    req.body?.ownerId,
+  ].filter(Boolean);
+
+  const seen = new Set();
+  for (const value of candidateValues) {
+    const rawValue = String(value).trim();
+    if (!rawValue || seen.has(rawValue)) continue;
+    seen.add(rawValue);
+
+    if (mongoose.Types.ObjectId.isValid(rawValue)) {
+      const dashUser = await DashboardUser.findById(rawValue).lean();
+      if (dashUser) return dashUser;
+    }
+
+    const dashUserByQuery = await DashboardUser.findOne({
+      $or: [{ _id: rawValue }, { userId: rawValue }, { email: rawValue }],
+    }).lean();
+
+    if (dashUserByQuery) return dashUserByQuery;
+  }
+
+  return null;
+};
+
+const resolveOwnerByDashboardUser = async (dashUser) => {
+  if (!dashUser) return null;
+
+  const normalizedEmail = String(dashUser.email || "").trim().toLowerCase();
+  const normalizedMobile = String(dashUser.mobile || "").trim();
+  const normalizedName = String(dashUser.name || "").trim().toLowerCase();
+
+  const ownerQueryParts = [];
+
+  if (normalizedEmail) {
+    ownerQueryParts.push({ email: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") });
+  }
+
+  if (normalizedMobile) {
+    ownerQueryParts.push({ mobile: normalizedMobile });
+  }
+
+  if (normalizedName) {
+    ownerQueryParts.push({ name: new RegExp(`^${normalizedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") });
+  }
+
+  if (dashUser.carOwnerId && mongoose.Types.ObjectId.isValid(dashUser.carOwnerId)) {
+    const carOwner = await CarOwner.findById(dashUser.carOwnerId).lean();
+    if (carOwner) return carOwner;
+  }
+
+  if (ownerQueryParts.length > 0) {
+    const carOwner = await CarOwner.findOne({ $or: ownerQueryParts }).lean();
+    if (carOwner) return carOwner;
+  }
+
+  return null;
+};
+
 const resolveCallerOwner = async (req) => {
-  const dashboardUserId = req.user?.id;
-  if (!dashboardUserId) {
-    return null;
-  }
-
-  const dashUser = await DashboardUser.findById(dashboardUserId).lean();
-  if (!dashUser?.email) {
-    return null;
-  }
-
-  return CarOwner.findOne({
-    email: new RegExp(`^${String(dashUser.email).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
-  }).lean();
+  const dashUser = await resolveDashboardUserFromRequest(req);
+  return resolveOwnerByDashboardUser(dashUser);
 };
 
 const ensureBookingBelongsToCaller = async (req, booking) => {
@@ -1082,12 +1139,13 @@ exports.getBookingsOfOwner = async (req, res) => {
       return res.status(400).json({ message: "Invalid ownerId" });
     }
 
-    const callerOwner = await resolveCallerOwner(req);
-    if (!callerOwner || String(callerOwner._id) !== String(ownerId)) {
-      return res.status(403).json({ message: "Access denied: You do not own these bookings." });
+    const dashUser = await resolveDashboardUserFromRequest(req);
+    const callerOwner = await resolveOwnerByDashboardUser(dashUser);
+    if (!callerOwner) {
+      return res.status(200).json([]);
     }
 
-    const ownerCars = await Car.find({ ownerId }).lean();
+    const ownerCars = await Car.find({ ownerId: callerOwner._id }).lean();
     if (ownerCars.length === 0) {
       return res.status(200).json([]);
     }

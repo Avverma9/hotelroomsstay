@@ -18,7 +18,7 @@
       console.error('FAIL: Missing hotelInfo or hotelCount. Keys:', Object.keys(payload));
       process.exit(1);
     }
-    console.log('PASS: hotelInfo and hotelCount present; hotelCount=', payload.hotelCount);
+    undefined;
     process.exit(0);
   } catch (err) {
     console.error('Error:', err);

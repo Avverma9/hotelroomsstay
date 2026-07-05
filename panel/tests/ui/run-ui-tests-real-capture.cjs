@@ -8,7 +8,7 @@ async function gotoWithRetries(page, url, retries = 20, delay = 1000) {
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
       return;
     } catch (e) {
-      console.log(`Waiting for ${url} (${i + 1}/${retries})`);
+      undefined;
       await sleep(delay);
     }
   }
@@ -22,7 +22,7 @@ async function gotoWithRetries(page, url, retries = 20, delay = 1000) {
   const PANEL_URL = process.env.PANEL_URL || 'http://localhost:5174/admin-new-hotel';
   const FRONT_URL = process.env.FRONT_URL || 'http://localhost:5173/partner';
 
-  console.log('Logging in to API at', API_BASE + '/login/dashboard/user');
+  undefined;
   let loginJson;
   try {
     const resp = await fetch(`${API_BASE}/login/dashboard/user`, {
@@ -60,9 +60,9 @@ async function gotoWithRetries(page, url, retries = 20, delay = 1000) {
       if (url.includes('/data/hotels-new/post/upload/data') || url.includes('/login/dashboard/user') || url.includes('/create-a-room-to-your-hotel') || url.includes('/create-a-amenities')) {
         const text = await res.text();
         const entry = { url, status: res.status(), body: text };
-        console.log('CAPTURED RESPONSE:', url, 'status', res.status());
+        undefined;
         // only print a truncated body to avoid huge logs
-        console.log('BODY:', (text && text.length > 2000) ? text.slice(0,2000) + '...[truncated]' : text);
+        undefined;
         captured.responses.push(entry);
       }
     } catch (e) {
@@ -83,7 +83,7 @@ async function gotoWithRetries(page, url, retries = 20, delay = 1000) {
   }, hrsadmin, loginJson.rsToken, loginJson.loggedUserId || (loginJson.sessionData && (loginJson.sessionData.user?.id || loginJson.sessionData.user?._id)), loginJson.loggedUserEmail || (loginJson.sessionData && loginJson.sessionData.user?.email), loginJson.loggedUserName || (loginJson.sessionData && loginJson.sessionData.user?.name));
 
   try {
-    console.log('--- Panel: visiting', PANEL_URL, '---');
+    undefined;
     await gotoWithRetries(page, PANEL_URL);
     await sleep(800);
 
@@ -121,15 +121,15 @@ async function gotoWithRetries(page, url, retries = 20, delay = 1000) {
     await sleep(2000);
 
     // Front test
-    console.log('--- Front: visiting', FRONT_URL, '---');
+    undefined;
     const page2 = await browser.newPage();
     page2.on('response', async (res) => {
       try {
         const url = res.url();
         if (url.includes('/data/hotels-new/post/upload/data') || url.includes('/login/dashboard/user')) {
           const text = await res.text();
-          console.log('CAPTURED RESPONSE (front):', url, 'status', res.status());
-          console.log('BODY:', (text && text.length > 2000) ? text.slice(0,2000) + '...[truncated]' : text);
+          undefined;
+          undefined;
           captured.responses.push({ url, status: res.status(), body: text });
         }
       } catch (e) {}
@@ -189,30 +189,30 @@ async function gotoWithRetries(page, url, retries = 20, delay = 1000) {
 
     await sleep(2000);
 
-    console.log('Captured responses summary:', captured.responses.map(r => ({ url: r.url, status: r.status })));
+    undefined;
 
     // Try to find a hotelId in captured bodies
     const createResp = captured.responses.find(r => r.url.includes('/data/hotels-new/post/upload/data'));
     if (createResp) {
       try {
         const parsed = JSON.parse(createResp.body);
-        console.log('Parsed create response:', parsed);
+        undefined;
         const hotelId = parsed?.data?.hotelId || parsed?.data?._id || null;
         if (hotelId) {
-          console.log('Found hotelId:', hotelId);
+          undefined;
           // verify via GET
           try {
             const verifyResp = await fetch(`${API_BASE}/hotels/get-by-id/${hotelId}`);
             const vt = await verifyResp.text();
-            console.log('Verify GET status:', verifyResp.status, 'body:', vt.slice(0,2000));
+            undefined;
           } catch (e) { console.error('Error verifying hotel GET:', e); }
         }
       } catch (e) { console.error('Error parsing create response body:', e); }
     } else {
-      console.log('No create-hotel response captured.');
+      undefined;
     }
 
-    console.log('\nReal-capture UI tests completed');
+    undefined;
     await browser.close();
     process.exit(0);
   } catch (err) {

@@ -104,7 +104,6 @@ const getRooms = async () => {
   try {
     // Token automatic add hoga
     const rooms = await hotelAPI.getAllRooms();
-    console.log(rooms);
   } catch (error) {
     // Agar server down hai, error page automatic dikha dega
     console.error('Failed:', error);

@@ -16,15 +16,15 @@ const options = {
 };
 
 const req = https.request(options, (res) => {
-  console.log('Status:', res.statusCode);
-  console.log('Headers:', JSON.stringify(res.headers));
+  undefined;
+  undefined;
   let body = '';
   res.on('data', (chunk) => (body += chunk));
   res.on('end', () => {
-    console.log('Body:', body);
+    undefined;
     try {
       const parsed = JSON.parse(body);
-      console.log('Parsed JSON:', JSON.stringify(parsed, null, 2));
+      undefined;
     } catch (e) {
       // not JSON
     }

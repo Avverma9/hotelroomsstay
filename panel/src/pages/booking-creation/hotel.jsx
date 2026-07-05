@@ -57,15 +57,7 @@ const normalizeAmenityList = (amenities) => {
 const normalizeHotel = (hotel) => {
   // Debug logging for hotel ID 48291034
   if (hotel?.hotelId === '48291034' || hotel?._id === '48291034') {
-    console.log('🔍 DEBUG - Hotel 48291034 Pricing Data:', {
-      hotelId: hotel?.hotelId,
-      _id: hotel?._id,
-      pricing: hotel?.pricing,
-      rooms: hotel?.rooms?.[0],
-      startingPrice: hotel?.startingPrice,
-      basePrice: hotel?.basePrice,
-      fullHotel: hotel
-    })
+    undefined
   }
   
   // Enhanced pricing logic for hotel ID 48291034 and others

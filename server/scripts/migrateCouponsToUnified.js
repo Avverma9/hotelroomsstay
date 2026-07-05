@@ -74,7 +74,7 @@ const run = async () => {
       migrateLegacyCollection({ collectionName: "partnercoupons", type: "partner" }),
     ]);
 
-    console.log("Legacy coupon migration done:");
+    undefined;
     console.table([userResult, partnerResult]);
   } catch (error) {
     console.error("Failed to migrate legacy coupons:", error);

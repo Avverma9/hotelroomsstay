@@ -11,7 +11,7 @@ const auth = (req, res, next) => {
 
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
         if (err) {
-            console.log(err);
+            undefined;
 
             if (err.name === 'TokenExpiredError') {
                 return res.status(403).json({ message: 'Access denied: Token has expired' });

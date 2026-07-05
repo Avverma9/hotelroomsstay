@@ -23,18 +23,7 @@ const run = async () => {
   });
   const total = await DashboardUser.countDocuments({});
 
-  console.log(
-    JSON.stringify(
-      {
-        matched: result.matchedCount ?? result.n ?? 0,
-        modified: result.modifiedCount ?? result.nModified ?? 0,
-        allowAllCount,
-        total,
-      },
-      null,
-      2,
-    ),
-  );
+  undefined;
 };
 
 run()

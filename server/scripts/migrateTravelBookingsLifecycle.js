@@ -117,7 +117,7 @@ const run = async () => {
       await CarBooking.bulkWrite(ops);
     }
 
-    console.log("Travel booking lifecycle migration complete");
+    undefined;
     console.table([
       {
         total: bookings.length,

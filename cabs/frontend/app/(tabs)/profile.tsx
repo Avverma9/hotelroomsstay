@@ -36,7 +36,7 @@ export default function ProfileScreen() {
   const load = useCallback(async () => {
     if (!user) return;
     try {
-      const [c, b] = await Promise.all([getMyCars(user.id), getOwnerBookings(user.id)]);
+      const [c, b] = await Promise.all([getMyCars(), getOwnerBookings(user.id)]);
       setCars(c);
       setBookings(b);
     } finally {

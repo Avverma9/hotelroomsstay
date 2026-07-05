@@ -589,7 +589,7 @@ const doranMonthlyPrices = [
 async function seed() {
   try {
     await connectDB();
-    console.log("✔  DB connected");
+    undefined;
 
     // 1. Upsert hotel basicDetails (includes embedded rooms)
     for (const hotel of [shivrajHotel, doranHotel]) {
@@ -598,7 +598,7 @@ async function seed() {
         { $set: hotel },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
-      console.log(`✔  Hotel upserted: ${hotel.hotelName} (${hotel.hotelId})`);
+      undefined;
     }
 
     // 2. Upsert amenities (one doc per hotel, unique on hotelId)
@@ -608,7 +608,7 @@ async function seed() {
         { $set: doc },
         { upsert: true, new: true }
       );
-      console.log(`✔  Amenities upserted for hotelId: ${doc.hotelId}`);
+      undefined;
     }
 
     // 3. Upsert policies (one doc per hotel, unique on hotelId)
@@ -618,7 +618,7 @@ async function seed() {
         { $set: doc },
         { upsert: true, new: true }
       );
-      console.log(`✔  Policies upserted for hotelId: ${doc.hotelId}`);
+      undefined;
     }
 
     // 4. Upsert foods (keyed by hotelId + name)
@@ -628,7 +628,7 @@ async function seed() {
         { $set: food },
         { upsert: true, new: true }
       );
-      console.log(`✔  Food upserted: "${food.name}" (${food.hotelId})`);
+      undefined;
     }
 
     // 5. Upsert monthly prices (keyed by hotelId + roomId + startDate + endDate)
@@ -638,10 +638,10 @@ async function seed() {
         { $set: mp },
         { upsert: true, new: true }
       );
-      console.log(`✔  MonthlyPrice upserted: ${mp.roomId} ${mp.startDate}→${mp.endDate} ₹${mp.monthPrice}`);
+      undefined;
     }
 
-    console.log("\n✅  Seed complete — Shivraj Hotel & Doran Hotel fully seeded.");
+    undefined;
   } catch (err) {
     console.error("❌  Seed failed:", err);
     process.exitCode = 1;

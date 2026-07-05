@@ -48,9 +48,7 @@ async function seedHotels() {
       );
     }
 
-    console.log(
-      `Seeded ${hotels.length} hotels from ${path.basename(HOTEL_SOURCE)}.`
-    );
+    undefined;
   } catch (error) {
     console.error("Failed to seed hotels:", error);
     process.exitCode = 1;

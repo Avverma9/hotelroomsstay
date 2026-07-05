@@ -26,7 +26,7 @@ router.post('/send-otp', async (req, res) => {
     const emailRegex = new RegExp('^' + email + '$', 'i');
     // Development helper: log the generated OTP (only outside production)
     if (process.env.NODE_ENV !== 'production') {
-        console.log(`DEV OTP for ${loginType}:${email.toLowerCase()} = ${otp}`);
+        undefined;
     }
 
     try {
@@ -46,7 +46,7 @@ router.post('/send-otp', async (req, res) => {
         const otpKey = `${loginType}:${email.toLowerCase()}`;
         otpStore.set(otpKey, { otp, expiresAt, loginType });
         if (process.env.NODE_ENV !== 'production') {
-            console.log(`DEV OTP stored for ${otpKey}`, { otp, expiresAt });
+            undefined;
         }
         res.status(200).json({ message: 'OTP sent successfully' });
     } catch (error) {
@@ -66,7 +66,7 @@ router.post('/verify-otp', async (req, res) => {
 
     const otpKey = `${loginType}:${email.toLowerCase()}`;
     if (process.env.NODE_ENV !== 'production') {
-        console.log(`DEV verify attempt for ${otpKey}. Current OTP keys:`, Array.from(otpStore.keys()));
+        undefined;
     }
     const stored = otpStore.get(otpKey);
 

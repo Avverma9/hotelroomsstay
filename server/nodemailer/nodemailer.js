@@ -19,7 +19,7 @@ const transporter = nodemailer.createTransport({
 // Verify transporter configuration at startup to catch missing creds early.
 transporter.verify()
   .then(() => {
-    console.log('Mailer transporter is configured and ready');
+    undefined;
   })
   .catch((err) => {
     console.warn('Mailer verification failed. Emails may not be sent. Error:', err && err.message ? err.message : err);
@@ -137,7 +137,7 @@ const sendOtpEmail = async (email, otp, options = {}) => {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`OTP sent to ${email}`);
+    undefined;
   } catch (error) {
     console.error("Error sending OTP email:", error);
     throw new Error("Failed to send OTP email");
@@ -215,7 +215,7 @@ const sendCancellationOtpEmail = async ({ email, otp, booking }) => {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`Cancellation OTP sent to ${email} for booking ${bookingId}`);
+    undefined;
   } catch (error) {
     console.error("Error sending cancellation OTP email:", error);
     throw new Error("Failed to send cancellation OTP email");
@@ -339,7 +339,7 @@ const sendBookingConfirmationMail = async ({ email, subject, bookingData }) => {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`Booking confirmation email sent to ${email}`);
+    undefined;
   } catch (err) {
     console.error("Failed to send booking confirmation email:", err.message);
     throw err;
@@ -468,7 +468,7 @@ const sendBookingCancellationMail = async ({ email, subject, bookingData }) => {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`Cancellation email sent to ${email}`);
+    undefined;
   } catch (err) {
     console.error("Failed to send cancellation email:", err);
     throw err;
@@ -501,7 +501,7 @@ const sendCustomEmail = async ({ email, subject, message, link }) => {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`Custom email sent to ${email}`);
+    undefined;
   } catch (error) {
     console.error("Error sending custom email:", error);
     throw new Error("Failed to send email");

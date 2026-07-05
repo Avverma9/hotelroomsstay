@@ -360,7 +360,7 @@ function TourPackages() {
     return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b));
   }, [visitingPlaces]);
 
-console.log("Travel Data:", travelData);
+undefined;
   useEffect(() => {
     showLoader();
     dispatch(getTravelList({})).finally(() => hideLoader());

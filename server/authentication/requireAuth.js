@@ -38,6 +38,11 @@ const SKIP_PATH_PREFIXES = [
   '/sort-tour/by-order',
   '/get-tour/',
   '/tours/',
+  // Tour public routes
+  '/get-all-tours',
+  '/filter-tour/by-query',
+  '/tour-booking/get-users-booking',
+  '/tour-booking/get-bookings',
 ];
 
 const getRawToken = (headerValue) => {

@@ -495,11 +495,11 @@ export default function BookNowPage() {
     if (offlineBookingLoading) return;
     setOfflineBookingLoading(true);
     const result = await handleOfflineBooking?.();
-    console.log("🎉 Booking Result:", result);
+    undefined;
     if (result?.success) {
       // Extract the actual booking data from nested response
       const actualData = result.data?.data || result.data;
-      console.log("📦 Actual Booking Data to Modal:", actualData);
+      undefined;
       setBookingResponseData(actualData);
       setShowBookingSheet(false);
       // Show success modal

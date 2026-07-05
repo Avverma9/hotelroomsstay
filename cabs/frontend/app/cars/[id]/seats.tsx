@@ -87,7 +87,7 @@ export default function SeatManagementScreen() {
         <View style={styles.empty}>
           <Ionicons name="grid-outline" size={52} color={colors.textLight} />
           <Text style={styles.emptyTitle}>No seat data</Text>
-          <Text style={styles.emptyText}>This car doesn't have seat configuration yet.</Text>
+          <Text style={styles.emptyText}>This car doesn&apos;t have seat configuration yet.</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120 }}>

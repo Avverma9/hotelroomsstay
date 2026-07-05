@@ -32,7 +32,7 @@ const createFood = async function (req, res) {
 const deleteFood = async (req, res) => {
   try {
     const { hotelId, foodId } = req.params;
-    console.log(`Deleting food item with ID: ${foodId} from hotel: ${hotelId}`);
+    undefined;
 
     if (!hotelId || !foodId) {
       return res

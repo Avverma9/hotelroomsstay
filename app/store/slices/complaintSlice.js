@@ -160,7 +160,6 @@ export const sendComplaintChat = createAsyncThunk(
 export const createHotelComplaint = createAsyncThunk(
   "complaints/createHotelComplaint",
   async (input = {}, { rejectWithValue }) => {
-    console.log("here is input",input)
     try {
       const resolvedUserId = sanitizeUserId(input?.userId || (await getUserId()));
       const hotelId = String(input?.hotelId || "").trim();
