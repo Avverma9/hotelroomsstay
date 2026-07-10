@@ -60,7 +60,9 @@ const getRawToken = (headerValue) => {
 };
 
 const shouldSkipPath = (path) => {
-  const normalized = String(path || '').toLowerCase();
+  let normalized = String(path || '').toLowerCase();
+  // Treat routes under /api/ the same as root paths (allow `/api/auth/me` to match `/auth/me`)
+  if (normalized.startsWith('/api/')) normalized = normalized.slice(4);
   return SKIP_PATH_PREFIXES.some((prefix) => normalized.startsWith(prefix.toLowerCase()));
 };
 

@@ -52,7 +52,7 @@ const ensureWelcomeCouponForUser = async ({ email, userId }) => {
 
   const existingCoupon = await Coupon.findOne({
     type: "user",
-    assignedTo: { $regex: `^${email}$`, $options: "i" },
+    assignedTo: { $regex: '^' + escapeRegex(email) + '$', $options: "i" },
   });
 
   if (existingCoupon) {
@@ -109,6 +109,9 @@ const sanitizeUser = (user) => {
   return obj;
 };
 
+const escapeRegex = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+
 const hashPassword = async (plain) => {
   // bcrypt with cost 10 is a reasonable baseline for this project.
   return bcrypt.hash(String(plain), 10);
@@ -153,7 +156,7 @@ const createSignup = async function (req, res) {
 
     if (email) {
       const findWithEmail = await userModel.findOne({
-        email: { $regex: `^${email}$`, $options: "i" },
+        email: { $regex: '^' + escapeRegex(email) + '$', $options: "i" },
       });
       if (findWithEmail) {
         return res.status(400).json({ message: "Email is already in use" });
@@ -206,7 +209,7 @@ const userForgotPasswordSendOtp = async (req, res) => {
 
     if (email) {
       const normalizedEmail = String(email).trim();
-      const emailRegex = new RegExp("^" + normalizedEmail + "$", "i");
+      const emailRegex = new RegExp("^" + escapeRegex(normalizedEmail) + "$", "i");
       const found = await userModel.findOne({ email: emailRegex });
       if (!found) {
         return res.status(400).json({ message: "No user account found with this email" });
@@ -251,7 +254,7 @@ const userForgotPasswordVerifyOtp = async (req, res) => {
 
     if (email) {
       const normalizedEmail = String(email).trim();
-      const emailRegex = new RegExp("^" + normalizedEmail + "$", "i");
+      const emailRegex = new RegExp("^" + escapeRegex(normalizedEmail) + "$", "i");
       const found = await userModel.findOne({ email: emailRegex });
       if (!found) {
         return res.status(400).json({ message: "No user account found with this email" });
@@ -369,7 +372,7 @@ const GoogleSignIn = async function (req, res) {
     const { email, uid, userName, images } = req.body;
 
     const existingUser = await userModel.findOne({
-      $or: [{ email: { $regex: `^${email}$`, $options: "i" } }, { uid }],
+      $or: [{ email: { $regex: '^' + escapeRegex(email) + '$', $options: "i" } }, { uid }],
     });
 
     if (existingUser) {
@@ -481,7 +484,7 @@ const signIn = async function (req, res) {
     const { email, password } = req.body;
 
     const user = await userModel.findOne({
-      email: { $regex: `^${email}$`, $options: "i" },
+      email: { $regex: '^' + escapeRegex(email) + '$', $options: "i" },
     });
 
     if (!user) {
@@ -571,7 +574,7 @@ const update = async (req, res) => {
 
     if (email) {
       const findWithEmail = await userModel.findOne({
-        email: { $regex: `^${email}$`, $options: "i" },
+        email: { $regex: '^' + escapeRegex(email) + '$', $options: "i" },
         userId: { $ne: canonicalUserId },
       });
       if (findWithEmail) {
@@ -860,7 +863,7 @@ const findUser = async (req, res) => {
       query.mobile = mobile;
     }
     if (email) {
-      query.email = { $regex: `^${email}$`, $options: "i" };
+      query.email = { $regex: '^' + escapeRegex(email) + '$', $options: "i" };
     }
 
     const findUserData = await userModel.find(query).select("-password -refreshToken").lean();

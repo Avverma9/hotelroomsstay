@@ -150,6 +150,8 @@ export type Booking = {
   cancellationReason?: string;
   bookingDate?: string;
   createdAt?: string;
+  rideStartedAt?: string;
+  rideCompletedAt?: string;
   carDetails?: any;
   totalSeatPrice?: number;
   availableSeatsOnCar?: any[];
@@ -300,4 +302,38 @@ export async function verifyPickupCode(bookingId: string, pickupCode: string) {
 export async function verifyDropCode(bookingId: string, dropCode: string) {
   const { data } = await travelApi.post(`/verify-drop-code/${bookingId}`, { dropCode });
   return data as { message: string; booking: Booking };
+}
+
+/**
+ * Check whether a car has active bookings that overlap [pickupD, dropD].
+ * Returns the same shape as getBookingsByCar but only fetches the overlap window.
+ * Returns [] (empty) on 404 / no-data.
+ */
+export async function checkCarOverlap(
+  carId: string,
+  pickupD: string,
+  dropD: string
+): Promise<Booking[]> {
+  try {
+    const result = await getBookingsByCar(carId, { dateFrom: pickupD, dateTo: dropD });
+    return Array.isArray(result?.bookings) ? result.bookings : [];
+  } catch (err: any) {
+    if (err?.response?.status === 404) return [];
+    throw err;
+  }
+}
+
+/**
+ * GET /travel/get-ride-history/car/:carId
+ * Returns all *completed* bookings for a given car.
+ * Falls back to getBookingsByCar with status=Completed if no dedicated endpoint exists.
+ */
+export async function getCarRideHistory(carId: string, page = 1, limit = 30): Promise<BookingsByCarResponse> {
+  try {
+    const result = await getBookingsByCar(carId, { status: "Completed", page, limit });
+    return result;
+  } catch (err: any) {
+    if (err?.response?.status === 404) return { bookings: [], total: 0, page, limit, car: {} as Car };
+    throw err;
+  }
 }

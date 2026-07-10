@@ -260,7 +260,8 @@ export default function TourBookNowPage() {
   }, [travelById?.themes]);
 
   const startBooking = () => {
-    if (!userId) {
+    const uid = localStorage.getItem('rsUserId');
+    if (!uid) {
       toast.warning("Please log in to book.");
       return;
     }

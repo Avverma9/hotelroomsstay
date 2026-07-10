@@ -7,7 +7,8 @@ export const fetchProfileData = createAsyncThunk(
   "profile/fetchProfileData",
   async (userId, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get(`/get/${userId}`);
+      const uid = userId || localStorage.getItem('rsUserId');
+      const response = await apiClient.get(`/get/${uid}`);
       return response.data.data;
     } catch (err) {
       return rejectWithValue(err.response?.data);

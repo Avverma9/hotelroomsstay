@@ -532,6 +532,45 @@ exports.bookCar = async (req, res) => {
 
     const pickupCode = generateVerificationCode();
     const dropCode = generateVerificationCode();
+
+    // --- Check for overlapping bookings (user / driver) to prevent duplicate rides ---
+    try {
+      const newStart = reservedCar.pickupD ? new Date(reservedCar.pickupD) : null;
+      const newEnd = reservedCar.dropD ? new Date(reservedCar.dropD) : null;
+      // Only run overlap checks when we have a sensible time window
+      if (newStart && newEnd) {
+        const blockingStatuses = ["Pending", "Confirmed", "Available", "Ride in Progress"];
+
+        // Check if the same user already has a booking that overlaps this time
+        const userConflict = await CarBooking.findOne({
+          userId: normalizedUserId,
+          bookingStatus: { $in: blockingStatuses },
+          pickupD: { $lte: newEnd },
+          dropD: { $gte: newStart },
+        }).lean();
+
+        if (userConflict) {
+          return res.status(409).json({ message: "You already have a booking that overlaps this time window" });
+        }
+
+        // Check if the assigned driver already has a booking at the same time
+        if (resolvedDriverId) {
+          const driverConflict = await CarBooking.findOne({
+            assignedDriverId: String(resolvedDriverId),
+            bookingStatus: { $in: ["Confirmed", "Available", "Ride in Progress"] },
+            pickupD: { $lte: newEnd },
+            dropD: { $gte: newStart },
+          }).lean();
+
+          if (driverConflict) {
+            return res.status(409).json({ message: "Driver already assigned to another booking in this time window" });
+          }
+        }
+      }
+    } catch (confErr) {
+      console.error("Overlap check failed:", confErr?.message || confErr);
+      // Do not block booking on overlap-check failure; proceed to normal flow.
+    }
     // First-time users are auto-confirmed; otherwise follow existing payment/confirm rules.
     const initialBookingStatus = isFirstTimeUser
       ? "Confirmed"

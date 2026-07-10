@@ -6,7 +6,7 @@ import {
   deleteComplaint,
   fetchHotelNamesByBookingId,
 } from "../../redux/slices/complaintSlice";
-import { userId, userName } from "../../utils/Unauthorized";
+import { userName } from "../../utils/Unauthorized";
 import { formatDateWithOrdinal } from "../../utils/_dateFunctions";
 import {
   IoClose,
@@ -56,7 +56,8 @@ export default function ComplaintsPage() {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    dispatch(fetchComplaints(userId));
+    const uid = localStorage.getItem('rsUserId');
+    if (uid) dispatch(fetchComplaints(uid));
   }, [dispatch]);
 
   useEffect(() => {
@@ -172,7 +173,7 @@ export default function ComplaintsPage() {
     e.preventDefault();
     setIsSubmitting(true);
     const formData = new FormData();
-    formData.append("userId", userId);
+    formData.append("userId", localStorage.getItem('rsUserId'));
     formData.append("regarding", regarding);
     formData.append("hotelName", hotelName);
     formData.append("hotelId", hotelId);
@@ -442,15 +443,17 @@ export default function ComplaintsPage() {
           </div>
         )}
 
-        {/* Error Message */}
-        {error && error.status !== 404 && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center gap-3">
-            <IoAlertCircleOutline className="text-2xl" />
-            <span className="font-medium">
-              Error loading complaints. Please try again.
-            </span>
-          </div>
-        )}
+        {/* Error Message: show only when it's not a 404 / "not found" case */}
+        {(() => {
+          const errStr = String(error || "").toLowerCase();
+          const isNotFound = errStr.includes("404") || errStr.includes("not found") || errStr.includes("no complaint") || errStr.includes("no complaints");
+          return error && !isNotFound ? (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center gap-3">
+              <IoAlertCircleOutline className="text-2xl" />
+              <span className="font-medium">Error loading complaints. Please try again.</span>
+            </div>
+          ) : null;
+        })()}
 
         {/* Complaints List */}
         <div className="mb-6">

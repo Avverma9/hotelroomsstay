@@ -41,6 +41,16 @@ const startServer = () => {
   app.options("*", cors());
   
   app.use(express.json());
+  // Temporary request logger to help debug auth issues (remove in production)
+  app.use((req, res, next) => {
+    try {
+      const auth = req.headers && req.headers.authorization ? req.headers.authorization : 'none';
+      console.log(`[REQ] ${new Date().toISOString()} ${req.method} ${req.path} Authorization: ${auth}`);
+    } catch (e) {
+      // ignore logging errors
+    }
+    return next();
+  });
   app.use("/uploads", express.static(path.join(__dirname, "uploads")));
   // Global authentication and route-access control
   app.use(requireAuth);

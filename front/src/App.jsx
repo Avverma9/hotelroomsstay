@@ -7,7 +7,7 @@ import { ToastProvider } from './utils/toast';
 // Pages
 import HomePage from './pages/HomePage';
 import LoginPage from './components/auth/LoginPage';
-import RegisterPage from './pages/RegisterPage';
+import RegisterPage from './components/auth/Register';
 import HotelSearch from './pages/hotel/HotelSearch';
 
 import TourPackages from './pages/tour/tour-package';

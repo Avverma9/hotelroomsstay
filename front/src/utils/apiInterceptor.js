@@ -74,8 +74,13 @@ const getRequestPath = (url = '') => {
 };
 
 const isPublicRequest = (url) => {
-  const path = getRequestPath(url);
-  return PUBLIC_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+  let path = getRequestPath(url).toLowerCase();
+  // Treat /api/... same as /... so both map to the same public prefixes
+  if (path.startsWith('/api/')) path = path.slice(4);
+  return PUBLIC_PATH_PREFIXES.some((prefix) => {
+    const p = String(prefix || '').toLowerCase();
+    return p && path.startsWith(p);
+  });
 };
 
 const isProtectedRequest = (url) => !isPublicRequest(url);

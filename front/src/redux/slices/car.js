@@ -75,8 +75,12 @@ export const getBookings = createAsyncThunk('car/getBookings', async (_, { rejec
     const response = await apiClient.post('/travel/get-bookings-by/bookedBy', { customerMobile: userMobile });
     return response.data;
   } catch (error) {
-    const errorMessage = error.response?.data?.message || error.message;
-    toast.error(`Error: ${errorMessage}`);
+    const errorMessage = error.response?.data?.message || error.message || String(error);
+    const errLower = String(errorMessage).toLowerCase();
+    // Don't show a toast for 404 / "no bookings" responses
+    if (!(error.response?.status === 404 || errLower.includes('no booking') || errLower.includes('not found'))) {
+      toast.error(`Error: ${errorMessage}`);
+    }
     return rejectWithValue(errorMessage);
   }
 });

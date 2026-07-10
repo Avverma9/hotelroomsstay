@@ -117,7 +117,8 @@ export default function Reviews() {
   const totalPages = Math.ceil(safeData.length / reviewsPerPage);
 
   if (location.pathname !== "/reviews") return null;
-  if (!userId) return <Unauthorized />;
+  const userIdLocal = localStorage.getItem('rsUserId');
+  if (!userIdLocal) return <Unauthorized />;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">

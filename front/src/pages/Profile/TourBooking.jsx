@@ -271,10 +271,12 @@ export default function TourBooking() {
     dispatch(getBookings())
       .unwrap()
       .catch((err) => {
-        // Only set an error if it's not a 404
-        if (err.status !== 404) {
-          setError("Failed to load tour bookings. Please try again.");
+        const msg = String(err || err?.message || "").toLowerCase();
+        // Treat 404 / "No bookings" / "not found" responses as empty state instead of an error
+        if (msg.includes("404") || msg.includes("no booking") || msg.includes("not found")) {
+          return;
         }
+        setError("Failed to load tour bookings. Please try again.");
       })
       .finally(() => setLoading(false));
   }, [dispatch]);

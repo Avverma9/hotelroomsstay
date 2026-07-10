@@ -29,8 +29,11 @@ export const fetchComplaints = createAsyncThunk('complaint/fetchComplaints', asy
         const response = await apiClient.get(`/complaints/${userId}`);
         return response.data;
     } catch (error) {
-        alert('Failed to fetch complaints');
-        return rejectWithValue(error.message);
+        const status = error?.response?.status;
+        const msg = error?.response?.data?.message || error?.message || String(error);
+        // Avoid noisy alert for 404 / not-found (empty) responses
+        if (status && status !== 404) alert('Failed to fetch complaints');
+        return rejectWithValue(msg);
     }
 });
 
@@ -101,7 +104,10 @@ const complaintSlice = createSlice({
             .addCase(fetchComplaints.rejected, (state, action) => {
                 state.loading = false;
                 state.error = action.payload;
-                alert(`Failed to fetch complaints: ${action.payload || 'Unknown error'}`);
+                const errStr = String(action.payload || '').toLowerCase();
+                if (!errStr.includes('404') && !errStr.includes('not found') && !errStr.includes('no complaint')) {
+                    alert(`Failed to fetch complaints: ${action.payload || 'Unknown error'}`);
+                }
             })
             // Delete complaint
             .addCase(deleteComplaint.pending, (state) => {

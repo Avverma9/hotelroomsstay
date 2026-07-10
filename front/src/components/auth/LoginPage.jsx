@@ -7,7 +7,6 @@ import {
   Phone,
   Eye,
   EyeOff,
-  ChevronRight,
   Loader2,
   ChevronDown,
   X,
@@ -15,20 +14,7 @@ import {
   AlertCircle,
   MapPin,
   Hotel,
-  Coffee,
-  UtensilsCrossed,
-  Bed,
-  Luggage,
-  Key,
-  Pizza,
-  Wine,
-  Bus,
-  Car,
-  Route,
-  Plane,
-  Soup,
-  ChefHat,
-  Milestone,
+  ArrowRight
 } from "lucide-react";
 import apiClient from "../../utils/apiInterceptor";
 import { loginSuccess } from "../../redux/slices/authSlice";
@@ -39,25 +25,6 @@ const countryCodes = [
   { code: "+44", country: "GB", flag: "🇬🇧", name: "UK" },
   { code: "+971", country: "AE", flag: "🇦🇪", name: "UAE" },
   { code: "+81", country: "JP", flag: "🇯🇵", name: "Japan" },
-];
-
-const DOODLE_ICONS = [
-  Hotel,
-  Coffee,
-  UtensilsCrossed,
-  Bed,
-  Luggage,
-  Key,
-  Pizza,
-  Wine,
-  MapPin,
-  Bus,
-  Car,
-  Route,
-  Plane,
-  Soup,
-  ChefHat,
-  Milestone,
 ];
 
 const saveUserSession = (data, dispatch) => {
@@ -83,27 +50,12 @@ const saveUserSession = (data, dispatch) => {
       },
       token,
       refreshToken,
-    }),
+    })
   );
 };
 
 const getErrorMessage = (error, fallbackMessage) =>
   error?.response?.data?.message || fallbackMessage;
-
-const DoodleBackground = () => (
-  <div className="fixed inset-0 z-0 overflow-hidden bg-white opacity-[0.18] pointer-events-none select-none">
-    <div className="absolute inset-0 flex flex-wrap items-center justify-center gap-8 p-2 -rotate-12 scale-150">
-      {Array.from({ length: 120 }).map((_, i) => {
-        const Icon = DOODLE_ICONS[i % DOODLE_ICONS.length];
-        return (
-          <div key={i} className="p-2">
-            <Icon size={28} strokeWidth={2.5} className="text-slate-900" />
-          </div>
-        );
-      })}
-    </div>
-  </div>
-);
 
 function Toast({ message, type, onClose }) {
   useEffect(() => {
@@ -113,20 +65,20 @@ function Toast({ message, type, onClose }) {
 
   return (
     <div
-      className={`fixed top-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-xl px-4 py-2 shadow-xl transition-all ${
+      className={`fixed top-6 right-6 z-50 flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg transition-all border ${
         type === "error"
-          ? "bg-slate-900 text-white"
-          : "border border-slate-100 bg-white text-slate-900"
+          ? "border-red-100 bg-red-50 text-red-800"
+          : "border-green-100 bg-green-50 text-green-800"
       }`}
     >
       {type === "error" ? (
-        <AlertCircle className="h-4 w-4 text-red-400" />
+        <AlertCircle className="h-5 w-5 text-red-500" />
       ) : (
-        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+        <CheckCircle2 className="h-5 w-5 text-green-500" />
       )}
-      <span className="text-[11px] font-bold tracking-tight">{message}</span>
-      <button onClick={onClose} className="ml-1 opacity-40 hover:opacity-100">
-        <X className="h-3 w-3" />
+      <span className="text-sm font-medium">{message}</span>
+      <button onClick={onClose} className="ml-4 opacity-50 hover:opacity-100">
+        <X className="h-4 w-4" />
       </button>
     </div>
   );
@@ -153,17 +105,17 @@ function CountryCodeDropdown({ selectedCode, onSelect, disabled }) {
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen((v) => !v)}
-        className="flex h-11 items-center gap-2 rounded-xl bg-slate-50 px-3 text-xs font-bold text-slate-700 transition-all hover:bg-slate-100 disabled:opacity-50"
+        className="flex h-11 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 disabled:opacity-50"
       >
         <span>{selectedCountry?.flag}</span>
         <span>{selectedCountry?.code}</span>
         <ChevronDown
-          className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
         />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-20 mt-2 w-40 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-xl ring-1 ring-black/5">
+        <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
           {countryCodes.map((c) => (
             <button
               key={c.code}
@@ -172,10 +124,11 @@ function CountryCodeDropdown({ selectedCode, onSelect, disabled }) {
                 onSelect(c.code);
                 setIsOpen(false);
               }}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[10px] font-bold text-slate-700 transition-colors hover:bg-slate-50"
+              className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
             >
               <span>{c.flag}</span>
-              <span className="flex-1">{c.name}</span>
+              <span className="flex-1 font-medium">{c.name}</span>
+              <span className="text-gray-400">{c.code}</span>
             </button>
           ))}
         </div>
@@ -193,7 +146,6 @@ function OtpInput({ disabled, onComplete, value }) {
       setVals(Array(6).fill(""));
       return;
     }
-
     if (value.length <= 6) {
       const next = Array(6).fill("");
       value.split("").forEach((digit, index) => {
@@ -205,11 +157,9 @@ function OtpInput({ disabled, onComplete, value }) {
 
   const handleChange = (i, v) => {
     if (!/^\d?$/.test(v)) return;
-
     const next = [...vals];
     next[i] = v;
     setVals(next);
-
     if (v && i < 5) inputsRef.current[i + 1]?.focus();
     onComplete(next.join(""));
   };
@@ -221,13 +171,11 @@ function OtpInput({ disabled, onComplete, value }) {
   };
 
   return (
-    <div className="flex justify-center gap-2">
+    <div className="flex justify-between gap-2">
       {vals.map((val, i) => (
         <input
           key={i}
-          ref={(el) => {
-            inputsRef.current[i] = el;
-          }}
+          ref={(el) => (inputsRef.current[i] = el)}
           type="text"
           inputMode="numeric"
           maxLength={1}
@@ -235,7 +183,7 @@ function OtpInput({ disabled, onComplete, value }) {
           disabled={disabled}
           onChange={(e) => handleChange(i, e.target.value)}
           onKeyDown={(e) => handleKeyDown(i, e)}
-          className="h-11 w-9 rounded-xl border border-slate-200 bg-slate-50 text-center text-base font-bold text-slate-900 outline-none transition-all focus:border-slate-900 focus:bg-white"
+          className="h-12 w-12 rounded-lg border border-gray-300 bg-white text-center text-lg font-semibold text-gray-900 outline-none transition-colors focus:border-gray-900 focus:ring-1 focus:ring-gray-900 disabled:opacity-50 sm:h-14 sm:w-14"
         />
       ))}
     </div>
@@ -246,8 +194,8 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const [mode, setMode] = useState("password");
-  const [authMethod, setAuthMethod] = useState("email");
+  const [mode, setMode] = useState("password"); // 'password' | 'otp'
+  const [authMethod, setAuthMethod] = useState("email"); // 'email' | 'mobile'
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -277,20 +225,13 @@ export default function LoginPage() {
 
   const handlePasswordLogin = async (e) => {
     e.preventDefault();
-
     if (!email || !password) {
       showToast("Email and password required.", "error");
       return;
     }
-
     setLoading(true);
     try {
-      const res = await apiClient.post("/signIn", {
-        email,
-        password,
-        loginType: "user",
-      });
-
+      const res = await apiClient.post("/signIn", { email, password, loginType: "user" });
       saveUserSession(res.data, dispatch);
       showToast("Logged in successfully!");
       navigate("/", { replace: true });
@@ -306,26 +247,20 @@ export default function LoginPage() {
       showToast("Please enter your email.", "error");
       return;
     }
-
     if (authMethod === "mobile" && !phone) {
       showToast("Please enter your mobile number.", "error");
       return;
     }
-
     setLoading(true);
     try {
       const res =
         authMethod === "email"
-          ? await apiClient.post("/mail/send-otp", {
-              email,
-              loginType: "user",
-            })
+          ? await apiClient.post("/mail/send-otp", { email, loginType: "user" })
           : await apiClient.post("/send-otp", {
               phoneNumber: `${countryCode}${phone}`,
               mobile: `${countryCode}${phone}`,
               loginType: "user",
             });
-
       setOtpSent(true);
       setTimer(30);
       showToast(res.data?.message || "Verification code has been sent.");
@@ -338,28 +273,21 @@ export default function LoginPage() {
 
   const handleOtpSubmit = async (e) => {
     e.preventDefault();
-
     if (!otp || otp.length !== 6) {
       showToast("Please enter the 6-digit OTP.", "error");
       return;
     }
-
     setLoading(true);
     try {
       const res =
         authMethod === "email"
-          ? await apiClient.post("/mail/verify-otp", {
-              email,
-              otp,
-              loginType: "user",
-            })
+          ? await apiClient.post("/mail/verify-otp", { email, otp, loginType: "user" })
           : await apiClient.post("/verify-otp", {
               phoneNumber: `${countryCode}${phone}`,
               mobile: `${countryCode}${phone}`,
               code: otp,
               loginType: "user",
             });
-
       saveUserSession(res.data, dispatch);
       showToast("Logged in successfully!");
       navigate("/", { replace: true });
@@ -374,272 +302,290 @@ export default function LoginPage() {
     mode === "password"
       ? handlePasswordLogin
       : otpSent
-        ? handleOtpSubmit
-        : (e) => {
-            e.preventDefault();
-            requestOtp();
-          };
+      ? handleOtpSubmit
+      : (e) => {
+          e.preventDefault();
+          requestOtp();
+        };
 
   return (
-    <div className="flex min-h-screen items-center justify-center overflow-hidden bg-white p-4 font-sans text-slate-900 antialiased">
-      <DoodleBackground />
-
+    <div className="flex min-h-screen bg-white font-sans text-gray-900 antialiased">
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      <div className="relative z-10 w-full max-w-[430px] sm:max-w-[470px]">
-        <div className="mb-5 flex flex-col items-center">
-          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-100 bg-white shadow-md">
-            <Hotel className="h-5 w-5 text-slate-900" strokeWidth={2} />
+      {/* Left Column - Hero Image */}
+      <div className="relative hidden w-0 flex-1 lg:block">
+        <img
+          className="absolute inset-0 h-full object-cover"
+          src="/login.jpg"
+          alt="Login hero"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-gray-900/20 to-transparent mix-blend-multiply" />
+        <div className="absolute bottom-0 left-0 p-12 text-white">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-white/10 backdrop-blur-md">
+            <Hotel className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-[14px] font-black uppercase leading-none tracking-[0.18em] text-slate-900">
-            HotelRoomsStay
-          </h1>
-          <div className="mt-2 h-[2px] w-4 rounded-full bg-slate-900"></div>
-        </div>
-
-        <div className="flex min-h-[560px] flex-col rounded-[28px] border border-slate-100 bg-white/96 p-7 shadow-[0_18px_50px_-14px_rgba(0,0,0,0.16)] backdrop-blur-md sm:min-h-[600px] sm:p-8">
-          <div className="mb-6 text-center">
-            <h2 className="text-[30px] font-black tracking-tight text-slate-900">Sign In</h2>
-            <p className="mt-1 text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-400">
-              Stay Managed
-            </p>
-          </div>
-
-          <div className="mb-6 flex rounded-xl border border-slate-100 bg-slate-50 p-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                setMode("password");
-                resetOtpFlow();
-              }}
-              className={`flex-1 rounded-lg py-2.5 text-[11px] font-black uppercase tracking-[0.16em] transition-all ${
-                mode === "password"
-                  ? "border border-slate-100 bg-white text-slate-900 shadow-sm"
-                  : "text-slate-400"
-              }`}
-            >
-              Password
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode("otp");
-                setPassword("");
-              }}
-              className={`flex-1 rounded-lg py-2.5 text-[11px] font-black uppercase tracking-[0.16em] transition-all ${
-                mode === "otp"
-                  ? "border border-slate-100 bg-white text-slate-900 shadow-sm"
-                  : "text-slate-400"
-              }`}
-            >
-              OTP
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {mode === "otp" && !otpSent && (
-              <div className="mb-1 flex justify-center gap-5">
-                <button
-                  type="button"
-                  onClick={() => setAuthMethod("email")}
-                  className={`pb-1 text-[10px] font-black uppercase tracking-[0.18em] transition-all ${
-                    authMethod === "email"
-                      ? "border-b-2 border-slate-900 text-slate-900"
-                      : "text-slate-300"
-                  }`}
-                >
-                  Email
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAuthMethod("mobile")}
-                  className={`pb-1 text-[10px] font-black uppercase tracking-[0.18em] transition-all ${
-                    authMethod === "mobile"
-                      ? "border-b-2 border-slate-900 text-slate-900"
-                      : "text-slate-300"
-                  }`}
-                >
-                  Mobile
-                </button>
-              </div>
-            )}
-
-            {(mode === "password" || authMethod === "email") && !otpSent && (
-              <div className="space-y-1.5">
-                <label className="ml-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-                  Email
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="h-12 w-full rounded-xl border border-slate-100 bg-slate-50/60 pl-11 pr-4 text-sm font-semibold outline-none transition-all focus:border-slate-900 focus:bg-white"
-                    placeholder="mail@example.com"
-                  />
-                </div>
-              </div>
-            )}
-
-            {mode === "otp" && authMethod === "mobile" && !otpSent && (
-              <div className="space-y-1.5">
-                <label className="ml-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-                  Mobile
-                </label>
-                <div className="flex gap-2">
-                  <CountryCodeDropdown
-                    selectedCode={countryCode}
-                    onSelect={setCountryCode}
-                    disabled={loading}
-                  />
-                  <div className="relative flex-1">
-                    <Phone className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
-                    <input
-                      type="tel"
-                      required
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
-                      className="h-12 w-full rounded-xl border border-slate-100 bg-slate-50/60 pl-11 pr-4 text-sm font-semibold outline-none transition-all focus:border-slate-900 focus:bg-white"
-                      placeholder="Number"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {mode === "password" && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between px-0.5">
-                  <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-                    Password
-                  </label>
-                  <button
-                    type="button"
-                    className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-900"
-                  >
-                    Reset?
-                  </button>
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="h-12 w-full rounded-xl border border-slate-100 bg-slate-50/60 pl-11 pr-12 text-sm font-semibold outline-none transition-all focus:border-slate-900 focus:bg-white"
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {mode === "otp" && otpSent && (
-              <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/50 px-4 py-5">
-                <div className="text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] leading-tight text-slate-400">
-                    OTP for{" "}
-                    <span className="text-slate-900">
-                      {authMethod === "email" ? email : `${countryCode} ${phone}`}
-                    </span>
-                  </p>
-                </div>
-                <OtpInput onComplete={setOtp} disabled={loading} value={otp} />
-                <div className="text-center">
-                  {timer > 0 ? (
-                    <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-300">
-                      {timer}s left
-                    </p>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={requestOtp}
-                      className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-900 hover:underline"
-                    >
-                      Resend
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || (mode === "otp" && otpSent && otp.length !== 6)}
-              className="group relative flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-md shadow-slate-900/10 transition-all hover:bg-black active:scale-[0.98] disabled:opacity-50"
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <span>{mode === "password" ? "Login" : otpSent ? "Login" : "Continue"}</span>
-                  <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                </>
-              )}
-            </button>
-          </form>
-
-          <div className="mt-auto pt-8">
-            <div className="relative flex items-center">
-              <div className="h-[1px] flex-1 bg-slate-100"></div>
-              <div className="mx-3 text-[8px] font-black uppercase tracking-[0.25em] text-slate-200">
-                Direct Access
-              </div>
-              <div className="h-[1px] flex-1 bg-slate-100"></div>
-            </div>
-
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-100 bg-white py-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 transition-all hover:bg-slate-50"
-              >
-                <img
-                  src="https://www.svgrepo.com/show/475656/google-color.svg"
-                  className="h-4 w-4"
-                  alt="G"
-                />
-                Google
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate("/", { replace: true })}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-100 bg-white py-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 transition-all hover:bg-slate-50"
-              >
-                <MapPin className="h-4 w-4 text-emerald-500" />
-                Guest
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5 text-center">
-          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-            No account?{" "}
-            <button
-              type="button"
-              onClick={() => navigate("/register")}
-              className="font-black text-slate-900 hover:underline"
-            >
-              Register
-            </button>
+          <h2 className="text-3xl font-bold tracking-tight">Experience Luxury.</h2>
+          <p className="mt-2 max-w-md text-lg text-gray-200">
+            Discover and book the finest hotel rooms and suites around the globe with HotelRoomsStay.
           </p>
         </div>
       </div>
 
-      <footer className="fixed bottom-4 flex gap-4 text-[7px] font-black uppercase tracking-[0.2em] text-slate-200">
-        <a href="/privacy">Privacy</a>
-        <a href="/terms">Security</a>
-      </footer>
+      {/* Right Column - Form */}
+      <div className="flex flex-1 flex-col justify-center px-4 py-12 sm:px-6 lg:flex-none lg:px-20 xl:px-24">
+        <div className="mx-auto w-full max-w-sm lg:w-[400px]">
+          {/* Mobile Logo */}
+          <div className="mb-8 flex flex-col lg:hidden">
+            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-gray-900 text-white">
+              <Hotel className="h-5 w-5" />
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight text-gray-900">Sign in</h2>
+            <p className="mt-2 text-sm text-gray-500">
+              Don't have an account?{" "}
+              <button
+                onClick={() => navigate("/register")}
+                className="font-semibold text-gray-900 hover:underline"
+              >
+                Register now
+              </button>
+            </p>
+          </div>
+
+          <div className="mt-8">
+            {/* Elegant Tabs */}
+            <div className="mb-6 border-b border-gray-200">
+              <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                <button
+                  onClick={() => {
+                    setMode("password");
+                    resetOtpFlow();
+                  }}
+                  className={`whitespace-nowrap border-b-2 py-3 text-sm font-medium transition-colors ${
+                    mode === "password"
+                      ? "border-gray-900 text-gray-900"
+                      : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                  }`}
+                >
+                  Password Login
+                </button>
+                <button
+                  onClick={() => {
+                    setMode("otp");
+                    setPassword("");
+                  }}
+                  className={`whitespace-nowrap border-b-2 py-3 text-sm font-medium transition-colors ${
+                    mode === "otp"
+                      ? "border-gray-900 text-gray-900"
+                      : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                  }`}
+                >
+                  One-Time Password
+                </button>
+              </nav>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {mode === "otp" && !otpSent && (
+                <div className="mb-2 flex gap-4">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="radio"
+                      className="text-gray-900 focus:ring-gray-900"
+                      checked={authMethod === "email"}
+                      onChange={() => setAuthMethod("email")}
+                    />
+                    Email
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="radio"
+                      className="text-gray-900 focus:ring-gray-900"
+                      checked={authMethod === "mobile"}
+                      onChange={() => setAuthMethod("mobile")}
+                    />
+                    Mobile
+                  </label>
+                </div>
+              )}
+
+              {(mode === "password" || (mode === "otp" && authMethod === "email")) && !otpSent && (
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                    Email address
+                  </label>
+                  <div className="relative mt-1">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                      <Mail className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                    </div>
+                    <input
+                      id="email"
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="block h-11 w-full rounded-lg border border-gray-300 pl-10 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                      placeholder="you@example.com"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {mode === "otp" && authMethod === "mobile" && !otpSent && (
+                <div>
+                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+                    Mobile number
+                  </label>
+                  <div className="mt-1 flex gap-2">
+                    <CountryCodeDropdown
+                      selectedCode={countryCode}
+                      onSelect={setCountryCode}
+                      disabled={loading}
+                    />
+                    <div className="relative flex-1">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                        <Phone className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                      </div>
+                      <input
+                        id="phone"
+                        type="tel"
+                        required
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+                        className="block h-11 w-full rounded-lg border border-gray-300 pl-10 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                        placeholder="000 000 0000"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {mode === "password" && (
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                      Password
+                    </label>
+                    <button
+                      type="button"
+                      className="text-sm font-medium text-gray-600 hover:text-gray-900 hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <div className="relative mt-1">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                      <Lock className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                    </div>
+                    <input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="block h-11 w-full rounded-lg border border-gray-300 pl-10 pr-10 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {mode === "otp" && otpSent && (
+                <div className="space-y-5">
+                  <div className="rounded-lg bg-gray-50 p-4">
+                    <p className="text-sm text-gray-600">
+                      We've sent a 6-digit verification code to <br />
+                      <span className="font-semibold text-gray-900">
+                        {authMethod === "email" ? email : `${countryCode} ${phone}`}
+                      </span>
+                    </p>
+                  </div>
+                  <OtpInput onComplete={setOtp} disabled={loading} value={otp} />
+                  <div className="flex items-center justify-between text-sm">
+                    {timer > 0 ? (
+                      <span className="text-gray-500">Resend code in {timer}s</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={requestOtp}
+                        className="font-medium text-gray-900 hover:underline"
+                      >
+                        Resend code
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={resetOtpFlow}
+                      className="text-gray-500 hover:text-gray-900 hover:underline"
+                    >
+                      Change {authMethod}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading || (mode === "otp" && otpSent && otp.length !== 6)}
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white transition-colors hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 disabled:opacity-50"
+              >
+                {loading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <span>
+                      {mode === "password" ? "Sign in" : otpSent ? "Verify & Sign in" : "Continue"}
+                    </span>
+                    {!otpSent && <ArrowRight className="h-4 w-4" />}
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="mt-8">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-sm font-medium leading-6">
+                  <span className="bg-white px-6 text-gray-500">Or continue with</span>
+                </div>
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+                >
+                  <img
+                    src="https://www.svgrepo.com/show/475656/google-color.svg"
+                    className="h-5 w-5"
+                    alt="Google"
+                  />
+                  <span>Google</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/", { replace: true })}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+                >
+                  <MapPin className="h-5 w-5 text-gray-400" />
+                  <span>Guest</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

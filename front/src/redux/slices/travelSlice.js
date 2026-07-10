@@ -1,7 +1,8 @@
 ﻿import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import apiClient from '../../utils/apiInterceptor';
 import alert from '../../utils/custom_alert/custom_alert';
-import { userId } from '../../utils/Unauthorized';
+// read user id at runtime from localStorage to avoid stale import
+const getUserId = () => localStorage.getItem('rsUserId');
 
 export const createTravel = createAsyncThunk(
   'travel/createTravel',
@@ -132,7 +133,7 @@ export const getBookings = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await apiClient.get('/tour-booking/get-users-booking', {
-        params: { userId: userId },
+        params: { userId: getUserId() },
       });
       return response?.data;
     } catch (error) {

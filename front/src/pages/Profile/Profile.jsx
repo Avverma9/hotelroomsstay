@@ -12,7 +12,7 @@ import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { fetchProfileData } from "../../redux/slices/profileSlice";
-import { userId } from "../../utils/Unauthorized";
+// read user id dynamically from localStorage to avoid stale import binding
 
 function InfoField({ icon, label, value, onActionClick }) {
   return (
@@ -68,14 +68,16 @@ export default function ProfilePage() {
   const { data, loading, error } = useSelector((state) => state.profile);
 
   useEffect(() => {
-    if (!userId) {
+    const userIdLocal = localStorage.getItem("rsUserId");
+    if (!userIdLocal) {
       navigate("/login", { replace: true });
       return;
     }
-    dispatch(fetchProfileData(userId));
+    dispatch(fetchProfileData(userIdLocal));
   }, [dispatch, navigate]);
 
-  if (!userId) return null;
+  const userIdLocal = localStorage.getItem("rsUserId");
+  if (!userIdLocal) return null;
 
   if (error) {
     return (
@@ -104,7 +106,7 @@ export default function ProfilePage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-1 flex flex-col items-center text-center bg-white rounded-2xl shadow-lg p-6 border border-slate-200/75">
             <img
-              src={data?.images?.[0] || `https://i.pravatar.cc/150?u=${userId}`}
+              src={data?.images?.[0] || `https://i.pravatar.cc/150?u=${userIdLocal}`}
               alt={data?.name || "User Avatar"}
               className="w-20 h-20 object-cover rounded-full ring-4 ring-slate-100"
             />

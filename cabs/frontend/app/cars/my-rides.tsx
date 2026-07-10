@@ -75,11 +75,25 @@ export default function MyRidesScreen() {
 }
 
 function MyRideCard({ ride, onPress, onEdit }: { ride: Car; onPress: () => void; onEdit: () => void }) {
+  const router = useRouter();
   const img = ride.images?.[0] || IMAGES.carPlaceholder;
   const pickupDate = ride.pickupD ? new Date(ride.pickupD).toLocaleDateString() : "N/A";
   const dropDate = ride.dropD ? new Date(ride.dropD).toLocaleDateString() : "N/A";
   const pickupTime = ride.pickupD ? new Date(ride.pickupD).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "N/A";
   const dropTime = ride.dropD ? new Date(ride.dropD).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "N/A";
+  const carLabel = `${ride.make} ${ride.model}`;
+
+  const goCalendar = () =>
+    router.push({
+      pathname: "/cars/calendar",
+      params: { carId: ride._id, carName: carLabel },
+    } as any);
+
+  const goHistory = () =>
+    router.push({
+      pathname: "/cars/ride-history",
+      params: { carId: ride._id, carName: carLabel },
+    } as any);
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
@@ -130,6 +144,18 @@ function MyRideCard({ ride, onPress, onEdit }: { ride: Car; onPress: () => void;
               <Text style={styles.editBtnText}>Edit</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* ── Secondary action row: Calendar + Ride History ── */}
+        <View style={styles.secondaryRow}>
+          <TouchableOpacity style={styles.secBtn} onPress={goCalendar}>
+            <Ionicons name="calendar-outline" size={15} color={colors.primary} />
+            <Text style={styles.secBtnText}>Availability</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secBtn} onPress={goHistory}>
+            <Ionicons name="time-outline" size={15} color={colors.info} />
+            <Text style={[styles.secBtnText, { color: colors.info }]}>Ride History</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>
@@ -214,5 +240,30 @@ const styles = StyleSheet.create<any>({
     color: "#fff",
     fontWeight: "700",
     fontSize: 14,
+  },
+  secondaryRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  secBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 9,
+    borderRadius: radii.md,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  secBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.primary,
   },
 });

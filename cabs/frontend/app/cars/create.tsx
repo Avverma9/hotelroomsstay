@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,7 +16,8 @@ import {
 } from "react-native";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { type Car, getMyCars, updateCar } from "../../src/api";
+import { type Booking, type Car, getMyCars, checkCarOverlap, updateCar } from "../../src/api";
+import { findConflicts } from "../../src/availability";
 import { useAuth } from "../../src/auth";
 import { colors, radii, spacing } from "../../src/theme";
 
@@ -35,6 +36,10 @@ export default function CreateRideScreen() {
   const [myCars, setMyCars] = useState<Car[]>([]);
   const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
   const [showCarPicker, setShowCarPicker] = useState(false);
+
+  // ── Conflict / availability state ─────────────────────────────────────────
+  const [conflicts, setConflicts] = useState<Booking[]>([]);
+  const conflictTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isEditMode = !!params.carToEdit;
 
@@ -128,6 +133,27 @@ export default function CreateRideScreen() {
   }, [selectedCar, params.carToEdit]);
   const pickupISO = useMemo(() => combineDateTime(form.pickupDate, form.pickupTime), [form.pickupDate, form.pickupTime]);
   const dropISO = useMemo(() => combineDateTime(form.dropDate, form.dropTime), [form.dropDate, form.dropTime]);
+
+  // ── Realtime conflict check (debounced 600 ms) ────────────────────────────
+  useEffect(() => {
+    setConflicts([]);
+    if (!selectedCarId || !pickupISO || !dropISO) return;
+
+    if (conflictTimerRef.current) clearTimeout(conflictTimerRef.current);
+    conflictTimerRef.current = setTimeout(async () => {
+      try {
+        const existingBookings = await checkCarOverlap(selectedCarId, pickupISO, dropISO);
+        const overlap = findConflicts(new Date(pickupISO), new Date(dropISO), existingBookings);
+        setConflicts(overlap);
+      } catch {
+        /* silently ignore — don't block create on check failure */
+      }
+    }, 600);
+
+    return () => {
+      if (conflictTimerRef.current) clearTimeout(conflictTimerRef.current);
+    };
+  }, [selectedCarId, pickupISO, dropISO]);
 
   const setField = (key: keyof typeof form, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
   const handleVehicleNumberChange = (value: string) => {
@@ -253,6 +279,53 @@ export default function CreateRideScreen() {
               onDatePress={() => openDateTimePicker("dropDate", "date")}
               onTimePress={() => openDateTimePicker("dropTime", "time")}
             />
+
+            {/* ── Availability conflict warning ─────────────────────── */}
+            {conflicts.length > 0 && (
+              <View style={styles.conflictBanner}>
+                <Ionicons name="warning" size={18} color="#D97706" style={{ marginTop: 2 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.conflictTitle}>
+                    {conflicts.some(c =>
+                      ["Confirmed", "Available", "Ride in Progress"].includes(c.bookingStatus ?? "")
+                    )
+                      ? "⚠️ Active ride already scheduled in this window"
+                      : "ℹ️ Pending booking overlaps this window"}
+                  </Text>
+                  {conflicts.map(c => (
+                    <Text key={c._id} style={styles.conflictItem} numberOfLines={2}>
+                      • #{c.bookingId || c._id?.slice(-6).toUpperCase()} — {c.bookingStatus}
+                      {c.pickupD ? ` (${new Date(c.pickupD).toLocaleDateString("en-IN", { day:"numeric", month:"short" })})` : ""}
+                    </Text>
+                  ))}
+                  <TouchableOpacity
+                    onPress={() =>
+                      router.push({
+                        pathname: "/cars/calendar",
+                        params: {
+                          carId: selectedCarId ?? "",
+                          carName: selectedCar
+                            ? `${selectedCar.make} ${selectedCar.model}`
+                            : "",
+                        },
+                      } as any)
+                    }
+                    style={styles.conflictCalBtn}
+                  >
+                    <Ionicons name="calendar-outline" size={13} color={colors.primary} />
+                    <Text style={styles.conflictCalText}>View Calendar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* No conflict + dates filled → show green confirmation */}
+            {conflicts.length === 0 && pickupISO && dropISO && (
+              <View style={styles.freeBanner}>
+                <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                <Text style={styles.freeText}>Vehicle is free in this window</Text>
+              </View>
+            )}
           </Section>
 
           <Section title="Pricing & Vehicle">
@@ -460,4 +533,43 @@ const styles = StyleSheet.create<any>({
   chipTextActive: { color: colors.primary },
   submitBtn: { backgroundColor: colors.primary, borderRadius: 999, paddingVertical: 15, alignItems: "center", marginTop: spacing.sm },
   submitText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+
+  // Conflict / availability banners
+  conflictBanner: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+    alignItems: "flex-start",
+  },
+  conflictTitle: { fontSize: 13, fontWeight: "700", color: "#92400E", marginBottom: 4 },
+  conflictItem: { fontSize: 12, color: "#78350F", marginBottom: 2 },
+  conflictCalBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: spacing.sm,
+    alignSelf: "flex-start",
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  conflictCalText: { fontSize: 12, color: colors.primary, fontWeight: "700" },
+  freeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#D1FAE5",
+    borderWidth: 1,
+    borderColor: "#6EE7B7",
+    borderRadius: radii.md,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  freeText: { fontSize: 12, fontWeight: "700", color: "#065F46" },
 });

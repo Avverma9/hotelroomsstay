@@ -12,7 +12,6 @@ import {
 } from '@mui/icons-material';
 
 import { updateProfileData, fetchProfileData } from '../../redux/slices/profileSlice';
-import { userId } from '../../utils/Unauthorized';
 import { useLoader } from '../../utils/loader';
 import { useToast } from '../../utils/toast';
 
@@ -46,7 +45,8 @@ export  default function ProfileUpdatePage () {
   const [imagePreview, setImagePreview] = useState(null);
 
   useEffect(() => {
-    if (userId) dispatch(fetchProfileData(userId));
+    const userIdLocal = localStorage.getItem('rsUserId');
+    if (userIdLocal) dispatch(fetchProfileData(userIdLocal));
   }, [dispatch]);
 
   useEffect(() => {
@@ -82,7 +82,7 @@ export  default function ProfileUpdatePage () {
     showLoader();
     try {
       const formDataObj = new FormData();
-      formDataObj.append('userId', userId);
+      formDataObj.append('userId', localStorage.getItem('rsUserId'));
 
       Object.keys(formData).forEach(key => {
         if (key === 'images' && formData.images.length > 0) {
