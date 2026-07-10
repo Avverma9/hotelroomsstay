@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const MONGO_URI =
-  "mongodb+srv://Avverma:Avverma95766@avverma.2g4orpk.mongodb.net/Hotel"; // Update with your MongoDB URI
+  "mongodb+srv://hotelroomsstay:Avverma%401@cluster0.og7zmtr.mongodb.net/Hotel"; // Update with your MongoDB URI
 
 const connectDB = async () => {
   try {

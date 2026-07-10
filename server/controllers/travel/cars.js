@@ -548,3 +548,54 @@ exports.deleteCarById = async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 };
+
+// ── Owner: manually release a specific seat (JWT-verified, owner-only) ────────
+exports.releaseSeat = async (req, res) => {
+  try {
+    const { carId } = req.params;
+    const { seatId } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(carId)) {
+      return res.status(400).json({ message: 'Invalid carId' });
+    }
+    if (!seatId) {
+      return res.status(400).json({ message: 'seatId is required' });
+    }
+
+    const callerOwner = await resolveCallerOwner(req);
+    if (!callerOwner) {
+      return res.status(403).json({ message: 'Access denied: Owner account not found.' });
+    }
+
+    const car = await Car.findById(carId);
+    if (!car) {
+      return res.status(404).json({ message: 'Car not found' });
+    }
+    if (String(car.ownerId) !== String(callerOwner._id)) {
+      return res.status(403).json({ message: 'Access denied: You do not own this car.' });
+    }
+
+    const seat = (car.seatConfig || []).find((s) => String(s._id) === String(seatId));
+    if (!seat) {
+      return res.status(404).json({ message: 'Seat not found on this car' });
+    }
+    if (!seat.isBooked) {
+      return res.status(400).json({ message: 'Seat is already free' });
+    }
+
+    seat.isBooked = false;
+    seat.bookedBy = '';
+
+    // Recalculate car availability
+    const allBooked =
+      car.seatConfig.length > 0 && car.seatConfig.every((s) => Boolean(s.isBooked));
+    car.isAvailable = !allBooked;
+    car.runningStatus = allBooked ? 'On A Trip' : 'Available';
+
+    await car.save();
+    return res.status(200).json({ message: 'Seat released successfully', car });
+  } catch (error) {
+    console.error('releaseSeat error:', error);
+    return res.status(500).json({ message: error.message });
+  }
+};

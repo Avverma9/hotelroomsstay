@@ -11,6 +11,7 @@ const {
   getCarBookingByUserId,
   verifyPickupCode,
   verifyDropCode,
+  getBookingsByCar,
 } = require('../../controllers/travel/booking');
 const router = express.Router();
 
@@ -24,5 +25,6 @@ router.patch('/update-travel/booking', auth, updateBooking)
 router.get("/get-bookings-by/owner/:ownerId", auth, getBookingsOfOwner)
 router.post("/get-bookings-by/bookedBy", auth, getBookingBookedBy);
 router.get("/get-bookings-by/user/:userId", auth, getCarBookingByUserId);
+router.get("/get-bookings-by/car/:carId", auth, getBookingsByCar);
 
 module.exports = router;

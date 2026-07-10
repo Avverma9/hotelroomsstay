@@ -35,7 +35,7 @@ export default function RiderHomeScreen() {
     if (!user) return;
     try {
       const [carsData, bookingsData] = await Promise.all([
-        getMyCars(user.id),
+        getMyCars(),
         getOwnerBookings(user.id),
       ]);
       setCars(carsData);

@@ -299,17 +299,25 @@ export default function CarEditScreen() {
         ) : (
           <>
             <Button
-              title="Manage Seats"
-              onPress={() => router.push(`/cars/${car._id}/seats`)}
-              testID="manage-seats-btn"
+              title="Bookings & Stats"
+              onPress={() => router.push(`/cars/${car._id}/bookings` as any)}
+              testID="view-bookings-btn"
               style={{ flex: 1 }}
             />
             <TouchableOpacity
               style={styles.editFab}
+              onPress={() => router.push(`/cars/${car._id}/seats` as any)}
+              testID="manage-seats-btn"
+            >
+              <Ionicons name="grid-outline" size={20} color={colors.primary} />
+              <Text style={styles.editFabText}>Seats</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.editFab, { backgroundColor: colors.inputBg }]}
               onPress={() => setEditing(true)}
               testID="start-edit-btn"
             >
-              <Ionicons name="create-outline" size={22} color={colors.primary} />
+              <Ionicons name="create-outline" size={20} color={colors.primary} />
               <Text style={styles.editFabText}>Edit</Text>
             </TouchableOpacity>
           </>

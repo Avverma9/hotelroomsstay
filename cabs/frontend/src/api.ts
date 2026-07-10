@@ -246,6 +246,38 @@ export async function updateCar(id: string, body: Partial<Car>) {
   return data as { success?: boolean; message?: string; car?: Car } & Car;
 }
 
+/**
+ * GET /travel/get-bookings-by/car/:carId
+ * Returns paginated bookings for a specific car — owner-verified via JWT.
+ * Supports optional filters: status, dateFrom (ISO), dateTo (ISO), page, limit.
+ */
+export type BookingsByCarResponse = {
+  bookings: (Booking & { seatDetails?: Seat[] })[];
+  total: number;
+  page: number;
+  limit: number;
+  car: Car;
+};
+export async function getBookingsByCar(
+  carId: string,
+  params?: { status?: string; dateFrom?: string; dateTo?: string; page?: number; limit?: number }
+) {
+  const { data } = await travelApi.get<BookingsByCarResponse>(
+    `/get-bookings-by/car/${carId}`,
+    { params }
+  );
+  return data;
+}
+
+/**
+ * PATCH /travel/release-seat/:carId
+ * Manually releases a booked seat — owner-verified via JWT.
+ */
+export async function releaseSeat(carId: string, seatId: string) {
+  const { data } = await travelApi.patch(`/release-seat/${carId}`, { seatId });
+  return data as { message: string; car: Car };
+}
+
 /** POST /travel/add-a-car */
 export async function addCar(body: Record<string, any>) {
   const { data } = await travelApi.post("/add-a-car", body);

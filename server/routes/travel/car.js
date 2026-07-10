@@ -10,6 +10,7 @@ const {
   getSeatsData,
   getCarByOwnerId,
   getMyCars,
+  releaseSeat,
 } = require('../../controllers/travel/cars');
 const auth = require('../../authentication/auth');
 const router = express.Router();
@@ -23,5 +24,6 @@ router.patch('/update-a-car/:id', auth, upload, updateCar);
 router.delete('/delete-a-car/:id', auth, deleteCarById);
 router.get('/filter-car/by-query',filterCar);
 router.get('/get-seat-data/by-id/:id',getSeatsData);
+router.patch('/release-seat/:carId', auth, releaseSeat);
 
 module.exports = router;

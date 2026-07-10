@@ -1176,6 +1176,65 @@ exports.getBookingsOfOwner = async (req, res) => {
   }
 };
 
+// ── Owner: bookings for a specific car (JWT-verified, owner-only) ────────────
+exports.getBookingsByCar = async (req, res) => {
+  try {
+    const { carId } = req.params;
+    if (!carId || !isValidObjectId(carId)) {
+      return res.status(400).json({ message: "Invalid carId" });
+    }
+
+    // Verify caller owns this car
+    const callerOwner = await resolveCallerOwner(req);
+    if (!callerOwner) {
+      return res.status(403).json({ message: "Access denied: Rider account not found." });
+    }
+
+    const car = await Car.findById(carId).lean();
+    if (!car) {
+      return res.status(404).json({ message: "Car not found" });
+    }
+    if (String(car.ownerId) !== String(callerOwner._id)) {
+      return res.status(403).json({ message: "Access denied: You do not own this car." });
+    }
+
+    // Optional query filters
+    const { status, dateFrom, dateTo } = req.query;
+    const page  = Math.max(1, Number(req.query.page)  || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+
+    const query = { carId };
+    if (status) query.bookingStatus = status;
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
+      if (dateTo)   query.createdAt.$lte = new Date(dateTo);
+    }
+
+    const skip = (page - 1) * limit;
+    const [bookings, total] = await Promise.all([
+      CarBooking.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      CarBooking.countDocuments(query),
+    ]);
+
+    const enrichedBookings = bookings.map((booking) => {
+      const seatDetails = buildSeatDetails(car, booking.seats || []);
+      return { ...booking, seatDetails };
+    });
+
+    return res.status(200).json({
+      bookings: enrichedBookings,
+      total,
+      page,
+      limit,
+      car,
+    });
+  } catch (error) {
+    console.error("getBookingsByCar error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 exports.getBookingBookedBy = async (req, res) => {
   try {
     const customerMobile = req.body?.customerMobile || req.query?.customerMobile;

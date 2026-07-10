@@ -31,7 +31,7 @@ export default function MyCarsScreen() {
   const load = useCallback(async () => {
     if (!user) return;
     try {
-      const data = await getMyCars(user.id);
+      const data = await getMyCars();
       setCars(data);
     } catch {
       setCars([]);
