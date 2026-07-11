@@ -92,8 +92,21 @@ const shouldForceLogin = (error) => {
   const status = error?.response?.status
   const message = String(error?.response?.data?.message || '').toLowerCase()
 
-  if (status === 401 || status === 403) {
+  // 401 is generally auth failure.
+  if (status === 401) {
     return true
+  }
+
+  // 403 can also mean route/business permission denial. Force logout only
+  // when response clearly indicates token/auth problems.
+  if (status === 403) {
+    return (
+      message.includes('no token provided') ||
+      message.includes('invalid token') ||
+      message.includes('token has expired') ||
+      message.includes('jwt malformed') ||
+      message.includes('jwt expired')
+    )
   }
 
   return (
