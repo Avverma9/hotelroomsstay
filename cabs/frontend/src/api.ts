@@ -225,6 +225,40 @@ export async function getMyCars() {
   }
 }
 
+export type OwnerAvailability = {
+  _id: string;
+  ownerId: string;
+  carId?: string;
+  startDate: string;
+  endDate: string;
+  mode: 'available' | 'unavailable';
+  note?: string;
+};
+
+/** GET /travel/owner-availability?ownerId=...&dateFrom=...&dateTo=... */
+export async function getOwnerAvailability(ownerId?: string, params?: { dateFrom?: string; dateTo?: string }) {
+  const qs: Record<string, any> = {};
+  if (ownerId) qs.ownerId = ownerId;
+  if (params?.dateFrom) qs.dateFrom = params.dateFrom;
+  if (params?.dateTo) qs.dateTo = params.dateTo;
+  const { data } = await travelApi.get<{ success: boolean; availability: OwnerAvailability[] }>('/owner-availability', {
+    params: qs,
+  });
+  return data;
+}
+
+/** POST /travel/owner-availability (auth) */
+export async function addOwnerAvailability(body: { startDate: string; endDate: string; mode?: 'available' | 'unavailable'; carId?: string; note?: string; }) {
+  const { data } = await travelApi.post('/owner-availability', body);
+  return data as { success: boolean; availability: OwnerAvailability };
+}
+
+/** DELETE /travel/owner-availability/:id (auth) */
+export async function deleteOwnerAvailability(id: string) {
+  const { data } = await travelApi.delete(`/owner-availability/${id}`);
+  return data as { success: boolean; message: string };
+}
+
 /**
  * GET /travel/get-bookings-by/owner/:ownerId
  * Fetches bookings for the cars of the currently authenticated owner.

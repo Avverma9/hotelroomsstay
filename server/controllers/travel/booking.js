@@ -1,6 +1,7 @@
        const crypto = require("crypto");
 const mongoose = require("mongoose");
 const CarBooking = require("../../models/travel/carBooking");
+const OwnerAvailability = require("../../models/travel/ownerAvailability");
 const Car = require("../../models/travel/cars");
 const CarOwner = require("../../models/travel/carOwner");
 const DashboardUser = require("../../models/dashboardUser");
@@ -382,6 +383,24 @@ exports.bookCar = async (req, res) => {
     const resolvedDriverName =
       String(assignedDriverName || "").trim() ||
       String(carOwner?.name || "").trim();
+
+    // Check owner-level availability: if owner marked 'unavailable' for this car's time window, block booking
+    try {
+      if (resolvedDriverId && carSnapshot.pickupD && carSnapshot.dropD) {
+        const ua = await OwnerAvailability.findOne({
+          ownerId: String(resolvedDriverId),
+          mode: 'unavailable',
+          startDate: { $lte: new Date(carSnapshot.dropD) },
+          endDate: { $gte: new Date(carSnapshot.pickupD) },
+        }).lean();
+        if (ua) {
+          return res.status(409).json({ message: 'Driver unavailable during selected time' });
+        }
+      }
+    } catch (err) {
+      // If availability check fails for some reason, don't block booking on that error.
+      console.error('Availability check failed:', err && err.message ? err.message : err);
+    }
 
     if (sharingType && sharingType !== carSnapshot.sharingType) {
       return res.status(400).json({

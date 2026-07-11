@@ -241,11 +241,7 @@ export default function CreateRideScreen() {
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>{isEditMode ? "Edit Ride" : "Publish New Ride"}</Text>
-              <Text style={styles.subtitle}>
-                {isEditMode
-                  ? "Update your ride details and save."
-                  : "Pickup, drop, date aur time fill karke ride publish karo."}
-              </Text>
+              
             </View>
           </View>
 

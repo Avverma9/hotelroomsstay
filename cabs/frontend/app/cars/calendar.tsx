@@ -24,16 +24,19 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getBookingsByCar, type Booking } from "../../src/api";
+import { getBookingsByCar, type Booking, getOwnerAvailability, addOwnerAvailability, type OwnerAvailability } from "../../src/api";
 import {
   buildBookingMap,
   formatRange,
   getDayStatus,
   toDateKey,
+  findConflicts,
   type DayStatus,
 } from "../../src/availability";
+import { useAuth } from "../../src/auth";
 import { colors, radii, spacing, statusColors } from "../../src/theme";
 
 const DAY_LABELS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
@@ -75,13 +78,22 @@ export default function CalendarScreen() {
   }>();
 
   const today = new Date();
+  const { user } = useAuth();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [car, setCar] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [availList, setAvailList] = useState<OwnerAvailability[]>([]);
+  const [autoMode, setAutoMode] = useState(true);
+
+  // Edit mode for manual availability
+  const [editMode, setEditMode] = useState(false);
+  const [rangeStartKey, setRangeStartKey] = useState<string | null>(null);
+  const [rangeEndKey, setRangeEndKey] = useState<string | null>(null);
 
   // Animated sheet
   const sheetAnim = useRef(new Animated.Value(400)).current;
@@ -138,6 +150,19 @@ export default function CalendarScreen() {
         dateTo: lastDay,
       });
       setBookings(Array.isArray(result?.bookings) ? result.bookings : []);
+      setCar(result?.car ?? null);
+      // load owner availability for the same window
+      const ownerId = result?.car?.ownerId || null;
+      if (ownerId) {
+        try {
+          const av = await getOwnerAvailability(ownerId as string, { dateFrom: firstDay, dateTo: lastDay });
+          setAvailList(av?.availability ?? []);
+        } catch (e) {
+          setAvailList([]);
+        }
+      } else {
+        setAvailList([]);
+      }
     } catch (e: any) {
       if (e?.response?.status === 404) {
         setBookings([]);
@@ -168,6 +193,63 @@ export default function CalendarScreen() {
   const selectedBookings = selectedDay ? (bookingMap.get(selectedDay) ?? []) : [];
   const todayKey = toDateKey(today);
 
+  const onDayTap = (key: string) => {
+    if (!editMode) {
+      openSheet(key);
+      return;
+    }
+    if (!rangeStartKey) {
+      setRangeStartKey(key);
+      setRangeEndKey(null);
+      return;
+    }
+    if (rangeStartKey && !rangeEndKey) {
+      const a = new Date(rangeStartKey);
+      const b = new Date(key);
+      if (b < a) {
+        setRangeStartKey(key);
+        setRangeEndKey(rangeStartKey);
+      } else {
+        setRangeEndKey(key);
+      }
+      return;
+    }
+    // reset if both set
+    setRangeStartKey(key);
+    setRangeEndKey(null);
+  };
+
+  const submitRange = async (mode: 'available' | 'unavailable') => {
+    if (!user) return Alert.alert('Login required', 'Please login to edit availability.');
+    if (!rangeStartKey) return Alert.alert('Select range', 'Please pick a start and end date.');
+    const s = new Date(rangeStartKey);
+    const e = new Date(rangeEndKey ?? rangeStartKey);
+    const start = s <= e ? s : e;
+    const end = e >= s ? e : s;
+
+    // client-side conflict check for marking as available
+    if (mode === 'available') {
+      const conflicts = findConflicts(start, end, bookings);
+      if ((conflicts?.length ?? 0) > 0) {
+        return Alert.alert('Conflict', 'Existing bookings overlap this range. Cannot mark as available.');
+      }
+    }
+
+    try {
+      setLoading(true);
+      await addOwnerAvailability({ startDate: start.toISOString(), endDate: end.toISOString(), mode, carId: carId ?? (car?._id as any) });
+      Alert.alert('Saved', 'Availability updated.');
+      setRangeStartKey(null);
+      setRangeEndKey(null);
+      setEditMode(false);
+      await loadMonth();
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message ?? err?.message ?? 'Could not save availability');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       {/* Header */}
@@ -186,6 +268,25 @@ export default function CalendarScreen() {
         </View>
         <TouchableOpacity style={styles.refreshBtn} onPress={loadMonth}>
           <Ionicons name="refresh" size={18} color={colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleBtn, autoMode ? styles.toggleActive : null]}
+          onPress={() => setAutoMode((a) => !a)}
+        >
+          <Text style={[styles.toggleText, autoMode ? styles.toggleTextActive : null]}>
+            {autoMode ? "Auto" : "Manual"}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleBtn, editMode ? styles.toggleActive : null]}
+          onPress={() => {
+            if (!user) return Alert.alert('Login required', 'Please login to edit availability.');
+            setEditMode((e) => !e);
+            setRangeStartKey(null);
+            setRangeEndKey(null);
+          }}
+        >
+          <Ionicons name="pencil" size={16} color={editMode ? colors.surface : colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -260,8 +361,7 @@ export default function CalendarScreen() {
                       isToday && styles.todayCell,
                       pressed && styles.pressedCell,
                     ]}
-                    onPress={() => hasMark && openSheet(key)}
-                    disabled={!hasMark}
+                    onPress={() => onDayTap(key)}
                   >
                     <Text
                       style={[
@@ -272,17 +372,38 @@ export default function CalendarScreen() {
                     >
                       {date.getDate()}
                     </Text>
-                    {hasMark && (
-                      <View
-                        style={[styles.statusDot, { backgroundColor: dotColor }]}
-                      />
-                    )}
+                    {/* Manual owner-unavailability overlay takes precedence when autoMode is off */}
+                    {(!autoMode && availList.some(a => new Date(a.startDate) <= date && new Date(a.endDate) >= date)) ? (
+                      <View style={[styles.statusDot, { backgroundColor: '#6B7280' }]} />
+                    ) : hasMark ? (
+                      <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
+                    ) : null}
                   </Pressable>
                 );
               })}
             </View>
           )}
         </View>
+
+        {/* Edit toolbar when selecting a range */}
+        {editMode && rangeStartKey && (
+          <View style={styles.editBar}>
+            <Text style={styles.editText}>
+              Selected: {new Date(rangeStartKey).toLocaleDateString()} {rangeEndKey ? `— ${new Date(rangeEndKey).toLocaleDateString()}` : ""}
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => { setRangeStartKey(null); setRangeEndKey(null); }}>
+                <Text style={styles.actionBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionPrimary} onPress={() => submitRange('unavailable')}>
+                <Text style={styles.actionPrimaryText}>Set Unavailable</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => submitRange('available')}>
+                <Text style={styles.actionBtnText}>Set Available</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Monthly summary */}
         {!loading && !error && (
@@ -504,6 +625,24 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  toggleBtn: {
+    marginLeft: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  toggleText: { fontSize: 12, color: colors.textMuted, fontWeight: '700' },
+  toggleTextActive: { color: colors.surface },
+
   loadingBox: {
     paddingVertical: spacing.xl,
     alignItems: "center",
@@ -519,6 +658,37 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   retryText: { color: colors.primary, fontWeight: "700", fontSize: 13 },
+
+  editBar: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  editText: { fontSize: 13, color: colors.text, fontWeight: '700' },
+  actionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  actionBtnText: { color: colors.text, fontWeight: '700' },
+  actionPrimary: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.primary,
+  },
+  actionPrimaryText: { color: colors.surface, fontWeight: '800' },
 
   summaryRow: {
     flexDirection: "row",
