@@ -1,6 +1,7 @@
        const crypto = require("crypto");
 const mongoose = require("mongoose");
 const CarBooking = require("../../models/travel/carBooking");
+const RideHistory = require("../../models/travel/rideHistory");
 const OwnerAvailability = require("../../models/travel/ownerAvailability");
 const Car = require("../../models/travel/cars");
 const CarOwner = require("../../models/travel/carOwner");
@@ -12,6 +13,7 @@ const { sendCustomEmail } = require("../../nodemailer/nodemailer");
 const {
   createUserNotificationSafe,
 } = require("../notification/helpers");
+const { logNewRideEvent, toObjectIdOrNull } = require("../../utils/rideHistory");
 
 const BOOKING_STATUS = new Set([
   "Pending",
@@ -671,6 +673,16 @@ exports.bookCar = async (req, res) => {
     }
 
     const isConfirmed = initialBookingStatus === "Confirmed";
+    await logNewRideEvent({
+      car: reservedCar,
+      booking: newBooking,
+      source: "BOOKING",
+      metadata: {
+        bookingStatus: newBooking.bookingStatus,
+        rideStatus: newBooking.rideStatus,
+      },
+    });
+
     await sendTravelEmailSafe({
       email: customerEmail,
       subject: isConfirmed
@@ -1289,6 +1301,72 @@ exports.getBookingsByCar = async (req, res) => {
     });
   } catch (error) {
     console.error("getBookingsByCar error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ── Owner: car-level ride history stats (new rides + route changes) ──────────
+exports.getRideHistoryByCar = async (req, res) => {
+  try {
+    const { carId } = req.params;
+    if (!carId || !isValidObjectId(carId)) {
+      return res.status(400).json({ message: "Invalid carId" });
+    }
+
+    const callerOwner = await resolveCallerOwner(req);
+    if (!callerOwner) {
+      return res.status(403).json({ message: "Access denied: Rider account not found." });
+    }
+
+    const car = await Car.findById(carId).lean();
+    if (!car) {
+      return res.status(404).json({ message: "Car not found" });
+    }
+    if (String(car.ownerId) !== String(callerOwner._id)) {
+      return res.status(403).json({ message: "Access denied: You do not own this car." });
+    }
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const match = {
+      carId: toObjectIdOrNull(carId),
+      ownerId: toObjectIdOrNull(callerOwner._id),
+    };
+
+    const [items, total, groupedCounts] = await Promise.all([
+      RideHistory.find(match).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      RideHistory.countDocuments(match),
+      RideHistory.aggregate([
+        { $match: match },
+        { $group: { _id: "$eventType", count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const counters = groupedCounts.reduce(
+      (acc, row) => {
+        if (row?._id === "NEW_RIDE") acc.newRideCount = row.count;
+        if (row?._id === "ROUTE_CHANGED") acc.routeChangeCount = row.count;
+        return acc;
+      },
+      { newRideCount: 0, routeChangeCount: 0 },
+    );
+
+    return res.status(200).json({
+      car,
+      page,
+      limit,
+      total,
+      items,
+      stats: {
+        totalEvents: total,
+        newRideCount: counters.newRideCount,
+        routeChangeCount: counters.routeChangeCount,
+      },
+    });
+  } catch (error) {
+    console.error("getRideHistoryByCar error:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };

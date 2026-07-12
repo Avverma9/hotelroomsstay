@@ -3,6 +3,7 @@ const Car = require('../../models/travel/cars');
 const CarOwner = require('../../models/travel/carOwner');
 const User = require('../../models/user');
 const DashboardUser = require('../../models/dashboardUser');
+const { logRouteChangedEvent, routeSnapshotFrom } = require('../../utils/rideHistory');
 
 const toDate = (value) => {
   if (!value) {
@@ -459,6 +460,7 @@ exports.updateCar = async (req, res) => {
     }
 
     const data = { ...req.body };
+    const previousRoute = routeSnapshotFrom(existingCar);
     const images = req.files?.map((file) => file.location) || [];
 
     data.images = images.length > 0 ? images : existingCar.images;
@@ -518,6 +520,23 @@ exports.updateCar = async (req, res) => {
       new: true,
       runValidators: true,
     });
+
+    const nextRoute = routeSnapshotFrom({
+      pickupP: data.pickupP !== undefined ? data.pickupP : existingCar.pickupP,
+      dropP: data.dropP !== undefined ? data.dropP : existingCar.dropP,
+      pickupD: data.pickupD !== undefined ? data.pickupD : existingCar.pickupD,
+      dropD: data.dropD !== undefined ? data.dropD : existingCar.dropD,
+    });
+    await logRouteChangedEvent({
+      car: existingCar,
+      previousRoute,
+      newRoute: nextRoute,
+      source: 'CAR_UPDATE',
+      metadata: {
+        carId: String(existingCar._id),
+      },
+    });
+
     return res.status(200).json({ message: 'Successfully Updated', car: updatedCar });
   } catch (error) {
     console.error('updateCar error:', error);

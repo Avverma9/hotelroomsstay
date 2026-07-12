@@ -12,6 +12,7 @@ const {
   verifyPickupCode,
   verifyDropCode,
   getBookingsByCar,
+  getRideHistoryByCar,
 } = require('../../controllers/travel/booking');
 const router = express.Router();
 
@@ -26,5 +27,6 @@ router.get("/get-bookings-by/owner/:ownerId", auth, getBookingsOfOwner)
 router.post("/get-bookings-by/bookedBy", auth, getBookingBookedBy);
 router.get("/get-bookings-by/user/:userId", auth, getCarBookingByUserId);
 router.get("/get-bookings-by/car/:carId", auth, getBookingsByCar);
+router.get("/get-ride-history/by-car/:carId", auth, getRideHistoryByCar);
 
 module.exports = router;
