@@ -22,9 +22,17 @@ import {
   changeBookingStatus,
   getBookingsByCar,
   getCarById,
+  getCarRideHistory,
   releaseSeat,
 } from "../../../src/api";
-import type { Booking, BookingsByCarResponse, Car, Seat } from "../../../src/api";
+import type {
+  Booking,
+  BookingsByCarResponse,
+  Car,
+  RideHistoryByCarResponse,
+  RideHistoryEvent,
+  Seat,
+} from "../../../src/api";
 import { colors, radii, spacing, statusColors } from "../../../src/theme";
 
 type Tab = "bookings" | "seats" | "stats";
@@ -42,25 +50,60 @@ export default function CarBookingsScreen() {
   const [activeTab, setActiveTab] = useState<Tab>("bookings");
   const [car, setCar] = useState<Car | null>(null);
   const [bookingsData, setBookingsData] = useState<BookingsByCarResponse | null>(null);
+  const [rideHistoryData, setRideHistoryData] = useState<RideHistoryByCarResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [bookingFilter, setBookingFilter] = useState("All");
   const [actioning, setActioning] = useState<string | null>(null);
 
+  const fetchAllRideHistory = useCallback(async (carId: string): Promise<RideHistoryByCarResponse | null> => {
+    const pageSize = 100;
+    const first = await getCarRideHistory(carId, 1, pageSize);
+    const total = Math.max(0, Number(first?.total || 0));
+    const allItems = Array.isArray(first?.items) ? [...first.items] : [];
+
+    if (total <= allItems.length) {
+      return { ...first, items: allItems };
+    }
+
+    const totalPages = Math.min(50, Math.ceil(total / pageSize));
+    for (let page = 2; page <= totalPages; page += 1) {
+      const next = await getCarRideHistory(carId, page, pageSize);
+      const nextItems = Array.isArray(next?.items) ? next.items : [];
+      allItems.push(...nextItems);
+      if (allItems.length >= total) break;
+    }
+
+    return {
+      ...first,
+      items: allItems,
+      total,
+      page: 1,
+      limit: allItems.length,
+    };
+  }, []);
+
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const [carRes, bRes] = await Promise.allSettled([
+      const [carRes, bRes, historyRes] = await Promise.allSettled([
         getCarById(id),
         getBookingsByCar(id, { limit: 100 }),
+        fetchAllRideHistory(id),
       ]);
       if (carRes.status === "fulfilled") setCar(carRes.value);
-      if (bRes.status === "fulfilled")   setBookingsData(bRes.value);
+      if (carRes.status === "rejected") setCar(null);
+
+      if (bRes.status === "fulfilled") setBookingsData(bRes.value);
+      if (bRes.status === "rejected") setBookingsData(null);
+
+      if (historyRes.status === "fulfilled") setRideHistoryData(historyRes.value);
+      if (historyRes.status === "rejected") setRideHistoryData(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [id]);
+  }, [id, fetchAllRideHistory]);
 
   useFocusEffect(useCallback(() => {
     setLoading(true);
@@ -181,7 +224,7 @@ export default function CarBookingsScreen() {
         />
       )}
       {activeTab === "stats" && (
-        <StatsTab bookings={bookings} car={car} />
+        <StatsTab rideHistoryData={rideHistoryData} />
       )}
     </SafeAreaView>
   );
@@ -368,24 +411,41 @@ function SeatsTab({ seatConfig, onRelease, actioning, refreshing, onRefresh, onM
 }
 
 // ─── Stats Tab ────────────────────────────────────────────────────────────────
-function StatsTab({ bookings, car }: { bookings: (Booking & { seatDetails?: Seat[] })[]; car: Car | null }) {
-  const total     = bookings.length;
-  const confirmed = bookings.filter((b) => b.bookingStatus === "Confirmed").length;
-  const completed = bookings.filter((b) => b.bookingStatus === "Completed").length;
-  const cancelled = bookings.filter((b) => b.bookingStatus === "Cancelled").length;
-  const pending   = bookings.filter((b) => b.bookingStatus === "Pending").length;
-  const revenue   = bookings.filter((b) => b.bookingStatus === "Completed").reduce((s, b) => s + (b.price ?? 0), 0);
-  const pendingRev = bookings.filter((b) => b.bookingStatus === "Confirmed").reduce((s, b) => s + (b.price ?? 0), 0);
+function StatsTab({ rideHistoryData }: { rideHistoryData: RideHistoryByCarResponse | null }) {
+  const [range, setRange] = useState<"ALL" | "7D" | "30D" | "90D">("ALL");
 
-  const seatFillRate = car?.seatConfig && car.seatConfig.length > 0
-    ? Math.round((car.seatConfig.filter((s) => s.isBooked).length / car.seatConfig.length) * 100)
-    : 0;
+  const items = rideHistoryData?.items ?? [];
+  const filteredItems = useMemo(() => {
+    if (range === "ALL") return items;
 
-  // Booking trend by date (last 7 unique dates)
+    const days = range === "7D" ? 7 : range === "30D" ? 30 : 90;
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    return items.filter((item) => {
+      if (!item.createdAt) return false;
+      const ts = new Date(item.createdAt).getTime();
+      if (Number.isNaN(ts)) return false;
+      return ts >= cutoff;
+    });
+  }, [items, range]);
+
+  const routeChanges = filteredItems.filter((item) => item.eventType === "ROUTE_CHANGED");
+  const newRides = filteredItems.filter((item) => item.eventType === "NEW_RIDE");
+  const stats = rideHistoryData?.stats ?? {
+    totalEvents: 0,
+    newRideCount: 0,
+    routeChangeCount: 0,
+  };
+
+  const effectiveStats = {
+    totalEvents: range === "ALL" ? stats.totalEvents : filteredItems.length,
+    newRideCount: range === "ALL" ? stats.newRideCount : newRides.length,
+    routeChangeCount: range === "ALL" ? stats.routeChangeCount : routeChanges.length,
+  };
+
   const byDate: Record<string, number> = {};
-  bookings.forEach((b) => {
-    if (!b.createdAt) return;
-    const d = new Date(b.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+  filteredItems.forEach((item) => {
+    if (!item.createdAt) return;
+    const d = new Date(item.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
     byDate[d] = (byDate[d] || 0) + 1;
   });
   const dateEntries = Object.entries(byDate).slice(-7);
@@ -393,37 +453,58 @@ function StatsTab({ bookings, car }: { bookings: (Booking & { seatDetails?: Seat
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.listPad}>
+      <View style={styles.statsFilterWrap}>
+        {[
+          { key: "ALL", label: "All" },
+          { key: "7D", label: "7 Days" },
+          { key: "30D", label: "30 Days" },
+          { key: "90D", label: "90 Days" },
+        ].map((opt) => {
+          const active = range === opt.key;
+          return (
+            <TouchableOpacity
+              key={opt.key}
+              style={[styles.statsFilterChip, active && styles.statsFilterChipActive]}
+              onPress={() => setRange(opt.key as any)}
+            >
+              <Text style={[styles.statsFilterText, active && styles.statsFilterTextActive]}>{opt.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       {/* Stat grid */}
       <View style={styles.statsGrid}>
-        <StatBox label="Total"       value={total}     color={colors.primary} bg={colors.primarySoft} />
-        <StatBox label="Confirmed"   value={confirmed} color="#2563EB"        bg="#DBEAFE" />
-        <StatBox label="Completed"   value={completed} color="#059669"        bg="#D1FAE5" />
-        <StatBox label="Cancelled"   value={cancelled} color="#DC2626"        bg="#FEE2E2" />
-        <StatBox label="Pending"     value={pending}   color="#D97706"        bg="#FEF3C7" />
-        <StatBox label="Seat Fill %" value={`${seatFillRate}%`} color="#6366F1" bg="#EEF2FF" />
+        <StatBox label="Total Events" value={effectiveStats.totalEvents} color={colors.primary} bg={colors.primarySoft} />
+        <StatBox label="New Rides" value={effectiveStats.newRideCount} color="#059669" bg="#D1FAE5" />
+        <StatBox label="Route Changes" value={effectiveStats.routeChangeCount} color="#D97706" bg="#FEF3C7" />
+        <StatBox label="Fetched" value={filteredItems.length} color="#6366F1" bg="#EEF2FF" />
       </View>
 
-      {/* Revenue */}
+      {/* Route change full details */}
       <View style={styles.revenueCard}>
-        <Text style={styles.revenueTitle}>Revenue</Text>
-        <View style={styles.revenueRow}>
-          <Text style={styles.revenueLabel}>Earned (Completed)</Text>
-          <Text style={[styles.revenueValue, { color: "#059669" }]}>₹{revenue.toLocaleString("en-IN")}</Text>
-        </View>
-        <View style={styles.revenueRow}>
-          <Text style={styles.revenueLabel}>Pending (Confirmed)</Text>
-          <Text style={[styles.revenueValue, { color: "#D97706" }]}>₹{pendingRev.toLocaleString("en-IN")}</Text>
-        </View>
-        <View style={[styles.revenueRow, { borderBottomWidth: 0 }]}>
-          <Text style={[styles.revenueLabel, { fontWeight: "800", color: colors.text }]}>Total Pipeline</Text>
-          <Text style={[styles.revenueValue, { color: colors.primary }]}>₹{(revenue + pendingRev).toLocaleString("en-IN")}</Text>
-        </View>
+        <Text style={styles.revenueTitle}>Route Change Full History</Text>
+        {routeChanges.length === 0 ? (
+          <Text style={styles.revenueLabel}>Abhi tak koi route change record nahi hai.</Text>
+        ) : (
+          routeChanges.map((item) => <RouteChangeDetailRow key={item._id} item={item} />)
+        )}
       </View>
 
-      {/* Booking trend */}
+      {/* New rides quick list */}
+      <View style={styles.revenueCard}>
+        <Text style={styles.revenueTitle}>New Ride History</Text>
+        {newRides.length === 0 ? (
+          <Text style={styles.revenueLabel}>Abhi tak koi new ride record nahi hai.</Text>
+        ) : (
+          newRides.slice(0, 10).map((item) => <RideHistoryRow key={item._id} item={item} />)
+        )}
+      </View>
+
+      {/* Event trend */}
       {dateEntries.length > 0 && (
         <View style={styles.trendCard}>
-          <Text style={styles.revenueTitle}>Booking Trend (last {dateEntries.length} dates)</Text>
+          <Text style={styles.revenueTitle}>Event Trend ({range === "ALL" ? "all data" : range.toLowerCase()})</Text>
           {dateEntries.map(([date, count]) => (
             <View key={date} style={styles.trendRow}>
               <Text style={styles.trendDate}>{date}</Text>
@@ -436,6 +517,45 @@ function StatsTab({ bookings, car }: { bookings: (Booking & { seatDetails?: Seat
         </View>
       )}
     </ScrollView>
+  );
+}
+
+function RideHistoryRow({ item }: { item: RideHistoryEvent }) {
+  const isRouteChanged = item.eventType === "ROUTE_CHANGED";
+  const title = isRouteChanged ? "Route Changed" : "New Ride Created";
+
+  const prev = item.previousRoute;
+  const next = item.newRoute || item.route;
+  const routeText = isRouteChanged
+    ? `${prev?.pickupP || "-"} -> ${prev?.dropP || "-"} to ${next?.pickupP || "-"} -> ${next?.dropP || "-"}`
+    : `${item.route?.pickupP || "-"} -> ${item.route?.dropP || "-"}`;
+
+  return (
+    <View style={styles.revenueRow}>
+      <View style={{ flex: 1, marginRight: spacing.sm }}>
+        <Text style={[styles.revenueLabel, { color: colors.text, fontWeight: "700" }]}>{title}</Text>
+        <Text style={styles.bookingDate} numberOfLines={1}>{routeText}</Text>
+      </View>
+      <Text style={[styles.revenueValue, { color: isRouteChanged ? "#D97706" : "#059669" }]}>#{item.bookingCode || item._id.slice(-5)}</Text>
+    </View>
+  );
+}
+
+function RouteChangeDetailRow({ item }: { item: RideHistoryEvent }) {
+  const prev = item.previousRoute || {};
+  const next = item.newRoute || item.route || {};
+
+  const fmt = (v?: string) => (v ? new Date(v).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-");
+
+  return (
+    <View style={[styles.revenueRow, { flexDirection: "column", alignItems: "flex-start", gap: 4, borderBottomColor: colors.border }]}> 
+      <Text style={[styles.revenueLabel, { color: colors.text, fontWeight: "800" }]}>Route Changed • #{item.bookingCode || item._id.slice(-5)}</Text>
+      <Text style={styles.bookingDate}>Changed At: {fmt(item.createdAt)}</Text>
+      <Text style={styles.bookingDate}>Old Route: {prev.pickupP || "-"} -> {prev.dropP || "-"}</Text>
+      <Text style={styles.bookingDate}>Old Date: {fmt(prev.pickupD)} -> {fmt(prev.dropD)}</Text>
+      <Text style={styles.bookingDate}>New Route: {next.pickupP || "-"} -> {next.dropP || "-"}</Text>
+      <Text style={styles.bookingDate}>New Date: {fmt(next.pickupD)} -> {fmt(next.dropD)}</Text>
+    </View>
   );
 }
 
@@ -562,6 +682,19 @@ const styles = StyleSheet.create<any>({
   releaseBtnText: { fontSize: 12, fontWeight: "700", color: "#DC2626" },
   manageAllBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.md, justifyContent: "center", paddingVertical: 12, borderRadius: 999, borderWidth: 1, borderColor: colors.primary },
   manageAllText:{ fontSize: 13, fontWeight: "700", color: colors.primary },
+
+  statsFilterWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginBottom: spacing.sm },
+  statsFilterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  statsFilterChipActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  statsFilterText: { fontSize: 12, fontWeight: "700", color: colors.textMuted },
+  statsFilterTextActive: { color: colors.primary },
 
   statsGrid:  { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.md },
   statBox:    { width: "47.5%", borderRadius: radii.xl, padding: spacing.md, alignItems: "center" },

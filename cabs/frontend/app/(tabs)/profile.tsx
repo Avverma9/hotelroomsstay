@@ -155,8 +155,8 @@ export default function ProfileScreen() {
         {/* Quick Stats Grid */}
         <View style={[styles.quickGrid, { paddingHorizontal: PADDING_H }]}>
           <QuickCard w={quickCardWidth} label="My Cars" value={cars.length} icon="car-sport" onPress={() => router.push("/(tabs)/cars")} />
-          <QuickCard w={quickCardWidth} label="Ride History" value={bookings.length} icon="time" onPress={() => router.push("/(tabs)/bookings")} />
-          <QuickCard w={quickCardWidth} label="My Ride" value={activeBookings.length} icon="flash" onPress={() => router.push("/(tabs)/bookings")} />
+          <QuickCard w={quickCardWidth} label="Bookings" value={bookings.length} icon="time" onPress={() => router.push("/(tabs)/bookings")} />
+          <QuickCard w={quickCardWidth} label="Published Rides" value={cars.length} icon="albums" onPress={() => router.push("/cars/my-rides")} />
           <QuickCard w={quickCardWidth} label="Calendar" value={dayBuckets.filter((d) => d.active).length} icon="calendar" onPress={() => {
             if (cars.length > 0) {
               const c = cars[0];

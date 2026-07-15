@@ -96,8 +96,9 @@ export default function MyCarsScreen() {
                   </View>
                   <View style={[styles.badge, { backgroundColor: item.isAvailable ? "#D1FAE5" : "#FEE2E2" }]}>
                     <View style={[styles.dot, { backgroundColor: item.isAvailable ? "#059669" : "#DC2626" }]} />
+                    
                     <Text style={[styles.badgeText, { color: item.isAvailable ? "#059669" : "#DC2626" }]}>
-                      {item.isAvailable ? "Available" : "On Trip"}
+                   Vehicle Status : -  {item.isAvailable ? "Available" : "On Trip"}
                     </Text>
                   </View>
                 </View>

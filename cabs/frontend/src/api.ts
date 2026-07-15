@@ -294,6 +294,46 @@ export type BookingsByCarResponse = {
   limit: number;
   car: Car;
 };
+
+export type RideHistoryEvent = {
+  _id: string;
+  eventType: "NEW_RIDE" | "ROUTE_CHANGED";
+  bookingId?: string;
+  bookingCode?: string;
+  route?: {
+    pickupP?: string;
+    dropP?: string;
+    pickupD?: string;
+    dropD?: string;
+  };
+  previousRoute?: {
+    pickupP?: string;
+    dropP?: string;
+    pickupD?: string;
+    dropD?: string;
+  };
+  newRoute?: {
+    pickupP?: string;
+    dropP?: string;
+    pickupD?: string;
+    dropD?: string;
+  };
+  source?: "BOOKING" | "CAR_UPDATE" | "SYSTEM";
+  createdAt?: string;
+};
+
+export type RideHistoryByCarResponse = {
+  car: Car;
+  page: number;
+  limit: number;
+  total: number;
+  items: RideHistoryEvent[];
+  stats: {
+    totalEvents: number;
+    newRideCount: number;
+    routeChangeCount: number;
+  };
+};
 export async function getBookingsByCar(
   carId: string,
   params?: { status?: string; dateFrom?: string; dateTo?: string; page?: number; limit?: number }
@@ -358,16 +398,27 @@ export async function checkCarOverlap(
 }
 
 /**
- * GET /travel/get-ride-history/car/:carId
- * Returns all *completed* bookings for a given car.
- * Falls back to getBookingsByCar with status=Completed if no dedicated endpoint exists.
+ * GET /travel/get-ride-history/by-car/:carId
+ * Returns car-level ride history events, separate from booking history.
  */
-export async function getCarRideHistory(carId: string, page = 1, limit = 30): Promise<BookingsByCarResponse> {
+export async function getCarRideHistory(carId: string, page = 1, limit = 30): Promise<RideHistoryByCarResponse> {
   try {
-    const result = await getBookingsByCar(carId, { status: "Completed", page, limit });
-    return result;
+    const { data } = await travelApi.get<RideHistoryByCarResponse>(
+      `/get-ride-history/by-car/${carId}`,
+      { params: { page, limit } },
+    );
+    return data;
   } catch (err: any) {
-    if (err?.response?.status === 404) return { bookings: [], total: 0, page, limit, car: {} as Car };
+    if (err?.response?.status === 404) {
+      return {
+        car: {} as Car,
+        page,
+        limit,
+        total: 0,
+        items: [],
+        stats: { totalEvents: 0, newRideCount: 0, routeChangeCount: 0 },
+      };
+    }
     throw err;
   }
 }

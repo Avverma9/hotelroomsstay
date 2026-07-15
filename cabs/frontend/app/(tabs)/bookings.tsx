@@ -1,6 +1,6 @@
 /**
- * Ride History Tab — Rider (owner) view.
- * Lists all bookings across the Rider's cars with quick access to new rides.
+ * Bookings Tab — Rider (owner) view.
+ * Lists all bookings across the Rider's cars.
  * Rider can confirm/cancel pending bookings.
  */
 import { Ionicons } from "@expo/vector-icons";
@@ -83,9 +83,9 @@ export default function RiderBookingsScreen() {
       {/* Header Section */}
       <View style={styles.header}>
         <View style={styles.headerTextContainer}>
-          <Text style={styles.title}>Ride History</Text>
+          <Text style={styles.title}>Bookings</Text>
           <Text style={styles.subtitle}>
-            {bookings.length} rides tracked across your account
+            {bookings.length} bookings tracked across your account
           </Text>
         </View>
         <TouchableOpacity
@@ -159,7 +159,7 @@ export default function RiderBookingsScreen() {
           <View style={styles.emptyIconContainer}>
             <Ionicons name="car-sport-outline" size={48} color={colors.textLight} />
           </View>
-          <Text style={styles.emptyTitle}>No ride history yet</Text>
+          <Text style={styles.emptyTitle}>No bookings yet</Text>
           <Text style={styles.emptyText}>
             {filter === "All"
               ? "Once riders book available cars, the history will appear here."

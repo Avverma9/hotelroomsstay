@@ -1,10 +1,10 @@
 /**
- * Ride History — per-vehicle completed ride log.
+ * Ride History Events — per-vehicle event log.
  * Route: /cars/ride-history?carId=xxx&carName=xxx
  *
- * Shows all *completed* rides for the vehicle with:
- *  - Lifetime stats (total rides, revenue, passengers)
- *  - Chronological list with route, passenger, price, codes
+ * Shows ride-history events only (not booking history):
+ *  - NEW_RIDE (when a new ride is created)
+ *  - ROUTE_CHANGED (when pickup/drop route or date changes)
  */
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -19,16 +19,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getCarRideHistory, type Booking } from "../../src/api";
-import { formatRange } from "../../src/availability";
+import { getCarRideHistory, type RideHistoryEvent } from "../../src/api";
 import { colors, radii, spacing } from "../../src/theme";
-
-const RIDE_STATUS_COLOR: Record<string, string> = {
-  "Ride Completed": colors.success,
-  Completed: colors.success,
-  Cancelled: "#DC2626",
-  Failed: "#DC2626",
-};
 
 export default function RideHistoryScreen() {
   const router = useRouter();
@@ -37,7 +29,7 @@ export default function RideHistoryScreen() {
     carName?: string;
   }>();
 
-  const [rides, setRides] = useState<Booking[]>([]);
+  const [rides, setRides] = useState<RideHistoryEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -54,7 +46,7 @@ export default function RideHistoryScreen() {
 
       try {
         const result = await getCarRideHistory(carId, nextPage, 20);
-        const incoming = result.bookings ?? [];
+        const incoming = result.items ?? [];
         setTotal(result.total ?? 0);
         setRides((prev) => (reset ? incoming : [...prev, ...incoming]));
         if (!reset) setPage((p) => p + 1);
@@ -81,11 +73,8 @@ export default function RideHistoryScreen() {
   };
 
   // ── Stats ─────────────────────────────────────────────────────────────────
-  const totalRevenue = rides.reduce((sum, r) => sum + (r.price ?? 0), 0);
-  const totalPassengers = rides.reduce(
-    (sum, r) => sum + (r.totalSeatsBooked ?? 1),
-    0
-  );
+  const newRideCount = rides.filter((r) => r.eventType === "NEW_RIDE").length;
+  const routeChangeCount = rides.filter((r) => r.eventType === "ROUTE_CHANGED").length;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -136,8 +125,8 @@ export default function RideHistoryScreen() {
           ListHeaderComponent={
             <StatsHeader
               total={total}
-              revenue={totalRevenue}
-              passengers={totalPassengers}
+              newRides={newRideCount}
+              routeChanges={routeChangeCount}
             />
           }
           ListEmptyComponent={
@@ -147,9 +136,9 @@ export default function RideHistoryScreen() {
                 size={52}
                 color={colors.textLight}
               />
-              <Text style={styles.emptyTitle}>No completed rides yet</Text>
+              <Text style={styles.emptyTitle}>No ride history events yet</Text>
               <Text style={styles.emptyText}>
-                Completed rides will appear here with full journey details.
+                New ride aur route change events yaha dikhai denge.
               </Text>
             </View>
           }
@@ -176,12 +165,12 @@ export default function RideHistoryScreen() {
 
 function StatsHeader({
   total,
-  revenue,
-  passengers,
+  newRides,
+  routeChanges,
 }: {
   total: number;
-  revenue: number;
-  passengers: number;
+  newRides: number;
+  routeChanges: number;
 }) {
   return (
     <View style={styles.statsRow}>
@@ -192,15 +181,15 @@ function StatsHeader({
         color={colors.primary}
       />
       <StatTile
-        icon="cash"
-        label="Revenue"
-        value={`₹${Math.round(revenue).toLocaleString("en-IN")}`}
+        icon="add-circle"
+        label="New Rides"
+        value={String(newRides)}
         color={colors.success}
       />
       <StatTile
-        icon="people"
-        label="Passengers"
-        value={String(passengers)}
+        icon="swap-horizontal"
+        label="Route Changes"
+        value={String(routeChanges)}
         color={colors.info}
       />
     </View>
@@ -229,10 +218,10 @@ function StatTile({
 
 // ── Individual ride card ──────────────────────────────────────────────────
 
-function RideCard({ ride }: { ride: Booking }) {
-  const rideStatusColor =
-    RIDE_STATUS_COLOR[ride.rideStatus ?? ""] ?? colors.textMuted;
-
+function RideCard({ ride }: { ride: RideHistoryEvent }) {
+  const isRouteChange = ride.eventType === "ROUTE_CHANGED";
+  const rideStatusColor = isRouteChange ? "#D97706" : colors.success;
+  const route = ride.newRoute || ride.route;
   const fmtDate = (iso?: string) =>
     iso
       ? new Date(iso).toLocaleDateString("en-IN", {
@@ -250,10 +239,10 @@ function RideCard({ ride }: { ride: Booking }) {
       <View style={styles.cardTop}>
         <View style={{ flex: 1 }}>
           <Text style={styles.cardBookingId}>
-            #{ride.bookingId || ride._id?.slice(-6).toUpperCase()}
+            #{ride.bookingCode || ride._id?.slice(-6).toUpperCase()}
           </Text>
           <Text style={styles.cardPassenger} numberOfLines={1}>
-            {ride.passengerName || ride.bookedBy || "Passenger"}
+            {isRouteChange ? "Route Updated" : "New Ride Created"}
           </Text>
         </View>
         <View>
@@ -269,11 +258,11 @@ function RideCard({ ride }: { ride: Booking }) {
             <Text
               style={[styles.rideStatusText, { color: rideStatusColor }]}
             >
-              {ride.rideStatus || ride.bookingStatus}
+              {isRouteChange ? "ROUTE_CHANGED" : "NEW_RIDE"}
             </Text>
           </View>
           <Text style={styles.cardPrice}>
-            ₹{Math.round(ride.price ?? 0).toLocaleString("en-IN")}
+            {fmtDate(ride.createdAt)}
           </Text>
         </View>
       </View>
@@ -285,7 +274,7 @@ function RideCard({ ride }: { ride: Booking }) {
           <View style={{ flex: 1 }}>
             <Text style={styles.routeLabel}>PICKUP</Text>
             <Text style={styles.routeVal} numberOfLines={2}>
-              {ride.pickupP || "—"}
+              {route?.pickupP || "—"}
             </Text>
           </View>
         </View>
@@ -295,7 +284,7 @@ function RideCard({ ride }: { ride: Booking }) {
           <View style={{ flex: 1 }}>
             <Text style={styles.routeLabel}>DROP</Text>
             <Text style={styles.routeVal} numberOfLines={2}>
-              {ride.dropP || "—"}
+              {route?.dropP || "—"}
             </Text>
           </View>
         </View>
@@ -305,53 +294,32 @@ function RideCard({ ride }: { ride: Booking }) {
       <View style={styles.metaGrid}>
         <MetaCell
           icon="time-outline"
-          label="Start"
-          value={fmtDate(ride.rideStartedAt ?? ride.pickupD)}
+          label="Pickup"
+          value={fmtDate(route?.pickupD)}
         />
         <MetaCell
           icon="flag-outline"
-          label="End"
-          value={fmtDate(ride.rideCompletedAt ?? ride.dropD)}
+          label="Drop"
+          value={fmtDate(route?.dropD)}
         />
         <MetaCell
-          icon="people-outline"
-          label="Seats"
-          value={String(ride.totalSeatsBooked ?? 1)}
+          icon="pulse-outline"
+          label="Event"
+          value={ride.eventType}
         />
         <MetaCell
-          icon="call-outline"
-          label="Mobile"
-          value={ride.customerMobile || "—"}
+          icon="calendar-outline"
+          label="Logged"
+          value={fmtDate(ride.createdAt)}
         />
       </View>
 
-      {/* Sharing type chip */}
-      {ride.sharingType && (
+      {/* Extra detail for route change */}
+      {isRouteChange && ride.previousRoute && (
         <View style={styles.sharingRow}>
-          <View
-            style={[
-              styles.sharingChip,
-              {
-                backgroundColor:
-                  ride.sharingType === "Shared" ? "#DBEAFE" : "#FEF3C7",
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.sharingText,
-                {
-                  color:
-                    ride.sharingType === "Shared" ? "#2563EB" : "#D97706",
-                },
-              ]}
-            >
-              {ride.sharingType}
-            </Text>
-          </View>
-          {ride.vehicleNumber && (
-            <Text style={styles.vehicleNum}>{ride.vehicleNumber}</Text>
-          )}
+          <Text style={styles.vehicleNum} numberOfLines={1}>
+            From: {ride.previousRoute.pickupP || "-"} -> {ride.previousRoute.dropP || "-"}
+          </Text>
         </View>
       )}
     </View>
