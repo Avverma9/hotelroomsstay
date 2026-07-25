@@ -1959,6 +1959,18 @@ const getHotelsByFilters = async (req, res) => {
       hotelModel.find(filters).lean(),
     ]);
 
+    // DEBUG: Log what we found
+    console.log(`\n🔍 Hotel Search Debug:`);
+    console.log(`Search term: "${searchTrim}"`);
+    console.log(`Filters applied:`, JSON.stringify(filters, null, 2));
+    console.log(`Hotels found before processing: ${allHotels.length}`);
+    if (allHotels.length > 0 && allHotels.length <= 5) {
+      allHotels.forEach((h, idx) => {
+        console.log(`  ${idx + 1}. ${h.hotelName} - Rooms: ${h.rooms?.length || 0}, isAccepted: ${h.isAccepted}`);
+      });
+    }
+    console.log(``);
+
     const calculateGST = (price) => {
       if (!gstData) {
         return { gstPercent: 0, gstAmount: 0 };
@@ -2109,11 +2121,13 @@ const getHotelsByFilters = async (req, res) => {
       });
 
       if (!matchingRooms.length) {
+        console.log(`❌ Hotel "${hotel.hotelName}" filtered out: no matching rooms`);
         continue;
       }
 
       const isFullyBooked = availableRooms < requestedRoomsCount;
       if (onlyAvailableRequired === true && isFullyBooked) {
+        console.log(`❌ Hotel "${hotel.hotelName}" filtered out: fully booked (${availableRooms} < ${requestedRoomsCount})`);
         continue;
       }
 
@@ -2193,6 +2207,9 @@ const getHotelsByFilters = async (req, res) => {
 
     const total = processedHotels.length;
     const paginatedHotels = processedHotels.slice(skip, skip + limitNum);
+
+    console.log(`✅ Final results: ${total} hotels after processing`);
+    console.log(`Returning ${paginatedHotels.length} hotels (page ${pageNum}, limit ${limitNum})\n`);
 
     return res.status(200).json({
       success: true,
