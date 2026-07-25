@@ -169,61 +169,66 @@ export default function HotelSearchPage() {
     }
   }, [hotels, dispatch, checkInDate, checkOutDate]);
 
-  const filteredHotels = useMemo(() => {
-    const validHotels = Array.isArray(hotels)
-      ? hotels.filter((item) => item && typeof item === 'object')
-      : [];
+const filteredHotels = useMemo(() => {
+  // 1. API response structure check: Agar hotels ek object hai to .data array nikalye
+  const hotelsArray = Array.isArray(hotels) 
+    ? hotels 
+    : (hotels?.data && Array.isArray(hotels.data) ? hotels.data : []);
 
-    const filtered = validHotels.filter((hotel) => {
-      const minHotelPrice = getHotelMinEffectivePrice(hotel, checkInDate, checkOutDate);
-      const normalizedAmenities = flattenAmenities(hotel.amenities);
+  const filtered = hotelsArray.filter((hotel) => {
+    if (!hotel || typeof hotel !== 'object') return false;
 
-      const priceMatch =
-        minHotelPrice >= (filters.minPrice ?? 0) &&
-        minHotelPrice <= (filters.maxPrice ?? Number.MAX_SAFE_INTEGER);
+    // 2. Price Logic: Naye JSON mein startingPrice top-level par hai
+    // Agar startingPrice 0 hai aur rooms khali hain, to usey 0 hi maaniye (ya fallback set kariye)
+    let hotelPrice = Number(hotel.startingPrice) || 0;
+    
+    // Fallback: Agar startingPrice 0 hai par rooms mein data hai (aapke case mein rooms [] hai)
+    if (hotelPrice === 0 && hotel.rooms?.length > 0) {
+      hotelPrice = Math.min(...hotel.rooms.map(r => Number(r.finalPrice || r.price || 0)));
+    }
 
-      const starMatch =
-        !filters.starRating || String(hotel.starRating || '').startsWith(filters.starRating);
+    // Price Match (Special Case: Agar price 0 hai to default filters se bahar na ho jaye)
+    const minP = filters.minPrice ?? 0;
+    const maxP = filters.maxPrice ?? Number.MAX_SAFE_INTEGER;
+    const priceMatch = hotelPrice === 0 ? true : (hotelPrice >= minP && hotelPrice <= maxP);
 
-      const amenityMatch =
-        filters.amenities.length === 0 ||
-        filters.amenities.every((selected) =>
-          normalizedAmenities.some((amenity) =>
-            String(amenity).toLowerCase().includes(selected.toLowerCase())
-          )
-        );
+    // 3. Star Rating Match: API "5" (string) bhej raha hai
+    const starMatch = !filters.starRating || String(hotel.starRating) === String(filters.starRating);
 
-      const propertyMatch =
-        filters.propertyType.length === 0 ||
-        (hotel.propertyType || []).some((type) => filters.propertyType.includes(type));
+    // 4. Amenities Match: Naye JSON mein flat array hai ["Free WiFi", "Parking"]
+    const hotelAmenities = Array.isArray(hotel.amenities) ? hotel.amenities : [];
+    const amenityMatch = filters.amenities.length === 0 ||
+      filters.amenities.every((selected) =>
+        hotelAmenities.some((amenity) =>
+          String(amenity).toLowerCase().includes(selected.toLowerCase())
+        )
+      );
 
-      const roomTypeMatch =
-        filters.type.length === 0 ||
-        (hotel.rooms || []).some((room) =>
-          filters.type.some((selected) =>
-            room.type && room.type.toLowerCase().includes(selected.toLowerCase())
-          )
-        );
+    // 5. Property Type Match
+    const propertyMatch = filters.propertyType.length === 0 ||
+      (hotel.propertyType || []).some((type) => filters.propertyType.includes(type));
 
-      const bedTypeMatch =
-        filters.bedTypes.length === 0 ||
-        (hotel.rooms || []).some((room) => {
-          if (!room.bedTypes) return false;
-          return filters.bedTypes.some((selected) =>
-            room.bedTypes.toLowerCase().includes(selected.toLowerCase())
-          );
-        });
+    // 6. Room & Bed Type Match: Safety check kyunki rooms khali [] ho sakte hain
+    const hasRooms = Array.isArray(hotel.rooms) && hotel.rooms.length > 0;
+    
+    const roomTypeMatch = filters.type.length === 0 || (hasRooms && hotel.rooms.some((room) =>
+      filters.type.some((selected) => room.type?.toLowerCase().includes(selected.toLowerCase()))
+    ));
 
-      return priceMatch && starMatch && amenityMatch && propertyMatch && roomTypeMatch && bedTypeMatch;
-    });
+    const bedTypeMatch = filters.bedTypes.length === 0 || (hasRooms && hotel.rooms.some((room) =>
+      filters.bedTypes.some((selected) => room.bedTypes?.toLowerCase().includes(selected.toLowerCase()))
+    ));
 
-    return filtered.sort((a, b) => {
-      const priceA = getHotelMinEffectivePrice(a, checkInDate, checkOutDate);
-      const priceB = getHotelMinEffectivePrice(b, checkInDate, checkOutDate);
-      return sortOrder === 'asc' ? priceA - priceB : priceB - priceA;
-    });
-  }, [filters, hotels, sortOrder, checkInDate, checkOutDate]);
+    return priceMatch && starMatch && amenityMatch && propertyMatch && roomTypeMatch && bedTypeMatch;
+  });
 
+  // Sorting Logic using startingPrice
+  return filtered.sort((a, b) => {
+    const priceA = Number(a.startingPrice) || 0;
+    const priceB = Number(b.startingPrice) || 0;
+    return sortOrder === 'asc' ? priceA - priceB : priceB - priceA;
+  });
+}, [filters, hotels, sortOrder, checkInDate, checkOutDate]);
   const handleClearFilters = () => {
     dispatch(resetFilters());
   };

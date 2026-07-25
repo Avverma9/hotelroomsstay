@@ -60,7 +60,24 @@ export const searchHotels = createAsyncThunk(
       const endpoint = `/hotels/filters?${queryString}`;
       
       const response = await apiClient.get(endpoint);
-      return response.data.data || response.data; // Handle both {data: [...]} and direct array
+      
+      // Handle API response format: {success: true, data: [...], total: X}
+      if (response.data && response.data.success && Array.isArray(response.data.data)) {
+        return response.data.data;
+      }
+      
+      // Fallback: if data is directly an array
+      if (Array.isArray(response.data.data)) {
+        return response.data.data;
+      }
+      
+      // Fallback: if response.data is directly an array
+      if (Array.isArray(response.data)) {
+        return response.data;
+      }
+      
+      // No valid data found
+      return [];
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || error.message || 'Failed to fetch hotels');
     }

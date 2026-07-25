@@ -98,7 +98,7 @@ export default function HotelCard({ hotel = {}, gstData, tripMeta = null }) {
   const [currentImgIndex, setCurrentImgIndex] = React.useState(0);
   const galleryImages = useMemo(() => buildGalleryImages(hotel), [hotel]);
   const hotelIdentifier = useMemo(() => deriveHotelIdentifier(hotel), [hotel]);
-
+console.log("insidehotel card", hotel)
   React.useEffect(() => {
     if (currentImgIndex >= galleryImages.length) {
       setCurrentImgIndex(0);
