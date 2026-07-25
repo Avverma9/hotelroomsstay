@@ -16,6 +16,8 @@ import {
   Clock,
   XCircle,
   Save,
+  Calendar,
+  Plus,
 } from 'lucide-react'
 import {
   getBookingsOfOwner,
@@ -23,10 +25,13 @@ import {
   updateBooking,
   clearCarError,
   clearCarSuccess,
+  getOwnerAvailability,
+  addOwnerAvailability,
 } from '../../../redux/slices/tms/travel/car'
 import { selectAuth } from '../../../redux/slices/authSlice'
 import Breadcrumb from '../../components/breadcrumb'
 import BookingStatusBadge, { cfgFor, NEXT_STATUSES, STATUS_CFG, RideStatusBadge } from '../../components/tms/booking-status'
+import CarAvailabilityCalendar from '../../components/tms/CarAvailabilityCalendar'
 import { formatDate, formatDateTime, formatCurrency } from '../../utils/format'
 
 const getBookingsList = (payload) => {
@@ -462,7 +467,7 @@ function BookingDetailModal({ booking, onClose, onStatusChange, onEdit, updating
 export default function CarBookingsList({ ownerId: propOwnerId }) {
   const dispatch = useDispatch()
   const { user } = useSelector(selectAuth)
-  const { ownerBookings, owners, loading, error, success } = useSelector((state) => state.car)
+  const { ownerBookings, owners, loading, error, success, ownerAvailability } = useSelector((state) => state.car)
 
   const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
@@ -470,6 +475,8 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
   const [editingBooking, setEditingBooking]   = useState(null)
   const [updating, setUpdating]         = useState(false)
   const [saving, setSaving]             = useState(false)
+  const [viewMode, setViewMode]         = useState('list') // 'list' | 'calendar'
+  const [selectedCar, setSelectedCar]   = useState(null)
 
   // Owner ID: prop se aaya ho, ya logged-in user ka id
   const resolvedOwnerId = propOwnerId || user?.id || user?._id || ''
@@ -479,6 +486,25 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
   const statusOptions = useMemo(() => {
     const statuses = new Set(bookingsList.map((b) => b.status || b.bookingStatus).filter(Boolean))
     return ['All', ...Array.from(statuses)]
+  }, [bookingsList])
+
+  // Get unique cars from bookings
+  const uniqueCars = useMemo(() => {
+    const carMap = new Map()
+    bookingsList.forEach((b) => {
+      const carKey = b.vehicleId || b.carId || `${b.make}-${b.model}-${b.vehicleNumber}`
+      if (!carMap.has(carKey)) {
+        carMap.set(carKey, {
+          id: carKey,
+          name: `${b.make || ''} ${b.model || ''}`.trim() || 'Unknown Car',
+          vehicleNumber: b.vehicleNumber,
+          vehicleType: b.vehicleType,
+          make: b.make,
+          model: b.model,
+        })
+      }
+    })
+    return Array.from(carMap.values())
   }, [bookingsList])
 
   const filtered = useMemo(() => {
@@ -498,10 +524,31 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
     if (resolvedOwnerId) dispatch(getBookingsOfOwner(resolvedOwnerId))
   }
 
+  const loadOwnerAvailability = async () => {
+    if (!resolvedOwnerId) return
+    try {
+      // Load availability for current month
+      const now = new Date()
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+      
+      await dispatch(getOwnerAvailability({ 
+        ownerId: resolvedOwnerId, 
+        dateFrom: firstDay, 
+        dateTo: lastDay 
+      })).unwrap()
+    } catch (err) {
+      console.error('Failed to load owner availability:', err)
+    }
+  }
+
   useEffect(() => {
     load()
+    if (viewMode === 'calendar') {
+      loadOwnerAvailability()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedOwnerId])
+  }, [resolvedOwnerId, viewMode])
 
   useEffect(() => {
     return () => {
@@ -542,6 +589,26 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
     }
   }
 
+  const handleAvailabilityUpdate = async (availabilityData) => {
+    if (!resolvedOwnerId) {
+      throw new Error('Owner ID not found')
+    }
+
+    try {
+      await dispatch(addOwnerAvailability({
+        ...availabilityData,
+        ownerId: resolvedOwnerId,
+      })).unwrap()
+      
+      // Reload availability data
+      await loadOwnerAvailability()
+      
+      return true
+    } catch (err) {
+      throw new Error(err?.message || 'Failed to update availability')
+    }
+  }
+
   return (
     <div className="bg-slate-50/70 p-6 md:p-8 min-h-screen">
       <Breadcrumb />
@@ -558,6 +625,30 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
                 <p className="mt-1 text-sm text-slate-500">Owner ke saare car bookings ek jagah</p>
               </div>
               <div className="flex items-center gap-3">
+                <div className="flex rounded-xl border border-slate-200 bg-white p-1">
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      viewMode === 'list'
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Car size={14} />
+                    List
+                  </button>
+                  <button
+                    onClick={() => setViewMode('calendar')}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      viewMode === 'calendar'
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Calendar size={14} />
+                    Calendar
+                  </button>
+                </div>
                 <span className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">
                   Total: {bookingsList.length}
                 </span>
@@ -620,7 +711,59 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
           </div>
         </section>
 
-        {/* ── Table ── */}
+        {/* ── Calendar or Table View ── */}
+        {viewMode === 'calendar' ? (
+          <section className="space-y-6">
+            {/* Car Selector */}
+            {uniqueCars.length > 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <label className="mb-2 block text-sm font-bold text-slate-700">Select Car</label>
+                <select
+                  value={selectedCar?.id || ''}
+                  onChange={(e) => {
+                    const car = uniqueCars.find((c) => c.id === e.target.value)
+                    setSelectedCar(car)
+                  }}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white"
+                >
+                  <option value="">-- Select a car --</option>
+                  {uniqueCars.map((car) => (
+                    <option key={car.id} value={car.id}>
+                      {car.name} {car.vehicleNumber ? `(${car.vehicleNumber})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Calendar Component */}
+            {selectedCar ? (
+              <CarAvailabilityCalendar
+                carId={selectedCar.id}
+                carName={selectedCar.name}
+                ownerId={resolvedOwnerId}
+                bookings={bookingsList.filter((b) => {
+                  const carKey = b.vehicleId || b.carId || `${b.make}-${b.model}-${b.vehicleNumber}`
+                  return carKey === selectedCar.id
+                })}
+                ownerAvailability={ownerAvailability || []}
+                onAvailabilityUpdate={handleAvailabilityUpdate}
+                mode="view"
+                onDateClick={(date, status) => {
+                  console.log('Date clicked:', date, status)
+                  // You can open booking details modal here
+                }}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 py-20">
+                <Calendar size={48} className="mb-4 text-slate-300" />
+                <p className="text-base font-semibold text-slate-700">Select a car to view calendar</p>
+                <p className="mt-1 text-sm text-slate-400">Choose from the dropdown above</p>
+              </div>
+            )}
+          </section>
+        ) : (
+          /* ── Table View ── */
         <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
           {loading && bookingsList.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
@@ -722,6 +865,7 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
             </div>
           )}
         </section>
+        )}
       </div>
 
       {/* ── Detail Modal ── */}

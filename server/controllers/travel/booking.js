@@ -231,6 +231,33 @@ const resolveCallerOwner = async (req) => {
   return resolveOwnerByDashboardUser(dashUser);
 };
 
+const resolveBookingUserId = async (req) => {
+  const candidateValues = [
+    req.user?.userId,
+    req.user?.id,
+    req.user?._id,
+    req.body?.userId,
+    req.body?.bookedBy,
+  ].filter(Boolean);
+
+  const seen = new Set();
+  for (const value of candidateValues) {
+    const rawValue = String(value).trim();
+    if (!rawValue || seen.has(rawValue)) continue;
+    seen.add(rawValue);
+
+    const resolvedUserId = await resolveToUserId(rawValue);
+    if (resolvedUserId) {
+      return resolvedUserId;
+    }
+
+    // Preserve legacy payloads that already send the canonical value.
+    return rawValue;
+  }
+
+  return null;
+};
+
 const ensureBookingBelongsToCaller = async (req, booking) => {
   const callerOwner = await resolveCallerOwner(req);
   if (!callerOwner) {
@@ -342,7 +369,6 @@ exports.bookCar = async (req, res) => {
       seats,
       sharingType,
       vehicleType,
-      userId,
       carId,
       bookedBy,
       customerMobile,
@@ -357,7 +383,8 @@ exports.bookCar = async (req, res) => {
       assignedDriverName,
     } = req.body;
 
-    let normalizedUserId = String(userId || "").trim();
+    let normalizedUserId = await resolveBookingUserId(req);
+    normalizedUserId = String(normalizedUserId || "").trim();
     if (!normalizedUserId) {
       return res.status(400).json({ message: "userId is required" });
     }

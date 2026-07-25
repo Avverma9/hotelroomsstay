@@ -1,8 +1,8 @@
 import { createSlice } from '@reduxjs/toolkit';
 
 // Check if user is already logged in from localStorage
-const token = localStorage.getItem('authToken');
-const isSignedIn = localStorage.getItem('isSignedIn') === 'true';
+const token = localStorage.getItem('authToken') || localStorage.getItem('rsToken');
+const isSignedIn = localStorage.getItem('isSignedIn') === 'true' || !!token;
 
 const initialState = {
   user: isSignedIn ? {
@@ -33,10 +33,24 @@ const authSlice = createSlice({
       state.token = action.payload.token;
       state.refreshToken = action.payload.refreshToken || null;
       state.error = null;
-      
-      // Save token to localStorage
+
+      // Save session data to localStorage in both legacy and current keys.
       if (action.payload.token) {
         localStorage.setItem('authToken', action.payload.token);
+        localStorage.setItem('rsToken', action.payload.token);
+      }
+      if (action.payload.user?.id) {
+        localStorage.setItem('rsUserId', action.payload.user.id);
+      }
+      localStorage.setItem('isSignedIn', action.payload.token ? 'true' : 'false');
+      if (action.payload.user?.email) {
+        localStorage.setItem('roomsstayUserEmail', action.payload.user.email);
+      }
+      if (action.payload.user?.mobile) {
+        localStorage.setItem('rsUserMobile', action.payload.user.mobile);
+      }
+      if (action.payload.user?.name) {
+        localStorage.setItem('rsUserName', action.payload.user.name);
       }
       if (action.payload.refreshToken) {
         localStorage.setItem('rsRefreshToken', action.payload.refreshToken);

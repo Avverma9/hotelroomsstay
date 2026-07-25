@@ -256,6 +256,46 @@ export const updateOwner = createAsyncThunk(
   }
 );
 
+// Owner Availability API calls
+export const addOwnerAvailability = createAsyncThunk(
+  "car/addOwnerAvailability",
+  async (availabilityData, { rejectWithValue }) => {
+    try {
+      const response = await api.post("/travel/owner-availability", availabilityData);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Failed to add owner availability.");
+    }
+  }
+);
+
+export const getOwnerAvailability = createAsyncThunk(
+  "car/getOwnerAvailability",
+  async ({ ownerId, dateFrom, dateTo }, { rejectWithValue }) => {
+    try {
+      const params = { ownerId };
+      if (dateFrom) params.dateFrom = dateFrom;
+      if (dateTo) params.dateTo = dateTo;
+      const response = await api.get("/travel/owner-availability", { params });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Failed to fetch owner availability.");
+    }
+  }
+);
+
+export const deleteOwnerAvailability = createAsyncThunk(
+  "car/deleteOwnerAvailability",
+  async (availabilityId, { rejectWithValue }) => {
+    try {
+      const response = await api.delete(`/travel/owner-availability/${availabilityId}`);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Failed to delete owner availability.");
+    }
+  }
+);
+
 // ─── Initial State ────────────────────────────────────────────────────────────
 
 const initialState = {
@@ -277,6 +317,9 @@ const initialState = {
   owners: [],
   selectedOwner: null,
   filteredOwners: [],
+
+  // Owner availability data
+  ownerAvailability: [],
 
   // UI state
   loading: false,
@@ -512,7 +555,35 @@ const carSlice = createSlice({
         if (index !== -1) state.owners[index] = updated;
         if (state.selectedOwner?._id === updated?._id) state.selectedOwner = updated;
       })
-      .addCase(updateOwner.rejected, rejected);
+      .addCase(updateOwner.rejected, rejected)
+
+      // ── addOwnerAvailability ───────────────────────────────────────────
+      .addCase(addOwnerAvailability.pending, pending)
+      .addCase(addOwnerAvailability.fulfilled, (state, action) => {
+        state.loading = false;
+        state.success = action.payload?.message || "Availability added successfully.";
+        const newAvail = action.payload?.availability || action.payload?.data;
+        if (newAvail) state.ownerAvailability.push(newAvail);
+      })
+      .addCase(addOwnerAvailability.rejected, rejected)
+
+      // ── getOwnerAvailability ───────────────────────────────────────────
+      .addCase(getOwnerAvailability.pending, pending)
+      .addCase(getOwnerAvailability.fulfilled, (state, action) => {
+        state.loading = false;
+        state.ownerAvailability = action.payload?.availability || action.payload?.data || [];
+      })
+      .addCase(getOwnerAvailability.rejected, rejected)
+
+      // ── deleteOwnerAvailability ────────────────────────────────────────
+      .addCase(deleteOwnerAvailability.pending, pending)
+      .addCase(deleteOwnerAvailability.fulfilled, (state, action) => {
+        state.loading = false;
+        state.success = action.payload?.message || "Availability deleted successfully.";
+        const deletedId = action.payload?.data?._id || action.meta?.arg;
+        state.ownerAvailability = state.ownerAvailability.filter((a) => a._id !== deletedId);
+      })
+      .addCase(deleteOwnerAvailability.rejected, rejected);
   },
 });
 

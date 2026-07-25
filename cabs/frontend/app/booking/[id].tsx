@@ -182,6 +182,7 @@ export default function RiderBookingDetailScreen() {
             </View>
 
             {/* Status controls */}
+            
             <SectionCard title="Status">
               <View style={styles.statusGrid}>
                 <TouchableOpacity style={styles.statusPicker} onPress={() => setStatusMenu("booking")} activeOpacity={0.85}>

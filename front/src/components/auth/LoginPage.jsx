@@ -30,9 +30,15 @@ const countryCodes = [
 const saveUserSession = (data, dispatch) => {
   const token = data?.rsToken || data?.token || "";
   const refreshToken = data?.refreshToken || "";
-  const userId = data?.userId || data?._id || "";
+  const userId =
+    data?.userId ||
+    data?.loggedUserId ||
+    data?.sessionData?.user?.id ||
+    data?._id ||
+    "";
 
   localStorage.setItem("authToken", token);
+  localStorage.setItem("rsToken", token);
   localStorage.setItem("isSignedIn", "true");
   localStorage.setItem("rsUserId", userId);
   localStorage.setItem("rsRefreshToken", refreshToken);

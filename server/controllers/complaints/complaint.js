@@ -8,35 +8,73 @@ const {
 } = require("../notification/helpers");
 
 const createComplaint = async (req, res) => {
+    // Extract data from either req.body (JSON) or req.body (multipart)
     const { userId, regarding, hotelName, hotelEmail, bookingId, status, issue, hotelId } = req.body;
+    
+    // Get images from req.files (multipart upload) - will be empty array if no files
     const images = req.files ? req.files.map((file) => file.location) : [];
+    
     try {
-        if (!userId || !regarding || !issue || !hotelId) {
-            return res.status(400).json({ message: 'Missing required fields.' });
+        // VALIDATION: Only userId, regarding, and issue are required
+        if (!userId || !regarding || !issue) {
+            return res.status(400).json({ message: 'Missing required fields: userId, regarding, and issue are mandatory.' });
         }
 
-        // Resolve numeric userId OR _id string to the user's MongoDB ObjectId
+        // Resolve userId to User's MongoDB ObjectId
+        // The userId from panel could be:
+        // 1. Dashboard user _id (MongoDB ObjectId string)
+        // 2. Dashboard user id field (string like "66751804def0b0b1d2f0d672")
+        // 3. User's userId field (numeric string)
+        // 4. User's _id (MongoDB ObjectId)
+        
         let resolvedObjectId;
+        
+        // First, try to find as dashboard user and get linked User
+        const DashboardUser = require('../../models/dashboardUser');
+        let dashboardUser = null;
+        
+        // Check if it's a valid ObjectId format
         if (mongoose.Types.ObjectId.isValid(userId) && String(userId).length === 24) {
-            const userDoc = await User.findOne({ $or: [{ _id: userId }, { userId }] }).select('_id').lean();
-            if (!userDoc) return res.status(404).json({ message: 'User not found.' });
+            dashboardUser = await DashboardUser.findById(userId).select('userId email mobile').lean();
+        }
+        
+        // If dashboard user found, find the corresponding User by userId/email/mobile
+        if (dashboardUser) {
+            const userDoc = await User.findOne({
+                $or: [
+                    { userId: dashboardUser.userId },
+                    { email: dashboardUser.email },
+                    { mobile: dashboardUser.mobile }
+                ]
+            }).select('_id').lean();
+            
+            if (!userDoc) {
+                return res.status(404).json({ message: 'User account not found for this dashboard user.' });
+            }
             resolvedObjectId = userDoc._id;
         } else {
-            const userDoc = await User.findOne({ userId }).select('_id').lean();
-            if (!userDoc) return res.status(404).json({ message: 'User not found.' });
-            resolvedObjectId = userDoc._id;
+            // If not found as dashboard user, try direct User lookup
+            if (mongoose.Types.ObjectId.isValid(userId) && String(userId).length === 24) {
+                const userDoc = await User.findOne({ $or: [{ _id: userId }, { userId }] }).select('_id').lean();
+                if (!userDoc) return res.status(404).json({ message: 'User not found.' });
+                resolvedObjectId = userDoc._id;
+            } else {
+                const userDoc = await User.findOne({ userId }).select('_id').lean();
+                if (!userDoc) return res.status(404).json({ message: 'User not found.' });
+                resolvedObjectId = userDoc._id;
+            }
         }
 
-        // Accept both Mongo _id and business hotelId strings from clients.
-        let resolvedHotelObjectId;
-        if (mongoose.Types.ObjectId.isValid(hotelId) && String(hotelId).length === 24) {
-            const hotelDoc = await Hotel.findOne({ _id: hotelId }).select('_id').lean();
-            if (!hotelDoc) return res.status(404).json({ message: 'Hotel not found.' });
-            resolvedHotelObjectId = hotelDoc._id;
-        } else {
-            const hotelDoc = await Hotel.findOne({ hotelId: String(hotelId) }).select('_id').lean();
-            if (!hotelDoc) return res.status(404).json({ message: 'Hotel not found.' });
-            resolvedHotelObjectId = hotelDoc._id;
+        // OPTIONAL: Resolve hotelId only if provided
+        let resolvedHotelObjectId = null;
+        if (hotelId) {
+            if (mongoose.Types.ObjectId.isValid(hotelId) && String(hotelId).length === 24) {
+                const hotelDoc = await Hotel.findOne({ _id: hotelId }).select('_id').lean();
+                if (hotelDoc) resolvedHotelObjectId = hotelDoc._id;
+            } else {
+                const hotelDoc = await Hotel.findOne({ hotelId: String(hotelId) }).select('_id').lean();
+                if (hotelDoc) resolvedHotelObjectId = hotelDoc._id;
+            }
         }
 
         // Check for existing pending complaints
@@ -52,17 +90,23 @@ const createComplaint = async (req, res) => {
         }
 
         // Create new complaint
-        const newComplaint = new Complaint({
+        const complaintData = {
             userId: resolvedObjectId,
-            hotelId: resolvedHotelObjectId,
             regarding,
-            hotelEmail,
-            hotelName,
-            bookingId,
-            images,
-            status: status || 'Pending', // Default to 'Pending' if not provided
             issue,
-        });
+            hotelEmail: hotelEmail || '',
+            hotelName: hotelName || '',
+            bookingId: bookingId || '',
+            images,
+            status: status || 'Pending',
+        };
+
+        // Add hotelId only if resolved
+        if (resolvedHotelObjectId) {
+            complaintData.hotelId = resolvedHotelObjectId;
+        }
+
+        const newComplaint = new Complaint(complaintData);
 
         await newComplaint.save();
 
@@ -82,7 +126,7 @@ const createComplaint = async (req, res) => {
         res.status(201).json(newComplaint);
     } catch (error) {
         console.error('Error creating complaint:', error); // Log error for debugging
-        res.status(500).json({ message: 'An error occurred while creating the complaint.' });
+        res.status(500).json({ message: 'An error occurred while creating the complaint.', error: error.message });
     }
 };
 

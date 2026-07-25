@@ -6,7 +6,7 @@ import { createComplaint } from '../../../redux/slices/complaintSlice'
 import { selectAuth } from '../../../redux/slices/authSlice'
 import { getAllHotels } from '../../../redux/slices/admin/hotel'
 
-const REGARDING_OPTIONS = ['Hotel', 'Room', 'Service', 'Staff', 'Cleanliness', 'Food', 'Billing', 'Other']
+const REGARDING_OPTIONS = ['Hotel', 'Cab', 'Tour', 'Staff', 'Other']
 
 const InputField = ({ label, required, children }) => (
   <div>
@@ -33,6 +33,7 @@ export default function CreateComplaint() {
 
   const [form, setForm] = useState({
     regarding:  'Hotel',
+    regardingOther: '', // NEW: For custom regarding input
     issue:      '',
     hotelName:  prefilledState.hotelName || '',
     hotelEmail: prefilledState.hotelEmail || '',
@@ -76,19 +77,33 @@ export default function CreateComplaint() {
     e.preventDefault()
     setError(null)
 
+    // Validate required fields
+    if (!form.regarding.trim()) { setError('Please select a complaint category.'); return }
+    if (form.regarding === 'Other' && !form.regardingOther.trim()) { 
+      setError('Please specify what your complaint is regarding.'); 
+      return 
+    }
     if (!form.issue.trim()) { setError('Please describe the issue.'); return }
 
     const userId = user?._id || user?.id || user?.userId || ''
+    
+    // Use custom regarding text if "Other" is selected, otherwise use the selected category
+    const finalRegarding = form.regarding === 'Other' 
+      ? form.regardingOther.trim() 
+      : form.regarding
+
     const payload = {
       userId,
-      regarding:  form.regarding,
+      regarding:  finalRegarding,
       issue:      form.issue.trim(),
-      hotelName:  form.hotelName.trim(),
-      hotelEmail: form.hotelEmail.trim(),
       status:     'Pending',
-      ...(form.hotelId.trim()   && { hotelId:   form.hotelId.trim() }),
-      ...(form.bookingId.trim() && { bookingId: form.bookingId.trim() }),
     }
+
+    // Add optional fields only if provided
+    if (form.hotelName.trim())  payload.hotelName  = form.hotelName.trim()
+    if (form.hotelEmail.trim()) payload.hotelEmail = form.hotelEmail.trim()
+    if (form.hotelId.trim())    payload.hotelId    = form.hotelId.trim()
+    if (form.bookingId.trim())  payload.bookingId  = form.bookingId.trim()
 
     setLoading(true)
     const result = await dispatch(createComplaint(payload))
@@ -133,7 +148,7 @@ export default function CreateComplaint() {
               className="w-full rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">
               View All Complaints
             </button>
-            <button onClick={() => { setSuccess(null); setForm({ regarding: 'Hotel', issue: '', hotelName: '', hotelEmail: '', hotelId: '', bookingId: '' }) }}
+            <button onClick={() => { setSuccess(null); setForm({ regarding: 'Hotel', regardingOther: '', issue: '', hotelName: '', hotelEmail: '', hotelId: '', bookingId: '' }) }}
               className="text-xs font-semibold text-slate-400 hover:text-slate-600">
               File Another Complaint
             </button>
@@ -168,16 +183,32 @@ export default function CreateComplaint() {
 
           {/* Regarding */}
           <InputField label="Complaint Regarding" required>
-            <div className="flex flex-wrap gap-2">
-              {REGARDING_OPTIONS.map((opt) => (
-                <button key={opt} type="button" onClick={() => setForm((p) => ({ ...p, regarding: opt }))}
-                  className={`rounded-full border px-3.5 py-1.5 text-[12px] font-bold transition-all
-                    ${form.regarding === opt
-                      ? 'border-indigo-300 bg-indigo-600 text-white shadow-sm'
-                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'}`}>
-                  {opt}
-                </button>
-              ))}
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {REGARDING_OPTIONS.map((opt) => (
+                  <button key={opt} type="button" onClick={() => setForm((p) => ({ ...p, regarding: opt, regardingOther: '' }))}
+                    className={`rounded-full border px-3.5 py-1.5 text-[12px] font-bold transition-all
+                      ${form.regarding === opt
+                        ? 'border-indigo-300 bg-indigo-600 text-white shadow-sm'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'}`}>
+                    {opt}
+                  </button>
+                ))}
+              </div>
+              
+              {/* Show input when "Other" is selected */}
+              {form.regarding === 'Other' && (
+                <div className="animate-fadeIn">
+                  <input
+                    type="text"
+                    value={form.regardingOther}
+                    onChange={(e) => setForm((p) => ({ ...p, regardingOther: e.target.value }))}
+                    placeholder="Please type specific regarding (e.g., Parking, WiFi, Pool, etc.)"
+                    className="w-full rounded-xl border border-indigo-300 bg-indigo-50/30 px-4 py-2.5 text-sm font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:border-indigo-500 focus:bg-white"
+                    autoFocus
+                  />
+                </div>
+              )}
             </div>
           </InputField>
 
@@ -187,14 +218,17 @@ export default function CreateComplaint() {
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none focus:border-indigo-500 focus:bg-white resize-none" />
           </InputField>
 
-          {/* Hotel info */}
+          {/* Hotel info - OPTIONAL */}
           <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-4">
-            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Hotel Details</p>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Hotel Details</p>
+              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">Optional</span>
+            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <InputField label="Hotel Name">
                 <select value={form.hotelName} onChange={handleHotelChange}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500">
-                  <option value="">{hotelsLoading ? 'Loading hotels...' : 'Select hotel'}</option>
+                  <option value="">{hotelsLoading ? 'Loading hotels...' : 'Select hotel (optional)'}</option>
                   {hotelOptions.map((hotel) => (
                     <option key={`${hotel.id}-${hotel.hotelName}`} value={hotel.hotelName}>
                       {hotel.hotelName}
@@ -209,16 +243,19 @@ export default function CreateComplaint() {
             </div>
           </div>
 
-          {/* Optional fields */}
+          {/* Booking & Hotel ID - OPTIONAL */}
           <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-4">
-            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Optional Reference</p>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Optional Reference</p>
+              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">Optional</span>
+            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <InputField label="Booking ID">
-                <input value={form.bookingId} onChange={set('bookingId')} placeholder="BK-2024-001"
+                <input value={form.bookingId} onChange={set('bookingId')} placeholder="BK-2024-001 (optional)"
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500" />
               </InputField>
               <InputField label="Hotel ID (System)">
-                <input value={form.hotelId} onChange={set('hotelId')} placeholder="MongoDB ID if known"
+                <input value={form.hotelId} onChange={set('hotelId')} placeholder="MongoDB ID (optional)"
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500" />
               </InputField>
             </div>

@@ -1,7 +1,8 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { toast } from 'react-toastify';
 import apiClient from '../../utils/apiInterceptor';
-import { userMobile } from '../../utils/Unauthorized';
+
+const getUserMobile = () => localStorage.getItem('rsUserMobile');
 
 export const addCar = createAsyncThunk('car/addCar', async (data, { rejectWithValue }) => {
   try {
@@ -72,7 +73,9 @@ export const bookSeat = createAsyncThunk('car/bookSeat', async (data, { rejectWi
 
 export const getBookings = createAsyncThunk('car/getBookings', async (_, { rejectWithValue }) => {
   try {
-    const response = await apiClient.post('/travel/get-bookings-by/bookedBy', { customerMobile: userMobile });
+    const response = await apiClient.post('/travel/get-bookings-by/bookedBy', {
+      customerMobile: getUserMobile(),
+    });
     return response.data;
   } catch (error) {
     const errorMessage = error.response?.data?.message || error.message || String(error);

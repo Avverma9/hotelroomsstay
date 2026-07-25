@@ -16,6 +16,11 @@ const { getGSTData } = require("../GST/gst");
 const {
   createUserNotificationSafe,
 } = require("../notification/helpers");
+const {
+  determineBookingStatus,
+  validateStatusTransition,
+  getPaymentTimeoutDescription,
+} = require("../../utils/bookingRules");
 
 const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -187,6 +192,45 @@ const getFormattedISTTime = (date = new Date()) => {
     hour12: true,
   }).format(date);
 };
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * BOOKING BUSINESS RULES SUMMARY
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 
+ * 1. ROOM & NIGHT LIMITS:
+ *    - Up to 3 rooms: Confirmed
+ *    - More than 3 rooms: Pending (needs manual review)
+ *    - Up to 3 nights: Confirmed
+ *    - More than 3 nights: Pending (needs manual review)
+ * 
+ * 2. DUPLICATE BOOKING DETECTION:
+ *    - Same mobile/email + Different city = Confirmed
+ *    - Same mobile/email + Same city + Different hotel = Pending
+ * 
+ * 3. PAYMENT TIMEOUT (Variable based on advance booking):
+ *    - 5-7 days before check-in: 48 hours payment window
+ *    - 2-3 days before check-in: 24 hours payment window
+ *    - 1 day before check-in: 6 hours payment window
+ *    - No payment within timeout → Auto-cancel
+ * 
+ * 4. NO-SHOW LOGIC:
+ *    - If customer doesn't check-in by check-in date → Status = No-Show
+ * 
+ * 5. STATUS UPDATE RIGHTS:
+ *    - HOTEL PARTNERS can only:
+ *      • Confirmed → Checked-in or No-Show
+ *      • Checked-in → Checked-out
+ *      • CANNOT cancel Confirmed or Checked-in bookings
+ *    
+ *    - ADMIN/DEVELOPER can do anything
+ *    
+ *    - USERS can only:
+ *      • Cancel their own Pending or Confirmed bookings
+ * 
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
 //==========================================creating booking========================================================================================================
 const createBooking = async (req, res) => {
   try {
@@ -296,14 +340,6 @@ const createBooking = async (req, res) => {
     // Calculate final price
     const finalPrice = discountedRoomTotal + gstAmount + foodPrice;
 
-    // Count total active rooms booked by this user across all hotels
-    const userActiveBookings = await bookingModel.find(
-      { "user.userId": user.userId, bookingStatus: { $nin: ["Cancelled", "Failed"] } },
-      { numRooms: 1 }
-    ).lean();
-    const totalExistingRooms = userActiveBookings.reduce((sum, b) => sum + (b.numRooms || 0), 0);
-    const totalRoomsAfterBooking = totalExistingRooms + (numRooms || 1);
-
     // Determine payment mode: offline = panel booking or pm/paymentMode says offline
     const resolvedPaymentMode =
       String(pm || "").trim().toLowerCase() === "offline"
@@ -311,19 +347,23 @@ const createBooking = async (req, res) => {
         ? "offline"
         : "online";
 
-    const normalizedBookingStatus = String(bookingStatus || "").trim();
+    // Use new business rules engine to determine booking status
+    const statusDecision = await determineBookingStatus({
+      numRooms: numRooms || 1,
+      nights,
+      userId: user.userId,
+      userMobile: user.mobile,
+      userEmail: user.email,
+      hotelCity: hotelCity || destination,
+      hotelId,
+      checkInDate,
+      paymentMode: resolvedPaymentMode,
+      bookingSource
+    });
 
-    // Business rules that force a booking into Pending for manual review
-    let pendingReason = null;
-    if (nights > 3) pendingReason = `Stay is ${nights} nights (more than 3 nights requires manual confirmation)`;
-    else if (totalRoomsAfterBooking > 3) pendingReason = `You already have ${totalExistingRooms} active room(s) booked. Total exceeds 3 rooms per user limit`;
-
-    const shouldForcePending = pendingReason !== null;
-    // Offline bookings created from panel can be Confirmed immediately;
-    // Online bookings always start as Pending until PhonePe confirms payment.
-    const resolvedBookingStatus = shouldForcePending
-      ? "Pending"
-      : normalizedBookingStatus || (resolvedPaymentMode === "offline" ? "Confirmed" : "Pending");
+    const resolvedBookingStatus = statusDecision.status;
+    const pendingReason = statusDecision.reason;
+    const autoCancelAt = statusDecision.autoCancelAt;
 
     const booking = new bookingModel({
       bookingId,
@@ -370,8 +410,8 @@ const createBooking = async (req, res) => {
       isPartialBooking,
       partialAmount,
       bookingStatus: resolvedBookingStatus,
-      pendingReason: resolvedBookingStatus === "Pending" ? (pendingReason || "Awaiting payment confirmation") : null,
-      autoCancelAt: resolvedBookingStatus === "Pending" ? new Date(Date.now() + 2 * 60 * 60 * 1000) : null,
+      pendingReason: pendingReason,
+      autoCancelAt: autoCancelAt,
       bookingSource,
       destination,
       roomDetails,
@@ -506,6 +546,25 @@ const updateBooking = async (req, res) => {
 
     const previousStatus = existingBooking.bookingStatus;
     const nextStatus = String(data.bookingStatus || previousStatus).trim() || previousStatus;
+
+    // Validate status transition using business rules
+    if (nextStatus !== previousStatus) {
+      const transitionValidation = validateStatusTransition(
+        previousStatus,
+        nextStatus,
+        requesterRole
+      );
+
+      if (!transitionValidation.allowed) {
+        return res.status(403).json({
+          message: transitionValidation.reason || "Status transition not allowed",
+          currentStatus: previousStatus,
+          attemptedStatus: nextStatus,
+          userRole: requesterRole
+        });
+      }
+    }
+
     const resolvedCheckInTime = String(data.checkInTime || "").trim();
     const resolvedCheckOutTime = String(data.checkOutTime || "").trim();
     const statusMetadataUpdate = {};

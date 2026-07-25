@@ -204,26 +204,40 @@ const getRoleCapabilities = (role = '', currentStatus = '') => {
 
 const getEditableStatusOptions = (currentStatus, role = '') => {
   const normalizedStatus = String(currentStatus || '').trim().toLowerCase()
+  const normalizedRole = String(role || '').trim().toLowerCase()
   const capabilities = getRoleCapabilities(role, currentStatus)
 
+  // Admin/Developer get all options
   if (capabilities.isPrivileged) {
     return statusOptions
   }
 
+  // Operations roles (hotel partners) - NEW RESTRICTIONS
   if (capabilities.isOperations) {
-    if (normalizedStatus === 'pending') return ['Pending', 'Confirmed']
-    if (normalizedStatus === 'confirmed') return ['Confirmed', 'Checked-in', 'No-Show']
-    if (normalizedStatus === 'checked-in') return ['Checked-in', 'Checked-out']
+    // Confirmed → Checked-in or No-Show ONLY (cannot cancel)
+    if (normalizedStatus === 'confirmed') {
+      return ['Confirmed', 'Checked-in', 'No-Show']
+    }
+    // Checked-in → Checked-out ONLY (cannot cancel)
+    if (normalizedStatus === 'checked-in') {
+      return ['Checked-in', 'Checked-out']
+    }
+    // Pending can only move to Confirmed (by operations)
+    if (normalizedStatus === 'pending') {
+      return ['Pending', 'Confirmed']
+    }
+    // No other transitions allowed
     return [getStatusLabel(currentStatus || 'Pending')]
   }
 
   // PMS role: Confirmed → Checked-in → Checked-out only
-  if (pmsRoles.has(String(role || '').trim().toLowerCase())) {
+  if (pmsRoles.has(normalizedRole)) {
     if (normalizedStatus === 'confirmed') return ['Confirmed', 'Checked-in']
     if (normalizedStatus === 'checked-in') return ['Checked-in', 'Checked-out']
     return [getStatusLabel(currentStatus || 'Pending')]
   }
 
+  // Default: no status change allowed
   return [getStatusLabel(currentStatus || 'Pending')]
 }
 

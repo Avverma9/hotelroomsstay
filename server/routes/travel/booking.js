@@ -16,7 +16,7 @@ const {
 } = require('../../controllers/travel/booking');
 const router = express.Router();
 
-router.post("/create-travel/booking", bookCar);
+router.post("/create-travel/booking", auth, bookCar);
 router.patch("/confirm-booking/:id", confirmTravelBooking);
 router.patch("/change-booking-status/:id", auth, changeBookingStatus)
 router.post("/verify-pickup-code/:id", auth, verifyPickupCode);

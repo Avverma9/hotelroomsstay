@@ -33,7 +33,7 @@ const complaintSchema = new mongoose.Schema(
     hotelId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'hotels',
-        required: true,
+        required: false, // CHANGED: Made optional
     },
     complaintId: {
       type: String,
@@ -41,7 +41,8 @@ const complaintSchema = new mongoose.Schema(
     },
     regarding: {
       type: String,
-      enum: ["Booking", "Hotel", "Website", 'Service','Staff','Cleanliness','Food','Billing','Room','Other'],
+      required: true,
+      // REMOVED enum to allow custom values from "Other" option
     },
     hotelName: String,
     hotelEmail: String,

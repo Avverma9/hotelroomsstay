@@ -234,6 +234,7 @@ apiClient.interceptors.response.use(
                 const newToken = res.data.rsToken;
                 const newRefreshToken = res.data.refreshToken;
                 localStorage.setItem('authToken', newToken);
+                localStorage.setItem('rsToken', newToken);
                 localStorage.setItem('rsRefreshToken', newRefreshToken);
                 _isRefreshing = false;
                 onRefreshed(newToken);
@@ -261,6 +262,7 @@ apiClient.interceptors.response.use(
                   const newToken = res.data.rsToken;
                   const newRefreshToken = res.data.refreshToken;
                   localStorage.setItem('authToken', newToken);
+                  localStorage.setItem('rsToken', newToken);
                   localStorage.setItem('rsRefreshToken', newRefreshToken);
                   _isRefreshing = false;
                   onRefreshed(newToken);

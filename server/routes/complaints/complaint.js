@@ -6,7 +6,7 @@ const { doChat } = require("../../controllers/complaints/chat");
 
 router.post(
   "/create-a-complaint/on/hotel",
-  upload,
+  upload, // This middleware handles multipart/form-data (for image uploads)
   complaintController.createComplaint
 ); //on site
 router.patch(

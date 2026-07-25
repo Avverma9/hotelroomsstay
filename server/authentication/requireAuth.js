@@ -16,6 +16,7 @@ const SKIP_PATH_PREFIXES = [
   '/signIn',
   '/signIn/google',
   '/send-otp',
+  '/travel/create-travel/booking',
   '/verify-otp',
   '/get/',
   '/get/offers/main/hotels',

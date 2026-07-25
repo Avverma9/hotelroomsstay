@@ -105,15 +105,14 @@ export default function CarEditScreen() {
   }
 
   const images = car.images && car.images.length > 0 ? car.images : [IMAGES.carPlaceholder];
-
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView 
-          showsVerticalScrollIndicator={false} 
+        <ScrollView
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }} // Dynamic padding for bottom bar
         >
           {/* Image carousel */}
@@ -132,7 +131,7 @@ export default function CarEditScreen() {
                 <Image key={idx} source={{ uri }} style={{ width, height: 240 }} resizeMode="cover" />
               ))}
             </ScrollView>
-            
+
             {/* Header Actions Overlay */}
             <View style={styles.headerActions}>
               <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
@@ -161,14 +160,42 @@ export default function CarEditScreen() {
                   {car.year ? `${car.year} · ` : ""}{car.color || "—"} · {car.vehicleType}
                 </Text>
               </View>
-              <View style={[styles.badge, { backgroundColor: isAvailable ? "#D1FAE5" : "#FEE2E2" }]}>
-                <View style={[styles.badgeDot, { backgroundColor: isAvailable ? "#059669" : "#DC2626" }]} />
-                <Text style={[styles.badgeText, { color: isAvailable ? "#059669" : "#DC2626" }]}>
-                  {isAvailable ? "Available" : "On Trip"}
+        
+            </View>
+            <View
+              style={[
+                styles.badge,
+                {
+                  backgroundColor: isAvailable ? "#D1FAE5" : "#FEE2E2",
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                },
+              ]}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View
+
+                />
+                <Text
+                  style={[
+                    styles.badgeText,
+                    { color: isAvailable ? "#059669" : "#DC2626", marginLeft: 6 },
+                  ]}
+                >
+                  Trip Status : {runningStatus || "Unavailable"}
                 </Text>
               </View>
-            </View>
 
+              <Text
+                style={[
+                  styles.badgeText,
+                  { color: isAvailable ? "#059669" : "#DC2626" },
+                ]}
+              >
+                Vehicle Status : {isAvailable ? "Available" : "Unavailable"}
+              </Text>
+            </View>
             {/* Spec chips - More compact spacing */}
             <View style={styles.specRow}>
               <SpecChip icon="people" label={`${car.seater || "?"} seats`} />
@@ -190,7 +217,7 @@ export default function CarEditScreen() {
                     placeholder="e.g. New Delhi Railway Station"
                     placeholderTextColor={colors.textLight}
                   />
-                  
+
                   <Label>Drop Point</Label>
                   <TextInput
                     style={styles.input}
@@ -199,7 +226,7 @@ export default function CarEditScreen() {
                     placeholder="e.g. Chandigarh Bus Stand"
                     placeholderTextColor={colors.textLight}
                   />
-                  
+
                   {/* Side-by-Side inputs for Compactness */}
                   <View style={styles.rowGrid}>
                     <View style={{ flex: 1 }}>
@@ -214,7 +241,7 @@ export default function CarEditScreen() {
                       />
                     </View>
                     <View style={{ flex: 1.2 }}>
-                      <Label>Status</Label>
+                      <Label>Ride Status</Label>
                       <TouchableOpacity
                         style={styles.select}
                         onPress={() => setRunningStatusOpen(true)}
@@ -229,7 +256,7 @@ export default function CarEditScreen() {
                   </View>
 
                   <View style={styles.divider} />
-                  
+
                   <View style={styles.switchRow}>
                     <Text style={styles.switchLabel}>Vehicle currently available?</Text>
                     <Switch
@@ -347,14 +374,14 @@ const styles = StyleSheet.create({
   errorText: { color: colors.textMuted, fontSize: 16 },
   backLink: { marginTop: 16, padding: 8 },
   backLinkText: { color: colors.primary, fontWeight: "700", fontSize: 16 },
-  
+
   imageWrap: { height: 240, position: "relative", backgroundColor: colors.inputBg },
   headerActions: { position: "absolute", top: 12, left: 16, right: 16, flexDirection: "row", justifyContent: "space-between" },
   iconBtn: { backgroundColor: "#fff", borderRadius: 20, width: 38, height: 38, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
   dots: { position: "absolute", bottom: 12, width: "100%", flexDirection: "row", justifyContent: "center", gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.6)" },
   dotActive: { backgroundColor: colors.primary, width: 18 },
-  
+
   content: { padding: spacing.md },
   titleRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: spacing.md },
   carName: { fontSize: 22, fontWeight: "800", color: colors.text, letterSpacing: -0.5 },
@@ -362,35 +389,35 @@ const styles = StyleSheet.create({
   badge: { flexDirection: "row", alignItems: "center", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, gap: 6 },
   badgeDot: { width: 6, height: 6, borderRadius: 3 },
   badgeText: { fontSize: 12, fontWeight: "700" },
-  
+
   specRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: spacing.lg },
   specChip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   specChipText: { fontSize: 12, color: colors.text, fontWeight: "600" },
-  
+
   section: { marginBottom: spacing.lg },
   sectionTitle: { fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: spacing.sm, letterSpacing: -0.2 },
   card: { backgroundColor: colors.surface, borderRadius: radii.lg, padding: spacing.md, shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
-  
+
   label: { fontSize: 12, fontWeight: "600", color: colors.textMuted, marginBottom: 6, marginTop: 12, letterSpacing: 0.3 },
   input: { backgroundColor: colors.inputBg, borderRadius: radii.md, paddingHorizontal: 14, height: 44, fontSize: 14, color: colors.text, borderWidth: 1, borderColor: "transparent" },
   rowGrid: { flexDirection: "row", gap: spacing.sm },
   select: { backgroundColor: colors.inputBg, borderRadius: radii.md, paddingHorizontal: 14, height: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   selectText: { fontSize: 14, color: colors.text, fontWeight: "500", flex: 1 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: 16 },
-  
+
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   switchLabel: { fontSize: 14, fontWeight: "600", color: colors.text },
-  
+
   infoRowItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
   rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   infoIconWrap: { width: 28, height: 28, borderRadius: 8, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center", marginRight: 12 },
   infoLabel: { fontSize: 14, color: colors.textMuted, flex: 1 },
   infoValue: { fontSize: 14, fontWeight: "600", color: colors.text, maxWidth: '50%', textAlign: 'right' },
-  
+
   bottomBar: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: spacing.md, paddingTop: 12, flexDirection: "row", gap: 10 },
   actionFab: { backgroundColor: colors.primarySoft, borderRadius: radii.lg, paddingHorizontal: 16, height: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   actionFabText: { color: colors.primary, fontWeight: "700", fontSize: 14 },
-  
+
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   modalCard: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, paddingBottom: 40 },
   modalTitle: { fontSize: 18, fontWeight: "700", color: colors.text, marginBottom: 16, textAlign: "center" },
