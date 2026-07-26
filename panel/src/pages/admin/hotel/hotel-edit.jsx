@@ -221,47 +221,56 @@ const createHotelForm = (hotel) => {
   }
 }
 
-const normalizeRoom = (room, index = 0) => {
-  let amenitiesStr = Array.isArray(room?.amenities) ? room.amenities.join(', ') : (room?.amenities || '')
-  let imagesStr    = Array.isArray(room?.images)    ? room.images.join(', ')    : (room?.images    || '')
-  const price      = room?.pricing?.basePrice ?? room?.price      ?? room?.originalPrice ?? 0
-  const countRooms = room?.inventory?.total   ?? room?.countRooms ?? room?.totalRooms    ?? 0
-  const isOffer      = room?.features?.isOffer    ?? room?.isOffer      ?? false
-  const offerName    = room?.features?.offerText  ?? room?.offerName    ?? room?.offerText     ?? ''
-  const roomId       = room?.roomId || room?.id || ''
-  const origPrice    = room?.pricing?.originalPrice ?? room?.originalPrice ?? price
-  const offerPLess   = room?.offerPriceLess ?? 0
-  const offerExp     = room?.offerExp || room?.features?.offerExp || ''
-  return {
-    _id: room?._id || room?.id || `room-${index}`,
-    roomId,
-    name:           room?.name  || room?.type || `Room ${index + 1}`,
-    type:           room?.type  || room?.name || `Room ${index + 1}`,
-    bedType:        room?.bedType || room?.bedTypes || '',
-    price:          String(price),
-    originalPrice:  String(origPrice),
-    countRooms:     String(countRooms),
-    totalRooms:     String(countRooms),
-    description:    room?.description || '',
-    amenities:      amenitiesStr,
-    images:         imagesStr,
-    isOffer,
-    offerName,
-    offerPriceLess: String(offerPLess),
-    offerExp,
+  const normalizeRoom = (room, index = 0) => {
+    let amenitiesStr = Array.isArray(room?.amenities) ? room.amenities.join(', ') : (room?.amenities || '')
+    // For rooms, images are in room.images array directly
+    const existingImages = Array.isArray(room?.images) ? room.images : []
+    let imagesStr = Array.isArray(room?.images) ? room.images.join(', ') : (room?.images || '')
+    
+    const price = room?.pricing?.basePrice ?? room?.price ?? room?.originalPrice ?? 0
+    const countRooms = room?.inventory?.total ?? room?.countRooms ?? room?.totalRooms ?? 0
+    const isOffer = room?.features?.isOffer ?? room?.isOffer ?? false
+    const offerName = room?.features?.offerText ?? room?.offerName ?? room?.offerText ?? ''
+    const roomId = room?.roomId || room?.id || ''
+    const origPrice = room?.pricing?.originalPrice ?? room?.originalPrice ?? price
+    const offerPLess = room?.offerPriceLess ?? 0
+    const offerExp = room?.offerExp || room?.features?.offerExp || ''
+    
+    return {
+      _id: room?._id || room?.id || `room-${index}`,
+      roomId,
+      name: room?.name || room?.type || `Room ${index + 1}`,
+      type: room?.type || room?.name || `Room ${index + 1}`,
+      bedType: room?.bedType || room?.bedTypes || '',
+      price: String(price),
+      originalPrice: String(origPrice),
+      countRooms: String(countRooms),
+      totalRooms: String(countRooms),
+      description: room?.description || '',
+      amenities: amenitiesStr,
+      images: imagesStr,
+      existingImages, // Preserve existing images array
+      isOffer,
+      offerName,
+      offerPriceLess: String(offerPLess),
+      offerExp,
+    }
   }
-}
 
 const createEmptyRoomForm = () => ({
   type: '', bedType: '', price: '', originalPrice: '', countRooms: '',
   description: '', amenities: '', images: '', isOffer: false, offerName: '',
   offerPriceLess: '', offerExp: '',
   imageFiles: [], imagePreviews: [], // For new image uploads
+  existingImages: [], // For displaying existing images from DB
 })
 
 const normalizeFood = (food, index = 0) => {
   const foodId = food?.foodId || food?.id || ''
+  // For foods, images are in food.images array directly  
+  const existingImages = Array.isArray(food?.images) ? food.images : []
   const images = Array.isArray(food?.images) ? food.images.join(', ') : (food?.images || '')
+  
   return {
     _id: food?._id || foodId || `food-${index}`,
     foodId,
@@ -270,12 +279,14 @@ const normalizeFood = (food, index = 0) => {
     price: String(food?.price ?? ''),
     about: food?.about || food?.description || '',
     images,
+    existingImages, // Preserve existing images array
   }
 }
 
 const createEmptyFoodForm = () => ({
   name: '', foodType: 'Veg', price: '', about: '', images: '',
   imageFiles: [], imagePreviews: [], // For new image uploads
+  existingImages: [], // For displaying existing images from DB
 })
 
 const buildFoodEntry = (form, existingFoodId = null) => {
@@ -531,8 +542,9 @@ function HotelEditPage() {
   const [hotelForm,       setHotelForm]       = useState(() => createHotelForm(null))
   
   // Hotel images state
-  const [hotelImages, setHotelImages] = useState([])
-  const [hotelPreviews, setHotelPreviews] = useState([])
+  const [hotelImages, setHotelImages] = useState([]) // New images to upload
+  const [hotelPreviews, setHotelPreviews] = useState([]) // Previews for new images
+  const [existingHotelImages, setExistingHotelImages] = useState([]) // Existing images from DB
   
   const [roomForm,        setRoomForm]        = useState(createEmptyRoomForm)
   const [editingRoomId,   setEditingRoomId]   = useState(null)
@@ -548,23 +560,44 @@ function HotelEditPage() {
 
   const hotel          = selectedHotel?.data || selectedHotel
   const displayHotelId = id || hotel?.hotelId || hotel?._id
-  const hotelImage     = hotel?.basicInfo?.images?.[0] || hotel?.images?.[0] || ''
+  const hotelImage     = selectedHotel?.data?.basicInfo?.images?.[0] || hotel?.basicInfo?.images?.[0] || hotel?.images?.[0] || ''
   const listPath       = location.state?.from ||
     (location.pathname.startsWith('/your-hotels') ? '/your-hotels' : '/hotels')
 
   const normalizedRooms = useMemo(
-    () => (Array.isArray(hotel?.rooms) ? hotel.rooms.map(normalizeRoom) : []),
-    [hotel?.rooms],
+    () => {
+      // Use selectedHotel.data.rooms which has the correct structure
+      const roomsData = selectedHotel?.data?.rooms || hotel?.rooms || []
+      return Array.isArray(roomsData) ? roomsData.map(normalizeRoom) : []
+    },
+    [selectedHotel?.data?.rooms, hotel?.rooms],
   )
   const normalizedFoods = useMemo(
-    () => (Array.isArray(hotel?.foods) ? hotel.foods.map(normalizeFood) : []),
-    [hotel?.foods],
+    () => {
+      // Use selectedHotel.data.foods which has the correct structure  
+      const foodsData = selectedHotel?.data?.foods || hotel?.foods || []
+      return Array.isArray(foodsData) ? foodsData.map(normalizeFood) : []
+    },
+    [selectedHotel?.data?.foods, hotel?.foods],
   )
 
   useEffect(() => { setRooms(normalizedRooms) }, [normalizedRooms])
   useEffect(() => { setFoods(normalizedFoods) }, [normalizedFoods])
   useEffect(() => { if (id) dispatch(getHotelById(id)) }, [dispatch, id])
   useEffect(() => { if (hotel) setHotelForm(createHotelForm(hotel)) }, [hotel])
+  
+  // Load existing hotel images
+  useEffect(() => {
+    // The images are actually in selectedHotel.data.basicInfo.images
+    const hotelImages = selectedHotel?.data?.basicInfo?.images || hotel?.basicInfo?.images || hotel?.images || []
+    
+    if (hotelImages && Array.isArray(hotelImages) && hotelImages.length > 0) {
+      setExistingHotelImages(hotelImages)
+    } else {
+      setExistingHotelImages([])
+    }
+  }, [hotel, selectedHotel])
+  
   useEffect(() => {
     if (!hotel) return
     const dp = hotel?.policies?.[0]?.detailed || hotel?.policies?.[0] || {}
@@ -652,6 +685,26 @@ function HotelEditPage() {
     setHotelImages((p) => p.filter((_, x) => x !== i))
     setHotelPreviews((p) => p.filter((_, x) => x !== i))
   }
+  
+  const removeExistingHotelImage = async (imageUrl) => {
+    if (!window.confirm('Are you sure you want to delete this image?')) return
+    
+    try {
+      // Correct API endpoint: /hotels/:hotelId/images/imageUrl with imageUrl as query parameter
+      const response = await api.delete(`/hotels/${displayHotelId}/images/imageUrl`, {
+        params: { imageUrl }
+      })
+      
+      setExistingHotelImages((p) => p.filter((url) => url !== imageUrl))
+      alert('Image deleted successfully!')
+      
+      // Refresh hotel data to get updated state from server
+      dispatch(getHotelById(displayHotelId))
+    } catch (err) {
+      console.error('Failed to delete image:', err)
+      alert(err?.response?.data?.message || err?.message || 'Failed to delete image')
+    }
+  }
 
   /* ─── Room Image Handlers ──────────────────────────────────── */
   const addRoomImages = (e) => {
@@ -671,6 +724,54 @@ function HotelEditPage() {
       imagePreviews: p.imagePreviews.filter((_, x) => x !== i),
     }))
   }
+  
+  // Remove existing room image
+  const removeExistingRoomImage = async (imageUrl) => {
+    if (!window.confirm('Are you sure you want to delete this room image?')) return
+    if (!displayHotelId) return
+    
+    try {
+      // Find the current room being edited
+      const currentRoom = rooms.find(r => r._id === editingRoomId)
+      if (!currentRoom?.roomId) {
+        alert('Room ID not found. Please save the room first.')
+        return
+      }
+      
+      // Delete from server using enhanced API
+      await api.delete(`/hotels/${displayHotelId}/images/imageUrl`, {
+        params: { 
+          imageUrl, 
+          type: 'room', 
+          itemId: currentRoom.roomId 
+        }
+      })
+      
+      // Update roomForm if currently editing
+      setRoomForm((p) => ({
+        ...p,
+        existingImages: p.existingImages.filter((url) => url !== imageUrl),
+      }))
+      
+      // Also update the rooms array for the specific room being edited
+      if (editingRoomId) {
+        setRooms(prevRooms => 
+          prevRooms.map(room => 
+            room._id === editingRoomId 
+              ? { ...room, existingImages: room.existingImages?.filter(url => url !== imageUrl) || [] }
+              : room
+          )
+        )
+      }
+      
+      alert('Room image deleted successfully!')
+      // Refresh hotel data to reflect server changes
+      dispatch(getHotelById(displayHotelId))
+    } catch (err) {
+      console.error('Failed to delete room image:', err)
+      alert(err?.response?.data?.message || err?.message || 'Failed to delete room image')
+    }
+  }
 
   /* ─── Food Image Handlers ──────────────────────────────────── */
   const addFoodImages = (e) => {
@@ -689,6 +790,54 @@ function HotelEditPage() {
       imageFiles: p.imageFiles.filter((_, x) => x !== i),
       imagePreviews: p.imagePreviews.filter((_, x) => x !== i),
     }))
+  }
+  
+  // Remove existing food image
+  const removeExistingFoodImage = async (imageUrl) => {
+    if (!window.confirm('Are you sure you want to delete this food image?')) return
+    if (!displayHotelId) return
+    
+    try {
+      // Find the current food being edited
+      const currentFood = foods.find(f => f._id === editingFoodId)
+      if (!currentFood?.foodId && !currentFood?.id) {
+        alert('Food ID not found. Please save the food item first.')
+        return
+      }
+      
+      // Delete from server using enhanced API
+      await api.delete(`/hotels/${displayHotelId}/images/imageUrl`, {
+        params: { 
+          imageUrl, 
+          type: 'food', 
+          itemId: currentFood.foodId || currentFood.id 
+        }
+      })
+      
+      // Update foodForm if currently editing
+      setFoodForm((p) => ({
+        ...p,
+        existingImages: p.existingImages.filter((url) => url !== imageUrl),
+      }))
+      
+      // Also update the foods array for the specific food being edited
+      if (editingFoodId) {
+        setFoods(prevFoods => 
+          prevFoods.map(food => 
+            food._id === editingFoodId 
+              ? { ...food, existingImages: food.existingImages?.filter(url => url !== imageUrl) || [] }
+              : food
+          )
+        )
+      }
+      
+      alert('Food image deleted successfully!')
+      // Refresh hotel data to reflect server changes
+      dispatch(getHotelById(displayHotelId))
+    } catch (err) {
+      console.error('Failed to delete food image:', err)
+      alert(err?.response?.data?.message || err?.message || 'Failed to delete food image')
+    }
   }
 
   /* ─── Cleanup previews on unmount ──────────────────────────── */
@@ -740,6 +889,8 @@ function HotelEditPage() {
     if (e?.preventDefault) e.preventDefault()
     if (!displayHotelId) return
     
+    console.log('🚀 Starting hotel save process...')
+    
     try {
       const hotelPayload = buildHotelPayload(hotelForm)
       const roomsPayload = rooms.map((r) => {
@@ -761,6 +912,17 @@ function HotelEditPage() {
       })
       const foodDeletionPayload = deletedFoodIds.map((fid) => ({ foodId: fid, _delete: true }))
       
+      console.log('📦 Payload summary:', {
+        hotel: Object.keys(hotelPayload),
+        rooms: roomsPayload.length,
+        roomDeletions: deletionPayload.length,
+        foods: foodsPayload.length,
+        foodDeletions: foodDeletionPayload.length,
+        hotelImages: hotelImages.length,
+        roomImagesTotal: rooms.reduce((acc, r) => acc + (r.imageFiles?.length || 0), 0),
+        foodImagesTotal: foods.reduce((acc, f) => acc + (f.imageFiles?.length || 0), 0)
+      })
+      
       // Create FormData to handle both JSON and images
       const fd = new FormData()
       
@@ -776,42 +938,78 @@ function HotelEditPage() {
       fd.append('foods', JSON.stringify([...foodsPayload, ...foodDeletionPayload]))
       
       // Add hotel images if any
-      hotelImages.forEach((file) => {
+      hotelImages.forEach((file, index) => {
+        console.log(`📷 Adding hotel image ${index + 1}:`, file.name)
         fd.append('images', file)
       })
       
       // Add room images with proper fieldname: roomImages:roomId or roomImages:_clientKey
-      rooms.forEach((room) => {
+      rooms.forEach((room, roomIndex) => {
         if (room.imageFiles && room.imageFiles.length > 0) {
           const key = room.roomId || room._clientKey
-          room.imageFiles.forEach((file) => {
+          console.log(`🏠 Adding ${room.imageFiles.length} images for room ${roomIndex + 1} (${key})`)
+          room.imageFiles.forEach((file, fileIndex) => {
+            console.log(`  - Room image ${fileIndex + 1}: ${file.name}`)
             fd.append(`roomImages:${key}`, file)
           })
         }
       })
       
-      // Note: Food images would need similar handling if server supports it
-      // For now, focusing on hotel and room images as per server code
+      // Add food images with proper fieldname: foodImages:foodId or foodImages:_clientKey
+      foods.forEach((food, foodIndex) => {
+        if (food.imageFiles && food.imageFiles.length > 0) {
+          const key = food.foodId || food._clientKey
+          console.log(`🍽️ Adding ${food.imageFiles.length} images for food ${foodIndex + 1} (${key})`)
+          food.imageFiles.forEach((file, fileIndex) => {
+            console.log(`  - Food image ${fileIndex + 1}: ${file.name}`)
+            fd.append(`foodImages:${key}`, file)
+          })
+        }
+      })
+      
+      console.log('🌐 Sending update request to server...')
       
       // Update hotel via API directly with FormData
-      await api.patch(`/hotels/master/${displayHotelId}`, fd, {
+      const response = await api.patch(`/hotels/master/${displayHotelId}`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       
-      // Clear uploaded images
+      console.log('✅ Server response:', response.data)
+      
+      // Clear uploaded images and clean up URLs
       hotelPreviews.forEach((u) => URL.revokeObjectURL(u))
+      rooms.forEach((room) => {
+        if (room.imageFiles) room.imageFiles.forEach((_, i) => {
+          if (roomForm.imagePreviews && roomForm.imagePreviews[i]) {
+            URL.revokeObjectURL(roomForm.imagePreviews[i])
+          }
+        })
+      })
+      foods.forEach((food) => {
+        if (food.imageFiles) food.imageFiles.forEach((_, i) => {
+          if (foodForm.imagePreviews && foodForm.imagePreviews[i]) {
+            URL.revokeObjectURL(foodForm.imagePreviews[i])
+          }
+        })
+      })
+      
       setHotelImages([])
       setHotelPreviews([])
       setDeletedRoomIds([])
       setDeletedFoodIds([])
+      resetRoomEditor()
+      resetFoodEditor()
       
-      // Refresh hotel data
-      dispatch(getHotelById(displayHotelId))
+      console.log('🔄 Refreshing hotel data...')
       
-      alert('Hotel updated successfully!')
+      // Refresh hotel data to get updated images
+      await dispatch(getHotelById(displayHotelId))
+      
+      alert('✅ Hotel updated successfully! All changes have been saved.')
     } catch (err) {
-      console.error('saveHotel failed', err)
-      alert(err?.response?.data?.message || err?.message || 'Failed to save hotel changes')
+      console.error('❌ saveHotel failed:', err)
+      console.error('❌ Error details:', err?.response?.data)
+      alert(err?.response?.data?.message || err?.message || 'Failed to save hotel changes. Check console for details.')
     }
   }
 
@@ -831,6 +1029,7 @@ function HotelEditPage() {
         amenities: roomForm.amenities, images: roomForm.images,
         isOffer: roomForm.isOffer, offerName: roomForm.offerName,
         imageFiles: roomForm.imageFiles, // Store files temporarily for later upload
+        existingImages: roomForm.existingImages || [], // Preserve existing images
       }
     }
     
@@ -852,16 +1051,22 @@ function HotelEditPage() {
 
   const handleRoomEdit = (room) => {
     setEditingRoomId(room._id)
+    
+    // Extract existing images correctly from the room object
+    const existingImages = room.existingImages || (Array.isArray(room.images) ? room.images : [])
+    
     setRoomForm({
       type: room.type, bedType: room.bedType, price: room.price,
       originalPrice: room.originalPrice || room.price,
       countRooms: room.countRooms, description: room.description,
-      amenities: room.amenities, images: room.images,
+      amenities: room.amenities, 
+      images: typeof room.images === 'string' ? room.images : room.images?.join(', ') || '',
       isOffer: room.isOffer, offerName: room.offerName,
       offerPriceLess: room.offerPriceLess || '',
       offerExp: room.offerExp || '',
       imageFiles: [], // Reset new uploads when editing
       imagePreviews: [], // Reset previews
+      existingImages: existingImages, // Load existing images from room
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -881,6 +1086,7 @@ function HotelEditPage() {
         about: foodForm.about,
         images: foodForm.images,
         imageFiles: foodForm.imageFiles, // Store files temporarily for later upload
+        existingImages: foodForm.existingImages || [], // Preserve existing images
       }
     }
     
@@ -902,14 +1108,19 @@ function HotelEditPage() {
 
   const handleFoodEdit = (food) => {
     setEditingFoodId(food._id)
+    
+    // Extract existing images correctly from the food object
+    const existingImages = food.existingImages || (Array.isArray(food.images) ? food.images : [])
+    
     setFoodForm({
       name: food.name,
       foodType: food.foodType || 'Veg',
       price: food.price,
       about: food.about,
-      images: food.images,
+      images: typeof food.images === 'string' ? food.images : food.images?.join(', ') || '',
       imageFiles: [], // Reset new uploads when editing
       imagePreviews: [], // Reset previews
+      existingImages: existingImages, // Load existing images from food
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -1024,23 +1235,47 @@ function HotelEditPage() {
                 <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 10, display: 'block' }}>
                   Hotel Images
                 </label>
+                
+                {/* Existing Images */}
+                {existingHotelImages.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 600 }}>Current Images</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                      {existingHotelImages.map((url, i) => (
+                        <div key={i} style={{ position: 'relative', width: 100, height: 100, borderRadius: 8, overflow: 'hidden', border: '2px solid #10b981' }}>
+                          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <button type="button" onClick={() => removeExistingHotelImage(url)}
+                            style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', border: '1.5px dashed #c0b4a0', borderRadius: 8, background: '#faf8f5', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: '#8a7f72', fontWeight: 600, transition: 'all .15s' }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f1ea'; e.currentTarget.style.borderColor = '#a89b88' }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = '#faf8f5'; e.currentTarget.style.borderColor = '#c0b4a0' }}>
-                  <ImagePlus size={16} /> Upload Hotel Images
+                  <ImagePlus size={16} /> Upload New Images
                   <input type="file" multiple accept="image/*" onChange={addHotelImages} style={{ display: 'none' }} />
                 </label>
+                
+                {/* New Images Preview */}
                 {hotelPreviews.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
-                    {hotelPreviews.map((url, i) => (
-                      <div key={i} style={{ position: 'relative', width: 100, height: 100, borderRadius: 8, overflow: 'hidden', border: '1.5px solid #e2e8f0' }}>
-                        <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        <button type="button" onClick={() => removeHotelImage(i)}
-                          style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>
-                          <X size={12} />
-                        </button>
-                      </div>
-                    ))}
+                  <div style={{ marginTop: 12 }}>
+                    <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 600 }}>New Images (to be uploaded)</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                      {hotelPreviews.map((url, i) => (
+                        <div key={i} style={{ position: 'relative', width: 100, height: 100, borderRadius: 8, overflow: 'hidden', border: '2px solid #3b82f6' }}>
+                          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <button type="button" onClick={() => removeHotelImage(i)}
+                            style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1158,23 +1393,47 @@ function HotelEditPage() {
                     {/* Room Images Upload */}
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 8, display: 'block' }}>
-                        Upload Room Images
+                        Room Images
                       </label>
+                      
+                      {/* Existing Room Images */}
+                      {roomForm.existingImages && roomForm.existingImages.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 600 }}>Current Images</p>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {roomForm.existingImages.map((url, i) => (
+                              <div key={i} style={{ position: 'relative', width: 80, height: 80, borderRadius: 6, overflow: 'hidden', border: '2px solid #10b981' }}>
+                                <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <button type="button" onClick={() => removeExistingRoomImage(url)}
+                                  style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                                  <X size={10} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
                       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', border: '1px dashed #c0b4a0', borderRadius: 6, background: '#faf8f5', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: '#8a7f72', fontWeight: 500 }}>
-                        <ImagePlus size={13} /> Attach room images
+                        <ImagePlus size={13} /> Upload New Room Images
                         <input type="file" multiple accept="image/*" onChange={addRoomImages} style={{ display: 'none' }} />
                       </label>
+                      
+                      {/* New Room Images Preview */}
                       {roomForm.imagePreviews.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                          {roomForm.imagePreviews.map((url, i) => (
-                            <div key={i} style={{ position: 'relative', width: 80, height: 80, borderRadius: 6, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                              <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              <button type="button" onClick={() => removeRoomImage(i)}
-                                style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
-                                <X size={10} />
-                              </button>
-                            </div>
-                          ))}
+                        <div style={{ marginTop: 12 }}>
+                          <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 600 }}>New Images (to be uploaded)</p>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {roomForm.imagePreviews.map((url, i) => (
+                              <div key={i} style={{ position: 'relative', width: 80, height: 80, borderRadius: 6, overflow: 'hidden', border: '2px solid #3b82f6' }}>
+                                <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <button type="button" onClick={() => removeRoomImage(i)}
+                                  style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                                  <X size={10} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1342,23 +1601,47 @@ function HotelEditPage() {
                     {/* Food Images Upload */}
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 8, display: 'block' }}>
-                        Upload Food Images
+                        Food Images
                       </label>
+                      
+                      {/* Existing Food Images */}
+                      {foodForm.existingImages && foodForm.existingImages.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 600 }}>Current Images</p>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {foodForm.existingImages.map((url, i) => (
+                              <div key={i} style={{ position: 'relative', width: 80, height: 80, borderRadius: 6, overflow: 'hidden', border: '2px solid #10b981' }}>
+                                <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <button type="button" onClick={() => removeExistingFoodImage(url)}
+                                  style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                                  <X size={10} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
                       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', border: '1px dashed #c0b4a0', borderRadius: 6, background: '#faf8f5', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: '#8a7f72', fontWeight: 500 }}>
-                        <ImagePlus size={13} /> Attach food images
+                        <ImagePlus size={13} /> Upload New Food Images
                         <input type="file" multiple accept="image/*" onChange={addFoodImages} style={{ display: 'none' }} />
                       </label>
+                      
+                      {/* New Food Images Preview */}
                       {foodForm.imagePreviews.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                          {foodForm.imagePreviews.map((url, i) => (
-                            <div key={i} style={{ position: 'relative', width: 80, height: 80, borderRadius: 6, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                              <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              <button type="button" onClick={() => removeFoodImage(i)}
-                                style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
-                                <X size={10} />
-                              </button>
-                            </div>
-                          ))}
+                        <div style={{ marginTop: 12 }}>
+                          <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 600 }}>New Images (to be uploaded)</p>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {foodForm.imagePreviews.map((url, i) => (
+                              <div key={i} style={{ position: 'relative', width: 80, height: 80, borderRadius: 6, overflow: 'hidden', border: '2px solid #3b82f6' }}>
+                                <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <button type="button" onClick={() => removeFoodImage(i)}
+                                  style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                                  <X size={10} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
