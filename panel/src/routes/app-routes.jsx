@@ -34,7 +34,9 @@ import TourListPage from '../pages/admin/tour-list'
 import TourRequestPage from '../pages/tour-request'
 import Complaints from '../pages/admin/complaints'
 import FileComplaint from '../pages/admin/file-complaint'
-import CreateComplaint from '../components/complaints/create-complaint'
+import FileComplaintSelection from '../pages/admin/file-complaint-selection'
+import CreateAdminComplaint from '../components/complaints/create-complaint'
+import CreateUserComplaint from '../components/complaints/create-user-complaint'
 import ComplaintChat from '../components/complaints/complaint-chat'
 import MyComplaints from '../pages/user/complaints/my-complaints'
 import UserComplaintsPage from '../pages/user/complaints/user-complaints'
@@ -97,8 +99,9 @@ export const APP_ROUTES = [
   { path: "/tour-list", Component: TourListPage },
   { path: "/tour-request", Component: TourRequestPage },
   { path: "/complaints", Component: Complaints },
-  { path: "/file-complaint", Component: FileComplaint },
-  { path: "/complaint/create", Component: CreateComplaint },
+  { path: "/complaints/file-complaint", Component: FileComplaintSelection },
+  { path: "/complaint/admin/create", Component: CreateAdminComplaint },
+  { path: "/complaint/user/create", Component: CreateUserComplaint },
   { path: "/complaint/chat/:id", Component: ComplaintChat },
   { path: "/your-complaints", Component: MyComplaints },
   { path: "/user-complaint", Component: UserComplaintsPage },

@@ -23,6 +23,30 @@ const fmtDate = (isoString) => {
   });
 };
 
+const fmtDateTime = (isoString) => {
+  if (!isoString) return '—';
+  
+  // Parse the ISO string to Date object
+  const date = new Date(isoString);
+  
+  // Format date and time in IST timezone
+  const dateStr = date.toLocaleDateString('en-IN', { 
+    day: '2-digit', 
+    month: 'short', 
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata'
+  });
+  
+  const timeStr = date.toLocaleTimeString('en-IN', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata'
+  });
+  
+  return `${dateStr}, ${timeStr} IST`;
+};
+
 const STATUSES = ['Pending', 'Approved', 'Working', 'Resolved', 'Rejected'];
 
 const STATUS_CONFIG = {
@@ -135,7 +159,15 @@ function UpdateModal({ complaint, onClose, onSave, saving, user }) {
                         <div className="h-5 w-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[9px] uppercase">{entry.name?.charAt(0)}</div>
                         {entry.name}
                       </span>
-                      <StatusBadge status={entry.status} />
+                      <div className="flex flex-col items-end gap-1">
+                        <StatusBadge status={entry.status} />
+                        {entry.updatedAt && (
+                          <span className="text-[10px] font-semibold text-zinc-400 flex items-center gap-1">
+                            <CalendarDays size={10} />
+                            {fmtDateTime(entry.updatedAt)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {entry.feedBack && <p className="text-xs font-medium text-zinc-500 pl-6 border-l-2 border-zinc-100 ml-2.5 mt-1">{entry.feedBack}</p>}
                   </div>
@@ -272,7 +304,7 @@ export default function Complaints() {
               <RefreshCw size={18} className={loading ? 'animate-spin text-blue-600' : ''} />
             </button>
             <button 
-              onClick={() => navigate('/complaint/create')}
+              onClick={() => navigate('/complaints/file-complaint')}
               className="flex h-12 items-center gap-2 rounded-2xl bg-zinc-900 px-6 text-sm font-bold text-white shadow-lg shadow-zinc-900/20 transition-all hover:bg-zinc-800 hover:-translate-y-0.5 active:scale-95"
             >
               <Plus size={18} /> Create Ticket

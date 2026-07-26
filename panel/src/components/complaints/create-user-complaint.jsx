@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, ChevronLeft, Loader2, Send, ShieldCheck, User, UserCog } from 'lucide-react'
+import { AlertCircle, CheckCircle2, ChevronLeft, Loader2, Send, User as UserIcon } from 'lucide-react'
 import { createComplaint } from '../../../redux/slices/complaintSlice'
 import { selectAuth } from '../../../redux/slices/authSlice'
 import { getAllHotels } from '../../../redux/slices/admin/hotel'
-import { getAllUsers } from '../../../redux/slices/user'
 
 const REGARDING_OPTIONS = ['Hotel', 'Cab', 'Tour', 'Staff', 'Other']
 
@@ -24,19 +23,17 @@ const normalizeHotelOption = (hotel) => ({
   hotelEmail: hotel?.hotelEmail || hotel?.email || hotel?.basicInfo?.contacts?.email || '',
 })
 
-export default function CreateAdminComplaint() {
+export default function CreateUserComplaint() {
   const dispatch  = useDispatch()
   const navigate  = useNavigate()
   const location  = useLocation()
   const { user }  = useSelector(selectAuth)
   const { allHotels, loading: hotelsLoading } = useSelector((state) => state.hotel)
-  const { users: allUsers, loading: usersLoading } = useSelector((state) => state.user)
   const prefilledState = location.state || {}
 
   const [form, setForm] = useState({
-    selectedUserId: user?._id || user?.id || '', // NEW: For user selection
     regarding:  'Hotel',
-    regardingOther: '', // NEW: For custom regarding input
+    regardingOther: '',
     issue:      '',
     hotelName:  prefilledState.hotelName || '',
     hotelEmail: prefilledState.hotelEmail || '',
@@ -45,7 +42,7 @@ export default function CreateAdminComplaint() {
   })
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
-  const [success, setSuccess] = useState(null)    // { complaintId, _id }
+  const [success, setSuccess] = useState(null)
 
   const set = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }))
 
@@ -53,10 +50,7 @@ export default function CreateAdminComplaint() {
     if (!allHotels?.length) {
       dispatch(getAllHotels())
     }
-    if (!allUsers?.length) {
-      dispatch(getAllUsers())
-    }
-  }, [allHotels?.length, allUsers?.length, dispatch])
+  }, [allHotels?.length, dispatch])
 
   const hotelOptions = useMemo(
     () =>
@@ -84,7 +78,6 @@ export default function CreateAdminComplaint() {
     setError(null)
 
     // Validate required fields
-    if (!form.selectedUserId.trim()) { setError('Please select a user.'); return }
     if (!form.regarding.trim()) { setError('Please select a complaint category.'); return }
     if (form.regarding === 'Other' && !form.regardingOther.trim()) { 
       setError('Please specify what your complaint is regarding.'); 
@@ -92,10 +85,14 @@ export default function CreateAdminComplaint() {
     }
     if (!form.issue.trim()) { setError('Please describe the issue.'); return }
 
-    // Use selected user ID instead of logged-in user
-    const userId = form.selectedUserId
+    // Use logged-in user's ID
+    const userId = user?._id || user?.id
+    if (!userId) {
+      setError('User session not found. Please login again.')
+      return
+    }
     
-    // Use custom regarding text if "Other" is selected, otherwise use the selected category
+    // Use custom regarding text if "Other" is selected
     const finalRegarding = form.regarding === 'Other' 
       ? form.regardingOther.trim() 
       : form.regarding
@@ -105,8 +102,7 @@ export default function CreateAdminComplaint() {
       regarding:  finalRegarding,
       issue:      form.issue.trim(),
       status:     'Pending',
-      complaintType: 'Admin', // Admin Complaint type
-      createdById: user?._id || user?.id, // Who created this complaint (logged-in admin)
+      complaintType: 'User', // User Complaint type
     }
 
     // Add optional fields only if provided
@@ -156,9 +152,9 @@ export default function CreateAdminComplaint() {
             )}
             <button onClick={() => navigate('/user-complaint')}
               className="w-full rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">
-              View User Complaints
+              View All Complaints
             </button>
-            <button onClick={() => { setSuccess(null); setForm({ selectedUserId: user?._id || user?.id || '', regarding: 'Hotel', regardingOther: '', issue: '', hotelName: '', hotelEmail: '', hotelId: '', bookingId: '' }) }}
+            <button onClick={() => { setSuccess(null); setForm({ regarding: 'Hotel', regardingOther: '', issue: '', hotelName: '', hotelEmail: '', hotelId: '', bookingId: '' }) }}
               className="text-xs font-semibold text-slate-400 hover:text-slate-600">
               File Another Complaint
             </button>
@@ -181,40 +177,15 @@ export default function CreateAdminComplaint() {
         {/* Header */}
         <div className="mb-6">
           <div className="mb-1 flex items-center gap-2">
-            <UserCog size={16} className="text-indigo-600" />
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-indigo-600">Admin Complaint</p>
+            <UserIcon size={16} className="text-indigo-600" />
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-indigo-600">User Complaint</p>
           </div>
-          <h1 className="text-2xl font-extrabold tracking-tight">File Admin Complaint</h1>
-          <p className="mt-1 text-sm font-medium text-slate-500">Create a complaint on behalf of any user.</p>
+          <h1 className="text-2xl font-extrabold tracking-tight">File Your Complaint</h1>
+          <p className="mt-1 text-sm font-medium text-slate-500">We'll look into your issue and get back to you.</p>
         </div>
 
         {/* Card */}
         <form onSubmit={handleSubmit} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
-
-          {/* User Selection - REQUIRED */}
-          <InputField label="Select User" required>
-            <div className="relative">
-              <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <select 
-                value={form.selectedUserId} 
-                onChange={(e) => setForm((p) => ({ ...p, selectedUserId: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500"
-              >
-                <option value="">{usersLoading ? 'Loading users...' : 'Select user to file complaint for'}</option>
-                {(allUsers || []).map((u) => {
-                  const userId = u?._id || u?.id || u?.userId
-                  const userName = u?.userName || u?.name || u?.email || 'Unknown User'
-                  const userEmail = u?.email || ''
-                  const userMobile = u?.mobile || ''
-                  return (
-                    <option key={userId} value={userId}>
-                      {userName} {userEmail ? `(${userEmail})` : userMobile ? `(${userMobile})` : ''}
-                    </option>
-                  )
-                })}
-              </select>
-            </div>
-          </InputField>
 
           {/* Regarding */}
           <InputField label="Complaint Regarding" required>
@@ -313,13 +284,7 @@ export default function CreateAdminComplaint() {
         </form>
 
         <p className="mt-4 text-center text-[11px] font-semibold text-slate-400">
-          Filing complaint as admin for: <span className="text-slate-600">{
-            form.selectedUserId 
-              ? (allUsers || []).find(u => (u?._id || u?.id || u?.userId) === form.selectedUserId)?.userName || 
-                (allUsers || []).find(u => (u?._id || u?.id || u?.userId) === form.selectedUserId)?.email || 
-                'Selected user'
-              : 'No user selected'
-          }</span>
+          Filing complaint for yourself as: <span className="text-slate-600">{user?.name || user?.email || 'Current User'}</span>
         </p>
       </div>
     </div>

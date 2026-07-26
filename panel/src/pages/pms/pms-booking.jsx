@@ -373,7 +373,7 @@ function BookingViewModal({ booking, loading, shouldHideGuestContact, showCreate
             <button
               type="button"
               onClick={() =>
-                navigate('/complaint/create', {
+                navigate('/complaints/file-complaint', {
                   state: {
                     bookingId: booking?.bookingId || '',
                     hotelId: booking?.hotelDetails?.hotelId || booking?.hotelId || '',

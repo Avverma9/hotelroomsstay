@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, ArrowRight, BedDouble, Building2, Check,
   CheckCircle2, Loader2, MapPin, PencilLine, Plus,
-  Save, ShieldCheck, Trash2, X, ChevronRight,
+  Save, ShieldCheck, Trash2, X, ChevronRight, ImagePlus,
 } from 'lucide-react'
 import Breadcrumb from '../../../components/breadcrumb'
 import {
@@ -256,6 +256,7 @@ const createEmptyRoomForm = () => ({
   type: '', bedType: '', price: '', originalPrice: '', countRooms: '',
   description: '', amenities: '', images: '', isOffer: false, offerName: '',
   offerPriceLess: '', offerExp: '',
+  imageFiles: [], imagePreviews: [], // For new image uploads
 })
 
 const normalizeFood = (food, index = 0) => {
@@ -274,6 +275,7 @@ const normalizeFood = (food, index = 0) => {
 
 const createEmptyFoodForm = () => ({
   name: '', foodType: 'Veg', price: '', about: '', images: '',
+  imageFiles: [], imagePreviews: [], // For new image uploads
 })
 
 const buildFoodEntry = (form, existingFoodId = null) => {
@@ -527,6 +529,11 @@ function HotelEditPage() {
   const [currentStep,     setCurrentStep]     = useState(1)
   const [completedSteps,  setCompletedSteps]  = useState([])
   const [hotelForm,       setHotelForm]       = useState(() => createHotelForm(null))
+  
+  // Hotel images state
+  const [hotelImages, setHotelImages] = useState([])
+  const [hotelPreviews, setHotelPreviews] = useState([])
+  
   const [roomForm,        setRoomForm]        = useState(createEmptyRoomForm)
   const [editingRoomId,   setEditingRoomId]   = useState(null)
   const [rooms,           setRooms]           = useState([])
@@ -633,6 +640,66 @@ function HotelEditPage() {
     setFoodForm((p) => ({ ...p, [key]: value }))
   }
 
+  /* ─── Hotel Image Handlers ─────────────────────────────────── */
+  const addHotelImages = (e) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    setHotelImages((p) => [...p, ...files])
+    setHotelPreviews((p) => [...p, ...files.map((f) => URL.createObjectURL(f))])
+  }
+  const removeHotelImage = (i) => {
+    URL.revokeObjectURL(hotelPreviews[i])
+    setHotelImages((p) => p.filter((_, x) => x !== i))
+    setHotelPreviews((p) => p.filter((_, x) => x !== i))
+  }
+
+  /* ─── Room Image Handlers ──────────────────────────────────── */
+  const addRoomImages = (e) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    setRoomForm((p) => ({
+      ...p,
+      imageFiles: [...p.imageFiles, ...files],
+      imagePreviews: [...p.imagePreviews, ...files.map((f) => URL.createObjectURL(f))],
+    }))
+  }
+  const removeRoomImage = (i) => {
+    URL.revokeObjectURL(roomForm.imagePreviews[i])
+    setRoomForm((p) => ({
+      ...p,
+      imageFiles: p.imageFiles.filter((_, x) => x !== i),
+      imagePreviews: p.imagePreviews.filter((_, x) => x !== i),
+    }))
+  }
+
+  /* ─── Food Image Handlers ──────────────────────────────────── */
+  const addFoodImages = (e) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    setFoodForm((p) => ({
+      ...p,
+      imageFiles: [...p.imageFiles, ...files],
+      imagePreviews: [...p.imagePreviews, ...files.map((f) => URL.createObjectURL(f))],
+    }))
+  }
+  const removeFoodImage = (i) => {
+    URL.revokeObjectURL(foodForm.imagePreviews[i])
+    setFoodForm((p) => ({
+      ...p,
+      imageFiles: p.imageFiles.filter((_, x) => x !== i),
+      imagePreviews: p.imagePreviews.filter((_, x) => x !== i),
+    }))
+  }
+
+  /* ─── Cleanup previews on unmount ──────────────────────────── */
+  useEffect(() => {
+    return () => {
+      hotelPreviews.forEach((u) => URL.revokeObjectURL(u))
+      roomForm.imagePreviews.forEach((u) => URL.revokeObjectURL(u))
+      foodForm.imagePreviews.forEach((u) => URL.revokeObjectURL(u))
+    }
+  }, [hotelPreviews, roomForm.imagePreviews, foodForm.imagePreviews])
+
   const markComplete = (step) => {
     setCompletedSteps((p) => p.includes(step) ? p : [...p, step])
   }
@@ -643,8 +710,16 @@ function HotelEditPage() {
   }
   const goPrev = () => setCurrentStep((s) => Math.max(s - 1, 1))
 
-  const resetRoomEditor = () => { setEditingRoomId(null); setRoomForm(createEmptyRoomForm()) }
-  const resetFoodEditor = () => { setEditingFoodId(null); setFoodForm(createEmptyFoodForm()) }
+  const resetRoomEditor = () => { 
+    roomForm.imagePreviews.forEach((u) => URL.revokeObjectURL(u))
+    setEditingRoomId(null)
+    setRoomForm(createEmptyRoomForm())
+  }
+  const resetFoodEditor = () => { 
+    foodForm.imagePreviews.forEach((u) => URL.revokeObjectURL(u))
+    setEditingFoodId(null)
+    setFoodForm(createEmptyFoodForm())
+  }
 
   const savePolicies = async (e) => {
     if (e?.preventDefault) e.preventDefault()
@@ -664,43 +739,101 @@ function HotelEditPage() {
   const saveHotel = async (e) => {
     if (e?.preventDefault) e.preventDefault()
     if (!displayHotelId) return
-    const hotelPayload  = buildHotelPayload(hotelForm)
-    const roomsPayload  = rooms.map((r) => buildRoomEntry(r, r.roomId || null))
-    const deletionPayload = deletedRoomIds.map((rid) => ({ roomId: rid, _delete: true }))
-    const foodsPayload = foods.map((f) => buildFoodEntry(f, f.foodId || null))
-    const foodDeletionPayload = deletedFoodIds.map((fid) => ({ foodId: fid, _delete: true }))
+    
     try {
-      await dispatch(updateHotelInfo({
-        hotelId: displayHotelId,
-        hotelData: {
-          ...hotelPayload,
-          rooms: [...roomsPayload, ...deletionPayload],
-          foods: [...foodsPayload, ...foodDeletionPayload],
-        },
-      })).unwrap()
+      const hotelPayload = buildHotelPayload(hotelForm)
+      const roomsPayload = rooms.map((r) => {
+        const roomData = buildRoomEntry(r, r.roomId || null)
+        // Add client key for new rooms to map images
+        if (!r.roomId && r._clientKey) {
+          roomData._clientKey = r._clientKey
+        }
+        return roomData
+      })
+      const deletionPayload = deletedRoomIds.map((rid) => ({ roomId: rid, _delete: true }))
+      const foodsPayload = foods.map((f) => {
+        const foodData = buildFoodEntry(f, f.foodId || null)
+        // Add client key for new foods to map images
+        if (!f.foodId && f._clientKey) {
+          foodData._clientKey = f._clientKey
+        }
+        return foodData
+      })
+      const foodDeletionPayload = deletedFoodIds.map((fid) => ({ foodId: fid, _delete: true }))
+      
+      // Create FormData to handle both JSON and images
+      const fd = new FormData()
+      
+      // Add hotel basic data as individual fields
+      Object.keys(hotelPayload).forEach((key) => {
+        if (hotelPayload[key] !== undefined && hotelPayload[key] !== null) {
+          fd.append(key, hotelPayload[key])
+        }
+      })
+      
+      // Add rooms and foods as JSON strings
+      fd.append('rooms', JSON.stringify([...roomsPayload, ...deletionPayload]))
+      fd.append('foods', JSON.stringify([...foodsPayload, ...foodDeletionPayload]))
+      
+      // Add hotel images if any
+      hotelImages.forEach((file) => {
+        fd.append('images', file)
+      })
+      
+      // Add room images with proper fieldname: roomImages:roomId or roomImages:_clientKey
+      rooms.forEach((room) => {
+        if (room.imageFiles && room.imageFiles.length > 0) {
+          const key = room.roomId || room._clientKey
+          room.imageFiles.forEach((file) => {
+            fd.append(`roomImages:${key}`, file)
+          })
+        }
+      })
+      
+      // Note: Food images would need similar handling if server supports it
+      // For now, focusing on hotel and room images as per server code
+      
+      // Update hotel via API directly with FormData
+      await api.patch(`/hotels/master/${displayHotelId}`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      
+      // Clear uploaded images
+      hotelPreviews.forEach((u) => URL.revokeObjectURL(u))
+      setHotelImages([])
+      setHotelPreviews([])
       setDeletedRoomIds([])
       setDeletedFoodIds([])
+      
+      // Refresh hotel data
       dispatch(getHotelById(displayHotelId))
+      
+      alert('Hotel updated successfully!')
     } catch (err) {
       console.error('saveHotel failed', err)
+      alert(err?.response?.data?.message || err?.message || 'Failed to save hotel changes')
     }
   }
 
-  const saveRoomLocal = (e) => {
+  const saveRoomLocal = async (e) => {
     if (e?.preventDefault) e.preventDefault()
+    
     const makeRoom = (existingId) => {
       const existing = existingId ? rooms.find((r) => r._id === existingId) : null
       return {
         _id: existingId || `room-temp-${Date.now()}`,
         roomId: existing?.roomId || '',
+        _clientKey: existingId || `room-temp-${Date.now()}`, // For server to map images
         name: roomForm.type || `Room ${rooms.length + 1}`,
         type: roomForm.type, bedType: roomForm.bedType,
         price: String(roomForm.price ?? ''), countRooms: String(roomForm.countRooms ?? ''),
         totalRooms: String(roomForm.countRooms ?? ''), description: roomForm.description,
         amenities: roomForm.amenities, images: roomForm.images,
         isOffer: roomForm.isOffer, offerName: roomForm.offerName,
+        imageFiles: roomForm.imageFiles, // Store files temporarily for later upload
       }
     }
+    
     if (editingRoomId) {
       setRooms(rooms.map((r) => r._id === editingRoomId ? { ...r, ...makeRoom(editingRoomId) } : r))
     } else {
@@ -727,24 +860,30 @@ function HotelEditPage() {
       isOffer: room.isOffer, offerName: room.offerName,
       offerPriceLess: room.offerPriceLess || '',
       offerExp: room.offerExp || '',
+      imageFiles: [], // Reset new uploads when editing
+      imagePreviews: [], // Reset previews
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const saveFoodLocal = (e) => {
+  const saveFoodLocal = async (e) => {
     if (e?.preventDefault) e.preventDefault()
+    
     const makeFood = (existingId) => {
       const existing = existingId ? foods.find((f) => f._id === existingId) : null
       return {
         _id: existingId || `food-temp-${Date.now()}`,
         foodId: existing?.foodId || '',
+        _clientKey: existingId || `food-temp-${Date.now()}`, // For server to map images
         name: foodForm.name,
         foodType: foodForm.foodType || 'Veg',
         price: String(foodForm.price ?? ''),
         about: foodForm.about,
         images: foodForm.images,
+        imageFiles: foodForm.imageFiles, // Store files temporarily for later upload
       }
     }
+    
     if (editingFoodId) {
       setFoods(foods.map((f) => f._id === editingFoodId ? { ...f, ...makeFood(editingFoodId) } : f))
     } else {
@@ -769,6 +908,8 @@ function HotelEditPage() {
       price: food.price,
       about: food.about,
       images: food.images,
+      imageFiles: [], // Reset new uploads when editing
+      imagePreviews: [], // Reset previews
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -877,6 +1018,32 @@ function HotelEditPage() {
               <FieldInput label="State" required value={hotelForm.state} onChange={setHotelField('state')} />
               <FieldInput label="Pin Code" value={hotelForm.pinCode} onChange={setHotelField('pinCode')} />
               <FieldInput label="Destination" value={hotelForm.destination} onChange={setHotelField('destination')} placeholder="e.g. Shimla" />
+              
+              {/* Hotel Images Upload */}
+              <div style={{ gridColumn: '1 / -1', marginTop: 8 }}>
+                <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 10, display: 'block' }}>
+                  Hotel Images
+                </label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', border: '1.5px dashed #c0b4a0', borderRadius: 8, background: '#faf8f5', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: '#8a7f72', fontWeight: 600, transition: 'all .15s' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f1ea'; e.currentTarget.style.borderColor = '#a89b88' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = '#faf8f5'; e.currentTarget.style.borderColor = '#c0b4a0' }}>
+                  <ImagePlus size={16} /> Upload Hotel Images
+                  <input type="file" multiple accept="image/*" onChange={addHotelImages} style={{ display: 'none' }} />
+                </label>
+                {hotelPreviews.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
+                    {hotelPreviews.map((url, i) => (
+                      <div key={i} style={{ position: 'relative', width: 100, height: 100, borderRadius: 8, overflow: 'hidden', border: '1.5px solid #e2e8f0' }}>
+                        <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <button type="button" onClick={() => removeHotelImage(i)}
+                          style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -987,6 +1154,31 @@ function HotelEditPage() {
                     <div style={{ gridColumn: '1 / -1' }}>
                       <FieldInput label="Image URLs (comma separated)" value={roomForm.images} onChange={setRoomField('images')} placeholder="https://..." />
                     </div>
+                    
+                    {/* Room Images Upload */}
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 8, display: 'block' }}>
+                        Upload Room Images
+                      </label>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', border: '1px dashed #c0b4a0', borderRadius: 6, background: '#faf8f5', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: '#8a7f72', fontWeight: 500 }}>
+                        <ImagePlus size={13} /> Attach room images
+                        <input type="file" multiple accept="image/*" onChange={addRoomImages} style={{ display: 'none' }} />
+                      </label>
+                      {roomForm.imagePreviews.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                          {roomForm.imagePreviews.map((url, i) => (
+                            <div key={i} style={{ position: 'relative', width: 80, height: 80, borderRadius: 6, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                              <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <button type="button" onClick={() => removeRoomImage(i)}
+                                style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                                <X size={10} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
                     <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8' }}>Description</label>
                       <textarea
@@ -1145,6 +1337,30 @@ function HotelEditPage() {
                     </div>
                     <div style={{ gridColumn: '1 / -1' }}>
                       <FieldInput label="Image URLs (comma separated)" value={foodForm.images} onChange={setFoodField('images')} placeholder="https://..." />
+                    </div>
+                    
+                    {/* Food Images Upload */}
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 8, display: 'block' }}>
+                        Upload Food Images
+                      </label>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', border: '1px dashed #c0b4a0', borderRadius: 6, background: '#faf8f5', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: '#8a7f72', fontWeight: 500 }}>
+                        <ImagePlus size={13} /> Attach food images
+                        <input type="file" multiple accept="image/*" onChange={addFoodImages} style={{ display: 'none' }} />
+                      </label>
+                      {foodForm.imagePreviews.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                          {foodForm.imagePreviews.map((url, i) => (
+                            <div key={i} style={{ position: 'relative', width: 80, height: 80, borderRadius: 6, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                              <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <button type="button" onClick={() => removeFoodImage(i)}
+                                style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                                <X size={10} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
