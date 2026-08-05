@@ -35,6 +35,8 @@ const PUBLIC_PATH_PREFIXES = [
   '/search-tours/from-to',
   '/tours/visiting-places',
   '/get-tour-list',
+  '/get-all-tours',
+  '/filter-tour/by-query',
   '/sort-tour/by-price',
   '/sort-tour/by-duration',
   '/sort-tour/by-themes',

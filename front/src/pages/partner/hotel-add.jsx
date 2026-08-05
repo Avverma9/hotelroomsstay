@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import apiClient from '../../utils/apiInterceptor'
+import { useToast } from '../../utils/toast'
 import {
   Building2, ImagePlus, Loader2, Plus, X,
   MapPin, Phone, Mail, Star, Calendar, Check,
@@ -237,6 +238,7 @@ function StepSidebar({ current, onJump, completedSteps }) {
 /* ── Main component ── */
 export default function HotelAdd() {
   const navigate = useNavigate()
+  const toast = useToast()
   const hotelCategoryOptions = useHotelCategories()
   const propertyTypeOptions = usePropertyTypes()
 
@@ -253,6 +255,11 @@ export default function HotelAdd() {
   const [policies, setPolicies]     = useState(createEmptyPolicies)
   const [status, setStatus]         = useState({ type: null, msg: '' })
   const [submitting, setSubmitting] = useState(false)
+
+  const MAX_HOTEL_IMAGES = 12
+  const MAX_ROOM_IMAGES = 6
+  const MAX_FOOD_IMAGES = 6
+  const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
 
   const inp = makeInp()
 
@@ -274,6 +281,15 @@ export default function HotelAdd() {
   const addImages = (e) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
+    if (images.length + files.length > MAX_HOTEL_IMAGES) {
+      toast.error(`Maximum ${MAX_HOTEL_IMAGES} images allowed for a property.`)
+      return
+    }
+    const tooLarge = files.find((f) => f.size > MAX_FILE_SIZE)
+    if (tooLarge) {
+      toast.error(`${tooLarge.name} is too large. Max ${MAX_FILE_SIZE / 1024 / 1024} MB.`)
+      return
+    }
     setImages((p) => [...p, ...files])
     setPreviews((p) => [...p, ...files.map((f) => URL.createObjectURL(f))])
   }
@@ -302,6 +318,13 @@ export default function HotelAdd() {
   const addRoomImages = (ri, e) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
+    const room = rooms[ri]
+    if (room.imageFiles.length + files.length > MAX_ROOM_IMAGES) {
+      toast.error(`Maximum ${MAX_ROOM_IMAGES} images allowed per room.`)
+      return
+    }
+    const tooLarge = files.find((f) => f.size > MAX_FILE_SIZE)
+    if (tooLarge) { toast.error(`${tooLarge.name} is too large. Max ${MAX_FILE_SIZE / 1024 / 1024} MB.`); return }
     setRooms((p) => p.map((r, i) => i === ri ? {
       ...r, imageFiles: [...r.imageFiles, ...files],
       imagePreviews: [...r.imagePreviews, ...files.map((f) => URL.createObjectURL(f))],
@@ -324,6 +347,13 @@ export default function HotelAdd() {
   const addFoodImages = (fi, e) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
+    const food = foods[fi]
+    if (food.imageFiles.length + files.length > MAX_FOOD_IMAGES) {
+      toast.error(`Maximum ${MAX_FOOD_IMAGES} images allowed per food item.`)
+      return
+    }
+    const tooLarge = files.find((f) => f.size > MAX_FILE_SIZE)
+    if (tooLarge) { toast.error(`${tooLarge.name} is too large. Max ${MAX_FILE_SIZE / 1024 / 1024} MB.`); return }
     setFoods((p) => p.map((f, i) => i === fi ? {
       ...f, imageFiles: [...f.imageFiles, ...files],
       imagePreviews: [...f.imagePreviews, ...files.map((file) => URL.createObjectURL(file))],
@@ -346,6 +376,23 @@ export default function HotelAdd() {
     try {
       /* 1 — Create hotel */
       const fd = new FormData()
+      // If images exist, upload them directly to S3 using presigned POSTs
+      let imagesUrls = []
+      if (images.length) {
+        try {
+          const presignResp = await apiClient.post(`${baseURL}/presign`, { files: images.map((f) => ({ name: f.name, contentType: f.type })) })
+          const presigns = presignResp.data?.data || []
+          for (let i = 0; i < presigns.length; i++) {
+            const p = presigns[i]
+            // presigned PUT URL — upload file with PUT and correct content-type
+            await fetch(p.url, { method: 'PUT', body: images[i], headers: { 'Content-Type': images[i].type || 'application/octet-stream' } })
+            imagesUrls.push(p.publicUrl)
+          }
+        } catch (err) {
+          console.error('Presigned upload failed', err)
+          throw new Error('Failed to upload images to S3')
+        }
+      }
       ;['hotelName','description','hotelOwnerName','destination','state','city','landmark',
         'pinCode','hotelCategory','numRooms','latitude','longitude','starRating','propertyType',
         'contact','hotelEmail','customerWelcomeNote','generalManagerContact',
@@ -353,14 +400,21 @@ export default function HotelAdd() {
       ].forEach((k) => fd.append(k, s(form[k])))
       if (form.startDate) fd.append('startDate', form.startDate)
       if (form.endDate)   fd.append('endDate',   form.endDate)
-      images.forEach((f) => fd.append('images', f))
+      // prefer direct-s3 uploaded image URLs when available
+      if (imagesUrls.length) {
+        fd.append('images', JSON.stringify(imagesUrls))
+      } else {
+        images.forEach((f) => fd.append('images', f))
+      }
 
       const res = await apiClient.post(`${baseURL}/data/hotels-new/post/upload/data`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      const hotelId = res.data?.data?.hotelId
+      // Server may return { hotelId } or { data: { hotelId } }
+      const hotelId = res?.data?.hotelId || res?.data?.data?.hotelId || res?.data?.id || res?.data?.data?.id;
       if (!hotelId) throw new Error('Hotel created but hotelId missing.')
       localStorage.setItem('hotelId', hotelId)
+      toast.success(`Hotel created — ID: ${hotelId}`)
 
       /* 2 — Amenities */
       if (amenities.length > 0)

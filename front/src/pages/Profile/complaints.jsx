@@ -32,6 +32,9 @@ export default function ComplaintsPage() {
   const dispatch = useDispatch();
   const { data, loading, error } = useSelector((state) => state.complaint);
 
+  // Get userId from localStorage
+  const userId = localStorage.getItem('rsUserId');
+
   const [regarding, setRegarding] = useState("");
   const [hotelId, setHotelId] = useState("");
   const [hotelName, setHotelName] = useState("");
@@ -56,9 +59,8 @@ export default function ComplaintsPage() {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    const uid = localStorage.getItem('rsUserId');
-    if (uid) dispatch(fetchComplaints(uid));
-  }, [dispatch]);
+    if (userId) dispatch(fetchComplaints(userId));
+  }, [dispatch, userId]);
 
   useEffect(() => {
     if (bookingId) {

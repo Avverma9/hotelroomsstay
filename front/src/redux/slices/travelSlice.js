@@ -23,8 +23,14 @@ export const searchTour = createAsyncThunk(
   'travel/searchTour',
   async ({ from, to }, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get('/search-tours/from-to', {
-        params: { from, to },
+      const response = await apiClient.get('/filter-tour/by-query', {
+        params: {
+          fromWhere: from || undefined,
+          to: to || undefined,
+          limit: 100,
+          sortBy: 'createdAt',
+          sortOrder: 'desc',
+        },
       });
       return response?.data?.data ?? response?.data;
     } catch (error) {
@@ -48,8 +54,10 @@ export const getTravelList = createAsyncThunk(
   'travel/getTravelList',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get('/get-tour-list');
-      return response?.data?.data;
+      const response = await apiClient.get('/get-all-tours', {
+        params: { page: 1, limit: 100, sortBy: 'createdAt', sortOrder: 'desc' },
+      });
+      return response?.data?.data ?? [];
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || error.message);
     }
@@ -60,8 +68,10 @@ export const getTravelByPrice = createAsyncThunk(
   'travel/getTravelByPrice',
   async ({ minPrice, maxPrice }, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get('/sort-tour/by-price?minPrice=' + minPrice + '&maxPrice=' + maxPrice);
-      return response?.data;
+      const response = await apiClient.get('/filter-tour/by-query', {
+        params: { minPrice, maxPrice, limit: 100 },
+      });
+      return response?.data?.data ?? response?.data ?? [];
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || error.message);
     }
@@ -72,8 +82,10 @@ export const getTravelByDuration = createAsyncThunk(
   'travel/getTravelByDuration',
   async ({ minNights, maxNights }, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get('/sort-tour/by-duration?minNights=' + minNights + '&maxNights=' + maxNights);
-      return response?.data;
+      const response = await apiClient.get('/filter-tour/by-query', {
+        params: { minNights, maxNights, limit: 100 },
+      });
+      return response?.data?.data ?? response?.data ?? [];
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || error.message);
     }
@@ -84,8 +96,10 @@ export const getTravelByThemes = createAsyncThunk(
   'travel/getTravelByThemes',
   async (themes, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get('/sort-tour/by-themes?themes=' + themes);
-      return response?.data;
+      const response = await apiClient.get('/filter-tour/by-query', {
+        params: { themes, limit: 100 },
+      });
+      return response?.data?.data ?? response?.data ?? [];
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || error.message);
     }
@@ -96,8 +110,11 @@ export const getTravelByOrder = createAsyncThunk(
   'travel/getTravelByOrder',
   async (sort, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get('/sort-tour/by-order?sort=' + sort);
-      return response?.data;
+      const sortOrder = String(sort).toLowerCase() === 'asc' ? 'asc' : 'desc';
+      const response = await apiClient.get('/filter-tour/by-query', {
+        params: { sortBy: 'price', sortOrder, limit: 100 },
+      });
+      return response?.data?.data ?? response?.data ?? [];
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || error.message);
     }

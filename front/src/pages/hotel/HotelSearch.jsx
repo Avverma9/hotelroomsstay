@@ -170,32 +170,43 @@ export default function HotelSearchPage() {
   }, [hotels, dispatch, checkInDate, checkOutDate]);
 
 const filteredHotels = useMemo(() => {
-  // 1. API response structure check: Agar hotels ek object hai to .data array nikalye
+  // 1. Extract hotels array from API response
   const hotelsArray = Array.isArray(hotels) 
     ? hotels 
     : (hotels?.data && Array.isArray(hotels.data) ? hotels.data : []);
 
-  const filtered = hotelsArray.filter((hotel) => {
-    if (!hotel || typeof hotel !== 'object') return false;
+  console.log("🔍 DEBUG: Hotels data received:", hotels);
+  console.log("🔍 DEBUG: Extracted hotels array:", hotelsArray);
+  console.log("🔍 DEBUG: Array length:", hotelsArray.length);
 
-    // 2. Price Logic: Naye JSON mein startingPrice top-level par hai
-    // Agar startingPrice 0 hai aur rooms khali hain, to usey 0 hi maaniye (ya fallback set kariye)
+  const filtered = hotelsArray.filter((hotel) => {
+    if (!hotel || typeof hotel !== 'object') {
+      console.log("❌ Rejected: Invalid hotel object", hotel);
+      return false;
+    }
+
+    // 2. Price Logic: Use startingPrice from top level
     let hotelPrice = Number(hotel.startingPrice) || 0;
     
-    // Fallback: Agar startingPrice 0 hai par rooms mein data hai (aapke case mein rooms [] hai)
-    if (hotelPrice === 0 && hotel.rooms?.length > 0) {
+    // Fallback: If startingPrice is 0 and rooms exist, calculate from rooms
+    if (hotelPrice === 0 && Array.isArray(hotel.rooms) && hotel.rooms.length > 0) {
       hotelPrice = Math.min(...hotel.rooms.map(r => Number(r.finalPrice || r.price || 0)));
     }
 
-    // Price Match (Special Case: Agar price 0 hai to default filters se bahar na ho jaye)
+    console.log(`💰 Hotel: ${hotel.hotelName}, Price: ${hotelPrice}, Rooms: ${hotel.rooms?.length || 0}`);
+
+    // Price Match - SPECIAL: If price is 0, still show it (don't filter out)
     const minP = filters.minPrice ?? 0;
     const maxP = filters.maxPrice ?? Number.MAX_SAFE_INTEGER;
     const priceMatch = hotelPrice === 0 ? true : (hotelPrice >= minP && hotelPrice <= maxP);
+    
+    console.log(`  ├─ Price Match: ${priceMatch} (${hotelPrice} between ${minP} and ${maxP})`);
 
-    // 3. Star Rating Match: API "5" (string) bhej raha hai
+    // 3. Star Rating Match
     const starMatch = !filters.starRating || String(hotel.starRating) === String(filters.starRating);
+    console.log(`  ├─ Star Match: ${starMatch} (${hotel.starRating} vs ${filters.starRating})`);
 
-    // 4. Amenities Match: Naye JSON mein flat array hai ["Free WiFi", "Parking"]
+    // 4. Amenities Match
     const hotelAmenities = Array.isArray(hotel.amenities) ? hotel.amenities : [];
     const amenityMatch = filters.amenities.length === 0 ||
       filters.amenities.every((selected) =>
@@ -203,12 +214,14 @@ const filteredHotels = useMemo(() => {
           String(amenity).toLowerCase().includes(selected.toLowerCase())
         )
       );
+    console.log(`  ├─ Amenity Match: ${amenityMatch}`);
 
     // 5. Property Type Match
     const propertyMatch = filters.propertyType.length === 0 ||
       (hotel.propertyType || []).some((type) => filters.propertyType.includes(type));
+    console.log(`  ├─ Property Match: ${propertyMatch}`);
 
-    // 6. Room & Bed Type Match: Safety check kyunki rooms khali [] ho sakte hain
+    // 6. Room & Bed Type Match
     const hasRooms = Array.isArray(hotel.rooms) && hotel.rooms.length > 0;
     
     const roomTypeMatch = filters.type.length === 0 || (hasRooms && hotel.rooms.some((room) =>
@@ -219,8 +232,15 @@ const filteredHotels = useMemo(() => {
       filters.bedTypes.some((selected) => room.bedTypes?.toLowerCase().includes(selected.toLowerCase()))
     ));
 
-    return priceMatch && starMatch && amenityMatch && propertyMatch && roomTypeMatch && bedTypeMatch;
+    console.log(`  ├─ Room Match: ${roomTypeMatch}, Bed Match: ${bedTypeMatch}`);
+
+    const finalMatch = priceMatch && starMatch && amenityMatch && propertyMatch && roomTypeMatch && bedTypeMatch;
+    console.log(`  └─ Final Match: ${finalMatch ? "✅ PASS" : "❌ FAIL"}`);
+
+    return finalMatch;
   });
+
+  console.log("✅ DEBUG: Filtered hotels count:", filtered.length);
 
   // Sorting Logic using startingPrice
   return filtered.sort((a, b) => {
