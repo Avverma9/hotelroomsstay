@@ -9,7 +9,7 @@ const {
 
 const createComplaint = async (req, res) => {
     // Extract data from either req.body (JSON) or req.body (multipart)
-    const { userId, regarding, hotelName, hotelEmail, bookingId, status, issue, hotelId } = req.body;
+    const { userId, regarding, hotelName, hotelEmail, bookingId, status, issue, hotelId, complaintType, createdById } = req.body;
     
     // Get images from req.files (multipart upload) - will be empty array if no files
     const images = req.files ? req.files.map((file) => file.location) : [];
@@ -18,6 +18,12 @@ const createComplaint = async (req, res) => {
         // VALIDATION: Only userId, regarding, and issue are required
         if (!userId || !regarding || !issue) {
             return res.status(400).json({ message: 'Missing required fields: userId, regarding, and issue are mandatory.' });
+        }
+        
+        // Validate complaintType if provided
+        const finalComplaintType = complaintType || 'User';
+        if (!['User', 'Admin'].includes(finalComplaintType)) {
+            return res.status(400).json({ message: 'Invalid complaintType. Must be either "User" or "Admin".' });
         }
 
         // Resolve userId to User's MongoDB ObjectId
@@ -99,11 +105,20 @@ const createComplaint = async (req, res) => {
             bookingId: bookingId || '',
             images,
             status: status || 'Pending',
+            complaintType: finalComplaintType,
         };
 
         // Add hotelId only if resolved
         if (resolvedHotelObjectId) {
             complaintData.hotelId = resolvedHotelObjectId;
+        }
+        
+        // Add createdBy for Admin complaints
+        if (finalComplaintType === 'Admin' && createdById) {
+            // Validate createdById is a valid ObjectId
+            if (mongoose.Types.ObjectId.isValid(createdById) && String(createdById).length === 24) {
+                complaintData.createdBy = createdById;
+            }
         }
 
         const newComplaint = new Complaint(complaintData);
@@ -210,19 +225,52 @@ const getComplaintsByUserId = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // Resolve numeric userId OR _id string to the stored ObjectId
-    let objectId;
+    // Resolve userId to User's MongoDB ObjectId
+    // The userId from panel could be:
+    // 1. Dashboard user _id (MongoDB ObjectId string)
+    // 2. Dashboard user id field (string)
+    // 3. User's userId field (numeric string)
+    // 4. User's _id (MongoDB ObjectId)
+    
+    let resolvedObjectId;
+    
+    // First, try to find as dashboard user and get linked User
+    const DashboardUser = require('../../models/dashboardUser');
+    let dashboardUser = null;
+    
+    // Check if it's a valid ObjectId format
     if (mongoose.Types.ObjectId.isValid(userId) && String(userId).length === 24) {
-      const userDoc = await User.findOne({ $or: [{ _id: userId }, { userId }] }).select('_id').lean();
-      if (!userDoc) return res.status(404).json({ message: 'No complaints found for this user.' });
-      objectId = userDoc._id;
+      dashboardUser = await DashboardUser.findById(userId).select('userId email mobile').lean();
+    }
+    
+    // If dashboard user found, find the corresponding User by userId/email/mobile
+    if (dashboardUser) {
+      const userDoc = await User.findOne({
+        $or: [
+          { userId: dashboardUser.userId },
+          { email: dashboardUser.email },
+          { mobile: dashboardUser.mobile }
+        ]
+      }).select('_id').lean();
+      
+      if (!userDoc) {
+        return res.status(404).json({ message: 'No complaints found for this user.' });
+      }
+      resolvedObjectId = userDoc._id;
     } else {
-      const userDoc = await User.findOne({ userId }).select('_id').lean();
-      if (!userDoc) return res.status(404).json({ message: 'No complaints found for this user.' });
-      objectId = userDoc._id;
+      // If not found as dashboard user, try direct User lookup
+      if (mongoose.Types.ObjectId.isValid(userId) && String(userId).length === 24) {
+        const userDoc = await User.findOne({ $or: [{ _id: userId }, { userId }] }).select('_id').lean();
+        if (!userDoc) return res.status(404).json({ message: 'No complaints found for this user.' });
+        resolvedObjectId = userDoc._id;
+      } else {
+        const userDoc = await User.findOne({ userId }).select('_id').lean();
+        if (!userDoc) return res.status(404).json({ message: 'No complaints found for this user.' });
+        resolvedObjectId = userDoc._id;
+      }
     }
 
-    const complaints = await Complaint.find({ userId: objectId }).lean();
+    const complaints = await Complaint.find({ userId: resolvedObjectId }).lean();
 
     if (!complaints.length) {
       return res.status(404).json({ message: "No complaints found for this user." });
@@ -336,7 +384,7 @@ const getComplaint = async (req, res) => {
 const filteredComplaints = async (req, res) => {
     try {
         // Extract query parameters
-        const { status, hotelName, hotelEmail, complaintId } = req.query;
+        const { status, hotelName, hotelEmail, complaintId, complaintType } = req.query;
 
         // Build filter object
         let filter = {};
@@ -351,6 +399,9 @@ const filteredComplaints = async (req, res) => {
         }
         if (hotelEmail) {
             filter.hotelEmail = { $regex: hotelEmail, $options: 'i' }; // Case-insensitive search
+        }
+        if (complaintType) {
+            filter.complaintType = complaintType; // Filter by User or Admin
         }
 
         // Fetch filtered complaints

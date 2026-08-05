@@ -12,6 +12,7 @@ const {
   getAllVisitingPlaces,
 } = require("../../controllers/tour/tour");
 const { upload } = require("../../aws/upload");
+const enforceUploadLimits = require('../../middleware/enforceUploadLimits');
 const {
   createBooking,
   getBookings,
@@ -27,14 +28,14 @@ const {
 const router = express.Router();
 
 // ── Tour Routes ──────────────────────────────────────────
-router.post("/create-tour", upload, createTour);
+router.post("/create-tour", upload, enforceUploadLimits({ maxFiles: 12, maxTotalSizeBytes: 60 * 1024 * 1024 }), createTour);
 router.get("/get-tour/:id", getTourById);
 router.get("/filter-tour/by-query", filterTours);
 router.get("/get-all-tours", getAllTours);
 router.get("/get-requests", getRequestedTour);
 router.get("/get-tour/by-owner/query", getTourByOwner);
 router.patch("/update-tour/data/:id", updateTour);
-router.patch("/update-tour-image/:id", upload, changeTourImage);
+router.patch("/update-tour-image/:id", upload, enforceUploadLimits({ maxFiles: 6, maxTotalSizeBytes: 30 * 1024 * 1024 }), changeTourImage);
 router.delete("/delete-tour-image/:id", deleteTourImage);
 router.get("/tours/:tourId/vehicles/:vehicleId/seats", getVehicleSeats);
 router.get("/tours/visiting-places", getAllVisitingPlaces);

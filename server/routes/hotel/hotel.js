@@ -1,16 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const { upload } = require('../../aws/upload');
+const enforceUploadLimits = require('../../middleware/enforceUploadLimits');
 const hotelController = require('../../controllers/hotel/hotel');
 const { createHotelBulk } = require('../../controllers/hotel/bulkhotel');
 const multer = require('multer');
 const { getVehicleSeats } = require('../../controllers/tour/booking');
 const uploadNone = multer().none();
 // Routes with authentication
-router.post('/data/hotels-new/post/upload/data', upload, hotelController.createHotel);
+router.post('/data/hotels-new/post/upload/data', upload, enforceUploadLimits({ maxFiles: 12, maxTotalSizeBytes: 60 * 1024 * 1024 }), hotelController.createHotel);
 router.post('/hotels/bulk', uploadNone, createHotelBulk);
 
-router.patch('/hotels/master/:hotelId', upload, hotelController.UpdateHotelMaster); // MASTER API: update everything (info, status, rooms, foods, amenities, policies, images)
+router.patch('/hotels/master/:hotelId', upload, enforceUploadLimits({ maxFiles: 24, maxTotalSizeBytes: 120 * 1024 * 1024 }), hotelController.UpdateHotelMaster); // MASTER API: update everything (info, status, rooms, foods, amenities, policies, images)
 router.get('/get/all/hotels', hotelController.getAllHotels); // on panel
 router.delete('/delete/hotels/by/:hotelId', hotelController.deleteHotelById); // on panel
 router.get('/get/main/get/hotels', hotelController.getHotels);

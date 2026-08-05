@@ -1,0 +1,172 @@
+### Add Complaint Sidebar Links via REST API
+### Use this file with REST Client extension in VS Code
+### Or copy curl commands to terminal
+
+### Variables
+@baseUrl = http://localhost:5000
+@token = YOUR_AUTH_TOKEN_HERE
+
+### 1. File Complaint (Selection Page) - All Roles
+POST {{baseUrl}}/api/additional/sidebar-links
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "parentLink": "Complaints",
+  "childLink": "/file-complaint",
+  "label": "File Complaint",
+  "isParentOnly": false,
+  "icon": "FileText",
+  "status": "active",
+  "role": ["Admin", "Developer", "PMS", "TMS", "CA", "Rider"],
+  "order": 1
+}
+
+### 2. User Complaint - All Roles
+POST {{baseUrl}}/api/additional/sidebar-links
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "parentLink": "Complaints",
+  "childLink": "/complaint/user/create",
+  "label": "User Complaint",
+  "isParentOnly": false,
+  "icon": "User",
+  "status": "active",
+  "role": ["Admin", "Developer", "PMS", "TMS", "CA", "Rider"],
+  "order": 2
+}
+
+### 3. Admin Complaint - Admin & Developer Only
+POST {{baseUrl}}/api/additional/sidebar-links
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "parentLink": "Complaints",
+  "childLink": "/complaint/admin/create",
+  "label": "Admin Complaint",
+  "isParentOnly": false,
+  "icon": "UserCog",
+  "status": "active",
+  "role": ["Admin", "Developer"],
+  "order": 3
+}
+
+### 4. All Complaints - All Roles
+POST {{baseUrl}}/api/additional/sidebar-links
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "parentLink": "Complaints",
+  "childLink": "/user-complaint",
+  "label": "All Complaints",
+  "isParentOnly": false,
+  "icon": "List",
+  "status": "active",
+  "role": ["Admin", "Developer", "PMS", "TMS", "CA", "Rider"],
+  "order": 4
+}
+
+### 5. Your Complaints - All Roles
+POST {{baseUrl}}/api/additional/sidebar-links
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "parentLink": "Complaints",
+  "childLink": "/your-complaints",
+  "label": "Your Complaints",
+  "isParentOnly": false,
+  "icon": "MessageSquare",
+  "status": "active",
+  "role": ["Admin", "Developer", "PMS", "TMS", "CA", "Rider"],
+  "order": 5
+}
+
+### Verify: Get all Complaints sidebar links
+GET {{baseUrl}}/api/additional/sidebar-links?status=active
+Authorization: Bearer {{token}}
+
+### ============================================
+### CURL COMMANDS (Alternative)
+### ============================================
+
+# Replace YOUR_TOKEN and localhost:5000 with your values
+
+# 1. File Complaint
+curl -X POST http://localhost:5000/api/additional/sidebar-links \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "parentLink": "Complaints",
+    "childLink": "/file-complaint",
+    "label": "File Complaint",
+    "isParentOnly": false,
+    "icon": "FileText",
+    "status": "active",
+    "role": ["Admin", "Developer", "PMS", "TMS", "CA", "Rider"],
+    "order": 1
+  }'
+
+# 2. User Complaint
+curl -X POST http://localhost:5000/api/additional/sidebar-links \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "parentLink": "Complaints",
+    "childLink": "/complaint/user/create",
+    "label": "User Complaint",
+    "isParentOnly": false,
+    "icon": "User",
+    "status": "active",
+    "role": ["Admin", "Developer", "PMS", "TMS", "CA", "Rider"],
+    "order": 2
+  }'
+
+# 3. Admin Complaint (Admin & Developer only)
+curl -X POST http://localhost:5000/api/additional/sidebar-links \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "parentLink": "Complaints",
+    "childLink": "/complaint/admin/create",
+    "label": "Admin Complaint",
+    "isParentOnly": false,
+    "icon": "UserCog",
+    "status": "active",
+    "role": ["Admin", "Developer"],
+    "order": 3
+  }'
+
+# 4. All Complaints
+curl -X POST http://localhost:5000/api/additional/sidebar-links \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "parentLink": "Complaints",
+    "childLink": "/user-complaint",
+    "label": "All Complaints",
+    "isParentOnly": false,
+    "icon": "List",
+    "status": "active",
+    "role": ["Admin", "Developer", "PMS", "TMS", "CA", "Rider"],
+    "order": 4
+  }'
+
+# 5. Your Complaints
+curl -X POST http://localhost:5000/api/additional/sidebar-links \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "parentLink": "Complaints",
+    "childLink": "/your-complaints",
+    "label": "Your Complaints",
+    "isParentOnly": false,
+    "icon": "MessageSquare",
+    "status": "active",
+    "role": ["Admin", "Developer", "PMS", "TMS", "CA", "Rider"],
+    "order": 5
+  }'

@@ -39,6 +39,17 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       default: generateComplaintId,
     },
+    complaintType: {
+      type: String,
+      enum: ['User', 'Admin'],
+      default: 'User',
+      required: true,
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'dashboardUsers',
+      required: false, // Stores who created the complaint (for admin complaints)
+    },
     regarding: {
       type: String,
       required: true,

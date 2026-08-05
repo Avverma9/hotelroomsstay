@@ -36,8 +36,13 @@ const normalizeLocalFileLocation = (file) => {
   return file;
 };
 
-const createLocalUploadMiddleware = () => {
+const DEFAULT_MAX_FILE_SIZE = parseInt(process.env.MAX_UPLOAD_FILE_SIZE, 10) || 5 * 1024 * 1024; // 5 MB
+const DEFAULT_MAX_FILES = parseInt(process.env.MAX_UPLOAD_FILES, 10) || 20;
+
+const createLocalUploadMiddleware = (options = {}) => {
   ensureLocalUploadDir();
+
+  const { maxFileSize = DEFAULT_MAX_FILE_SIZE, maxFiles = DEFAULT_MAX_FILES } = options;
 
   const storage = multer.diskStorage({
     destination: (_req, _file, cb) => {
@@ -53,6 +58,7 @@ const createLocalUploadMiddleware = () => {
 
   const middleware = multer({
     storage,
+    limits: { fileSize: maxFileSize, files: maxFiles },
     fileFilter: (req, file, cb) => {
       if (file.mimetype.startsWith("image/")) {
         cb(null, true);
@@ -73,16 +79,19 @@ const createLocalUploadMiddleware = () => {
   };
 };
 
-const createS3UploadMiddleware = () => {
+const createS3UploadMiddleware = (options = {}) => {
+  const { maxFileSize = DEFAULT_MAX_FILE_SIZE, maxFiles = DEFAULT_MAX_FILES } = options;
+
   const middleware = multer({
     storage: multerS3({
       s3,
       bucket: AWS_BUCKET_NAME,
-      acl: "public-read",
+      // Note: Do not set ACL by default. Some buckets enforce "Bucket owner enforced" and reject ACLs.
       key: function (_req, file, cb) {
         cb(null, `${Date.now()}-${file.originalname}`);
       },
     }),
+    limits: { fileSize: maxFileSize, files: maxFiles },
     fileFilter: (req, file, cb) => {
       if (file.mimetype.startsWith("image/")) {
         cb(null, true);

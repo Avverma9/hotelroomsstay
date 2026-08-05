@@ -22,6 +22,7 @@ const availability = require('./hotel/availability');
 const tourRouter = require('./tour/tour');
 const carRouter = require('./travel/car');
 const carOwnerRouter = require('./travel/carOwner');
+const presignRouter = require('./aws/presign');
 const availabilityRouter = require('./travel/availability');
 const additionalSettings =require("./additional/additional")
 const GSTRouter = require('./GST/gst');
@@ -55,6 +56,7 @@ router.use('/gst', GSTRouter);
 router.use('/travel', carOwnerRouter);
 router.use('/travel', availabilityRouter);
 router.use('/travel', carRouter);
+router.use('/', presignRouter);
 router.use('/travel', travelBookings);
 router.use('/coupons', couponRouterV2);
 router.use('/additional', additionalSettings);

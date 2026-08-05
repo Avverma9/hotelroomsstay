@@ -1443,6 +1443,183 @@ exports.getBookingBookedBy = async (req, res) => {
   }
 };
 
+/**
+ * Create manual booking by cab owner with customer details
+ * POST /api/travel/bookings/manual
+ */
+exports.createManualBooking = async (req, res) => {
+  try {
+    const {
+      carId,
+      seatId,
+      customerName,
+      customerMobile,
+      customerEmail,
+      pickupLocation,
+      dropLocation,
+    } = req.body;
+
+    // Validate required fields
+    if (!carId || !seatId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Car ID and Seat ID are required" 
+      });
+    }
+
+    if (!customerName || !customerName.trim()) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Customer name is required" 
+      });
+    }
+
+    if (!customerMobile || customerMobile.length !== 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Valid 10-digit mobile number is required" 
+      });
+    }
+
+    // Fetch car details
+    const car = await Car.findById(carId);
+    if (!car) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Car not found" 
+      });
+    }
+
+    // Verify owner access
+    const ownerId = req.user?.id;
+    if (!ownerId || String(car.ownerId) !== String(ownerId)) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Access denied: You do not own this car" 
+      });
+    }
+
+    // Find the seat in car's seatConfig
+    const seat = car.seatConfig?.find(s => String(s._id) === String(seatId));
+    if (!seat) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Seat not found in car configuration" 
+      });
+    }
+
+    // Check if seat is already booked
+    if (seat.isBooked) {
+      return res.status(409).json({ 
+        success: false, 
+        message: "Seat is already booked" 
+      });
+    }
+
+    // Generate verification codes
+    const generateVerificationCode = () => {
+      return Math.floor(100000 + Math.random() * 900000).toString();
+    };
+
+    const pickupCode = generateVerificationCode();
+    const dropCode = generateVerificationCode();
+
+    // Calculate pricing
+    const basePrice = seat.seatPrice || car.perPersonCost || 0;
+    const gstRate = 5; // 5% GST for cab bookings
+    const gstAmount = (basePrice * gstRate) / 100;
+    const finalPrice = basePrice + gstAmount;
+
+    // Create booking
+    const newBooking = await CarBooking.create({
+      carId: car._id,
+      userId: "MANUAL_" + Date.now(), // Generate unique userId for manual bookings
+      passengerName: customerName.trim(),
+      customerMobile: customerMobile.trim(),
+      customerEmail: (customerEmail || "").trim(),
+      bookedBy: "owner", // Mark as owner-created booking
+      vehicleType: car.vehicleType || "Car",
+      sharingType: car.sharingType || "Shared",
+      vehicleNumber: car.vehicleNumber || "",
+      make: car.make || "",
+      model: car.model || "",
+      color: car.color || "",
+      pickupP: pickupLocation || "",
+      dropP: dropLocation || "",
+      pickupD: car.pickupD || new Date(),
+      dropD: car.dropD || new Date(),
+      seats: [seat.seatNumber],
+      totalSeatsBooked: 1,
+      passengers: [{
+        name: customerName.trim(),
+        mobile: customerMobile.trim(),
+        email: (customerEmail || "").trim(),
+      }],
+      basePrice: basePrice,
+      gstRate: gstRate,
+      gstPrice: gstRate,
+      gstAmount: gstAmount,
+      price: finalPrice,
+      paymentMode: "offline",
+      paymentMethod: "Cash",
+      isPaid: false,
+      bookingStatus: "Confirmed", // Manual bookings are auto-confirmed
+      rideStatus: "PickupPending",
+      pickupCode: pickupCode,
+      dropCode: dropCode,
+      confirmedAt: new Date(),
+      assignedDriverId: String(ownerId),
+      assignedDriverName: req.user?.name || "Owner",
+    });
+
+    // Mark seat as booked in car's seatConfig
+    await Car.updateOne(
+      { _id: carId, "seatConfig._id": seatId },
+      { 
+        $set: { 
+          "seatConfig.$.isBooked": true,
+          "seatConfig.$.bookingId": newBooking._id
+        } 
+      }
+    );
+
+    // Log ride event
+    if (car && newBooking) {
+      await logNewRideEvent({
+        car,
+        booking: newBooking,
+        source: "MANUAL_BOOKING",
+        metadata: {
+          createdBy: "owner",
+          ownerName: req.user?.name || "Owner",
+        },
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: "Manual booking created successfully",
+      data: {
+        bookingId: newBooking.bookingId,
+        _id: newBooking._id,
+        customerName: newBooking.passengerName,
+        customerMobile: newBooking.customerMobile,
+        seatNumber: seat.seatNumber,
+        price: newBooking.price,
+        pickupCode: newBooking.pickupCode,
+        dropCode: newBooking.dropCode,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating manual booking:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Failed to create manual booking",
+      error: error.message 
+    });
+  }
+};
+
 exports.getCarBookingByUserId = async (req, res) => {
   try {
     const { userId } = req.params;

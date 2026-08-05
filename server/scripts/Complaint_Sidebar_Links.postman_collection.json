@@ -1,0 +1,169 @@
+{
+  "info": {
+    "name": "Complaint Sidebar Links",
+    "description": "Add new complaint sidebar links to database",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "YOUR_AUTH_TOKEN_HERE",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. File Complaint (Selection Page)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"parentLink\": \"Complaints\",\n  \"childLink\": \"/file-complaint\",\n  \"label\": \"File Complaint\",\n  \"isParentOnly\": false,\n  \"icon\": \"FileText\",\n  \"status\": \"active\",\n  \"role\": [\"Admin\", \"Developer\", \"PMS\", \"TMS\", \"CA\", \"Rider\"],\n  \"order\": 1\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/additional/sidebar-links",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "additional", "sidebar-links"]
+        }
+      }
+    },
+    {
+      "name": "2. User Complaint",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"parentLink\": \"Complaints\",\n  \"childLink\": \"/complaint/user/create\",\n  \"label\": \"User Complaint\",\n  \"isParentOnly\": false,\n  \"icon\": \"User\",\n  \"status\": \"active\",\n  \"role\": [\"Admin\", \"Developer\", \"PMS\", \"TMS\", \"CA\", \"Rider\"],\n  \"order\": 2\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/additional/sidebar-links",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "additional", "sidebar-links"]
+        }
+      }
+    },
+    {
+      "name": "3. Admin Complaint (Admin & Developer Only)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"parentLink\": \"Complaints\",\n  \"childLink\": \"/complaint/admin/create\",\n  \"label\": \"Admin Complaint\",\n  \"isParentOnly\": false,\n  \"icon\": \"UserCog\",\n  \"status\": \"active\",\n  \"role\": [\"Admin\", \"Developer\"],\n  \"order\": 3\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/additional/sidebar-links",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "additional", "sidebar-links"]
+        }
+      }
+    },
+    {
+      "name": "4. All Complaints",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"parentLink\": \"Complaints\",\n  \"childLink\": \"/user-complaint\",\n  \"label\": \"All Complaints\",\n  \"isParentOnly\": false,\n  \"icon\": \"List\",\n  \"status\": \"active\",\n  \"role\": [\"Admin\", \"Developer\", \"PMS\", \"TMS\", \"CA\", \"Rider\"],\n  \"order\": 4\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/additional/sidebar-links",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "additional", "sidebar-links"]
+        }
+      }
+    },
+    {
+      "name": "5. Your Complaints",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"parentLink\": \"Complaints\",\n  \"childLink\": \"/your-complaints\",\n  \"label\": \"Your Complaints\",\n  \"isParentOnly\": false,\n  \"icon\": \"MessageSquare\",\n  \"status\": \"active\",\n  \"role\": [\"Admin\", \"Developer\", \"PMS\", \"TMS\", \"CA\", \"Rider\"],\n  \"order\": 5\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/additional/sidebar-links",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "additional", "sidebar-links"]
+        }
+      }
+    },
+    {
+      "name": "Verify - Get All Sidebar Links",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/additional/sidebar-links?status=active",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "additional", "sidebar-links"],
+          "query": [
+            {
+              "key": "status",
+              "value": "active"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

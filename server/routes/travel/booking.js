@@ -23,6 +23,7 @@ router.post("/verify-pickup-code/:id", auth, verifyPickupCode);
 router.post("/verify-drop-code/:id", auth, verifyDropCode);
 router.get('/get-travels-bookings', auth, getTravelBookings)
 router.patch('/update-travel/booking', auth, updateBooking)
+router.post("/bookings/manual", auth, require("../../controllers/travel/booking").createManualBooking);
 router.get("/get-bookings-by/owner/:ownerId", auth, getBookingsOfOwner)
 router.post("/get-bookings-by/bookedBy", auth, getBookingBookedBy);
 router.get("/get-bookings-by/user/:userId", auth, getCarBookingByUserId);

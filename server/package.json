@@ -9,13 +9,16 @@
         "migrate:coupons": "node scripts/migrateCouponsToUnified.js",
         "migrate:travel-bookings": "node scripts/migrateTravelBookingsLifecycle.js",
         "seed:hotels": "node scripts/seedFullHotels.js",
-        "test:partner-by-id": "node scripts/testPartnerById.js"
+        "test:partner-by-id": "node scripts/testPartnerById.js",
+        "configure:s3-cors": "node scripts/configure_s3_cors.js",
+        "test:s3-presigned-upload": "node scripts/test_presigned_s3_upload.js"
     },
     "keywords": [],
     "author": "",
     "license": "ISC",
     "dependencies": {
         "@aws-sdk/client-s3": "^3.525.0",
+        "@aws-sdk/s3-request-presigner": "^3.525.0",
         "@phonepe-pg/pg-sdk-node": "^2.0.5",
         "bcryptjs": "^2.4.3",
         "body-parser": "^1.20.2",
