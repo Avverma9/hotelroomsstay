@@ -20,6 +20,116 @@ import { useRoomTypes } from '../../../../util/additional-fields/roomTypes'
 const s = (v) => String(v ?? '').trim()
 const MAX_HOTEL_IMAGES = 50
 const MAX_HOTEL_IMAGES_TOTAL_BYTES = 50 * 1024 * 1024
+const MULTIPART_OVERHEAD_BUFFER_BYTES = 3 * 1024 * 1024
+const MAX_HOTEL_IMAGES_SAFE_PAYLOAD_BYTES = MAX_HOTEL_IMAGES_TOTAL_BYTES - MULTIPART_OVERHEAD_BUFFER_BYTES
+const toMB = (bytes) => (Number(bytes || 0) / (1024 * 1024)).toFixed(1)
+const MAX_IMAGE_DIMENSION = 1920
+const TARGET_IMAGE_FILE_SIZE_BYTES = 900 * 1024
+const MIN_IMAGE_QUALITY = 0.56
+const HOTEL_IMAGE_UPLOAD_BATCH_SIZE = 6
+const MAX_HOTEL_IMAGE_BATCH_BYTES = 20 * 1024 * 1024
+
+const getTotalFileBytes = (files = []) => files.reduce((sum, file) => sum + (file?.size || 0), 0)
+
+const canvasToBlob = (canvas, mimeType, quality) =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob)
+        return
+      }
+      reject(new Error('Unable to convert canvas to blob.'))
+    }, mimeType, quality)
+  })
+
+const compressImageFile = async (file) => {
+  if (!file || !String(file.type || '').startsWith('image/')) {
+    return { file, compressed: false }
+  }
+
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('Invalid image file.'))
+      img.src = objectUrl
+    })
+
+    const originalWidth = image.naturalWidth || image.width
+    const originalHeight = image.naturalHeight || image.height
+    const longestSide = Math.max(originalWidth, originalHeight) || 1
+    const scale = Math.min(1, MAX_IMAGE_DIMENSION / longestSide)
+    const targetWidth = Math.max(1, Math.round(originalWidth * scale))
+    const targetHeight = Math.max(1, Math.round(originalHeight * scale))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = targetWidth
+    canvas.height = targetHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return { file, compressed: false }
+
+    ctx.drawImage(image, 0, 0, targetWidth, targetHeight)
+
+    let quality = 0.82
+    let blob = await canvasToBlob(canvas, 'image/jpeg', quality)
+    while (blob.size > TARGET_IMAGE_FILE_SIZE_BYTES && quality > MIN_IMAGE_QUALITY) {
+      quality = Number((quality - 0.08).toFixed(2))
+      blob = await canvasToBlob(canvas, 'image/jpeg', quality)
+    }
+
+    const shouldKeepOriginal = blob.size >= (file.size || 0) && scale === 1
+    if (shouldKeepOriginal) return { file, compressed: false }
+
+    const baseName = String(file.name || 'image').replace(/\.[^.]+$/, '')
+    const optimizedFile = new File([blob], `${baseName}.jpg`, {
+      type: 'image/jpeg',
+      lastModified: Date.now(),
+    })
+
+    return { file: optimizedFile, compressed: true }
+  } catch (_error) {
+    return { file, compressed: false }
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
+const optimizeImages = async (files = []) => {
+  const optimizedFiles = []
+  let compressedCount = 0
+
+  for (const file of files) {
+    const result = await compressImageFile(file)
+    optimizedFiles.push(result.file)
+    if (result.compressed) compressedCount += 1
+  }
+
+  return { optimizedFiles, compressedCount }
+}
+
+const extractUploadedImageUrls = (payload) => {
+  const candidates = [payload?.data, payload?.images, payload?.urls, payload?.files, payload]
+
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) continue
+    const urls = candidate
+      .flatMap((item) => {
+        if (typeof item === 'string') return [item]
+        if (item && typeof item === 'object') {
+          if (typeof item.location === 'string') return [item.location]
+          if (typeof item.url === 'string') return [item.url]
+        }
+        return []
+      })
+      .map((url) => String(url || '').trim())
+      .filter(Boolean)
+
+    if (urls.length) return urls
+  }
+
+  return []
+}
 
 const createEmptyRoom = () => ({
   type: '', bedTypes: '', price: '', originalPrice: '', countRooms: '1',
@@ -371,11 +481,35 @@ export default function AddNewHotel() {
   const prev = () => step > 0 && goTo(step - 1)
 
   /* hotel images */
-  const addImages = (e) => {
+  const addImages = async (e) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
-    setImages((p) => [...p, ...files])
-    setPreviews((p) => [...p, ...files.map((f) => URL.createObjectURL(f))])
+
+    if (images.length + files.length > MAX_HOTEL_IMAGES) {
+      setStatus({ type: 'error', msg: `Maximum ${MAX_HOTEL_IMAGES} images are allowed.` })
+      return
+    }
+
+    const { optimizedFiles, compressedCount } = await optimizeImages(files)
+    const projectedTotalBytes = getTotalFileBytes(images) + getTotalFileBytes(optimizedFiles)
+
+    if (projectedTotalBytes > MAX_HOTEL_IMAGES_SAFE_PAYLOAD_BYTES) {
+      setStatus({
+        type: 'error',
+        msg: `Selected images exceed safe upload limit (${toMB(MAX_HOTEL_IMAGES_SAFE_PAYLOAD_BYTES)} MB). Current total would be ${toMB(projectedTotalBytes)} MB.`,
+      })
+      return
+    }
+
+    if (compressedCount > 0) {
+      setStatus({
+        type: 'warn',
+        msg: `${compressedCount} image(s) auto-optimized for faster and safer upload.`,
+      })
+    }
+
+    setImages((p) => [...p, ...optimizedFiles])
+    setPreviews((p) => [...p, ...optimizedFiles.map((f) => URL.createObjectURL(f))])
   }
   const removeImage = (i) => {
     URL.revokeObjectURL(previews[i])
@@ -404,12 +538,16 @@ export default function AddNewHotel() {
   const setRoomField = (ri, key, val) =>
     setRooms((p) => p.map((r, i) => i === ri ? { ...r, [key]: val } : r))
 
-  const addRoomImages = (ri, e) => {
+  const addRoomImages = async (ri, e) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
+    const { optimizedFiles, compressedCount } = await optimizeImages(files)
+    if (compressedCount > 0) {
+      setStatus({ type: 'warn', msg: `Room images optimized: ${compressedCount} file(s).` })
+    }
     setRooms((p) => p.map((r, i) => i === ri ? {
-      ...r, imageFiles: [...r.imageFiles, ...files],
-      imagePreviews: [...r.imagePreviews, ...files.map((f) => URL.createObjectURL(f))],
+      ...r, imageFiles: [...r.imageFiles, ...optimizedFiles],
+      imagePreviews: [...r.imagePreviews, ...optimizedFiles.map((f) => URL.createObjectURL(f))],
     } : r))
   }
   const removeRoomImage = (ri, ii) => {
@@ -426,12 +564,16 @@ export default function AddNewHotel() {
   const setFoodField = (fi, key, value) =>
     setFoods((p) => p.map((f, i) => i === fi ? { ...f, [key]: value } : f))
 
-  const addFoodImages = (fi, e) => {
+  const addFoodImages = async (fi, e) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
+    const { optimizedFiles, compressedCount } = await optimizeImages(files)
+    if (compressedCount > 0) {
+      setStatus({ type: 'warn', msg: `Food images optimized: ${compressedCount} file(s).` })
+    }
     setFoods((p) => p.map((f, i) => i === fi ? {
-      ...f, imageFiles: [...f.imageFiles, ...files],
-      imagePreviews: [...f.imagePreviews, ...files.map((file) => URL.createObjectURL(file))],
+      ...f, imageFiles: [...f.imageFiles, ...optimizedFiles],
+      imagePreviews: [...f.imagePreviews, ...optimizedFiles.map((file) => URL.createObjectURL(file))],
     } : f))
   }
   const removeFoodImage = (fi, ii) => {
@@ -443,6 +585,42 @@ export default function AddNewHotel() {
   }
   const addFoodItem    = () => setFoods((p) => [...p, createEmptyFood()])
   const removeFoodItem = (fi) => setFoods((p) => { p[fi].imagePreviews.forEach((u) => URL.revokeObjectURL(u)); return p.filter((_, i) => i !== fi) })
+
+  const uploadHotelImagesInBatches = async (files) => {
+    if (!Array.isArray(files) || files.length === 0) return []
+
+    const uploadedUrls = []
+
+    for (let start = 0; start < files.length; start += HOTEL_IMAGE_UPLOAD_BATCH_SIZE) {
+      const batch = files.slice(start, start + HOTEL_IMAGE_UPLOAD_BATCH_SIZE)
+      const batchBytes = getTotalFileBytes(batch)
+
+      if (batchBytes > MAX_HOTEL_IMAGE_BATCH_BYTES) {
+        throw new Error(`Image batch too large (${toMB(batchBytes)} MB). Please choose smaller images.`)
+      }
+
+      setStatus({
+        type: 'warn',
+        msg: `Uploading images ${start + 1}-${start + batch.length} of ${files.length}...`,
+      })
+
+      const batchFormData = new FormData()
+      batch.forEach((file) => batchFormData.append('images', file))
+
+      const response = await api.post('/hotels/upload-images', batchFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+
+      const urls = extractUploadedImageUrls(response?.data)
+      if (!urls.length) {
+        throw new Error('Image upload succeeded but no image URLs returned.')
+      }
+
+      uploadedUrls.push(...urls)
+    }
+
+    return uploadedUrls
+  }
 
   /* submit */
   const handleSubmit = async (e) => {
@@ -474,15 +652,21 @@ export default function AddNewHotel() {
         return
       }
 
-      const totalImageBytes = images.reduce((sum, file) => sum + (file?.size || 0), 0)
-      if (totalImageBytes > MAX_HOTEL_IMAGES_TOTAL_BYTES) {
-        setStatus({ type: 'error', msg: 'Total image upload size cannot exceed 50 MB.' })
+      const totalImageBytes = getTotalFileBytes(images)
+      if (totalImageBytes > MAX_HOTEL_IMAGES_SAFE_PAYLOAD_BYTES) {
+        setStatus({
+          type: 'error',
+          msg: `Total image size is ${toMB(totalImageBytes)} MB. Please keep it under ${toMB(MAX_HOTEL_IMAGES_SAFE_PAYLOAD_BYTES)} MB for reliable upload.`
+        })
         setSubmitting(false)
         return
       }
 
-      // Always use server multipart upload (multer-s3) to avoid client-side S3 CORS/preflight failures.
-      images.forEach((image) => fd.append('images', image))
+      const uploadedHotelImageUrls = await uploadHotelImagesInBatches(images)
+      if (!uploadedHotelImageUrls.length) {
+        throw new Error('Image upload failed. No image URLs received.')
+      }
+      fd.append('images', JSON.stringify(uploadedHotelImageUrls))
 
       // ✅ Hybrid Approach: Send amenities and policies in single call with error handling
       try {
@@ -553,7 +737,15 @@ export default function AddNewHotel() {
       setShowSuccessPopup(true)
       setTimeout(() => { dispatch(clearHotelUpdateStatus()); setStatus({ type: null, msg: '' }) }, 6000)
     } catch (err) {
-      setStatus({ type: 'error', msg: err?.response?.data?.message || err?.message || 'Something went wrong.' })
+      const statusCode = err?.response?.status
+      if (statusCode === 413) {
+        setStatus({
+          type: 'error',
+          msg: `Upload payload too large (413). Reduce total image size below ${toMB(MAX_HOTEL_IMAGES_SAFE_PAYLOAD_BYTES)} MB or increase server/client_max_body_size on deployment.`
+        })
+      } else {
+        setStatus({ type: 'error', msg: err?.response?.data?.message || err?.message || 'Something went wrong.' })
+      }
     } finally {
       setSubmitting(false)
     }
@@ -1284,6 +1476,9 @@ export default function AddNewHotel() {
               <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9b8b76', marginBottom: 12 }}>
                 {images.length} file{images.length > 1 ? 's' : ''} selected
               </div>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: '#7a6e5e', marginBottom: 12 }}>
+                Total: {toMB(images.reduce((sum, file) => sum + (file?.size || 0), 0))} MB / Safe limit: {toMB(MAX_HOTEL_IMAGES_SAFE_PAYLOAD_BYTES)} MB
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
                 {previews.map((src, i) => (
                   <div key={i} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '1', border: '1px solid #ede6dc' }}>
@@ -1371,10 +1566,20 @@ export default function AddNewHotel() {
 
       {/* Status banner */}
       {status.type && (
-        <div style={{ padding: '10px 28px', borderBottom: '1px solid #ede6dc', background: status.type === 'success' ? '#f0faf5' : '#fdf5f5', flexShrink: 0 }}>
+        <div style={{
+          padding: '10px 28px',
+          borderBottom: '1px solid #ede6dc',
+          background: status.type === 'success' ? '#f0faf5' : status.type === 'warn' ? '#fffbeb' : '#fdf5f5',
+          flexShrink: 0
+        }}>
           {status.type === 'success' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#2d7a4f', fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 600 }}>
               <CheckCircle2 size={15} /> {status.msg}
+            </div>
+          )}
+          {status.type === 'warn' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#92400e', fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 600 }}>
+              <AlertCircle size={15} /> {status.msg}
             </div>
           )}
           {status.type === 'error' && (
