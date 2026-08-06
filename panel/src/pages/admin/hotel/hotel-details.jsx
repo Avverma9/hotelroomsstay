@@ -49,6 +49,80 @@ const formatDate = (dateString) => {
   })
 }
 
+const normalizeImageList = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => {
+        if (typeof item === 'string') return [item]
+        if (item && typeof item === 'object') {
+          if (typeof item.url === 'string') return [item.url]
+          if (typeof item.location === 'string') return [item.location]
+        }
+        return []
+      })
+      .map((url) => String(url || '').trim())
+      .filter(Boolean)
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        return normalizeImageList(JSON.parse(trimmed))
+      } catch {
+        // Fall through to plain URL/csv parsing
+      }
+    }
+
+    if (trimmed.includes(',')) {
+      return trimmed
+        .split(',')
+        .map((u) => u.trim())
+        .filter(Boolean)
+    }
+
+    return [trimmed]
+  }
+
+  if (value && typeof value === 'object') {
+    if (typeof value.url === 'string') return [value.url.trim()].filter(Boolean)
+    if (typeof value.location === 'string') return [value.location.trim()].filter(Boolean)
+  }
+
+  return []
+}
+
+const normalizePolicies = (value) => {
+  if (Array.isArray(value)) {
+    return value.find((entry) => entry && typeof entry === 'object') || {}
+  }
+  return value && typeof value === 'object' ? value : {}
+}
+
+const normalizeAmenities = (value) => {
+  if (!Array.isArray(value)) return []
+  return value
+    .flatMap((entry) => {
+      if (typeof entry === 'string') return [entry]
+      if (entry && typeof entry === 'object') {
+        if (typeof entry.name === 'string') return [entry.name]
+        if (typeof entry.title === 'string') return [entry.title]
+        if (typeof entry.amenityName === 'string') return [entry.amenityName]
+      }
+      return []
+    })
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+}
+
+const isPolicyAllowed = (value) => {
+  if (typeof value === 'boolean') return value
+  const normalized = String(value || '').trim().toLowerCase()
+  return ['yes', 'true', '1', 'allowed'].includes(normalized)
+}
+
 const normalizeFoodDetails = (foods = []) =>
   (Array.isArray(foods) ? foods : [])
     .filter((food) => food && typeof food === 'object')
@@ -171,6 +245,8 @@ function HotelDetails({ listPath, listLabel }) {
   const { selectedHotel, loading, updating, error, updateSuccess } = useSelector((state) => state.hotel)
   
   const [activeTab, setActiveTab] = useState('overview')
+  const [galleryOpen, setGalleryOpen] = useState(false)
+  const [activeImageIndex, setActiveImageIndex] = useState(0)
 
   const resolvedListPath =
     listPath ||
@@ -214,16 +290,46 @@ function HotelDetails({ listPath, listLabel }) {
   }
 
   const hotelData = selectedHotel?.data || selectedHotel
-  const basicInfo = hotelData?.basicInfo || {}
+
+  const basicInfo = useMemo(() => {
+    const info = hotelData?.basicInfo && typeof hotelData.basicInfo === 'object' ? hotelData.basicInfo : {}
+    const location = info?.location && typeof info.location === 'object' ? info.location : {}
+    const contacts = info?.contacts && typeof info.contacts === 'object' ? info.contacts : {}
+
+    return {
+      ...info,
+      name: info?.name || hotelData?.hotelName || '',
+      owner: info?.owner || hotelData?.hotelOwnerName || hotelData?.owner || '',
+      description: info?.description || hotelData?.description || '',
+      starRating: info?.starRating || hotelData?.starRating || 0,
+      category: info?.category || hotelData?.hotelCategory || '',
+      propertyType: info?.propertyType || hotelData?.propertyType || [],
+      location: {
+        ...location,
+        address: location?.address || hotelData?.address || hotelData?.landmark || '',
+        city: location?.city || hotelData?.city || '',
+        state: location?.state || hotelData?.state || '',
+        pinCode: location?.pinCode || hotelData?.pinCode || '',
+      },
+      contacts: {
+        ...contacts,
+        email: contacts?.email || hotelData?.hotelEmail || hotelData?.email || '',
+        phone: contacts?.phone || contacts?.mobile || hotelData?.contact || hotelData?.phone || '',
+        generalManager: contacts?.generalManager || hotelData?.generalManagerContact || '',
+        salesManager: contacts?.salesManager || hotelData?.salesManagerContact || '',
+      },
+    }
+  }, [hotelData])
+
   const location = basicInfo?.location || {}
   const contacts = basicInfo?.contacts || {}
   const pricingOverview = hotelData?.pricingOverview || {}
-  const policies = hotelData?.policies || {}
+  const policies = useMemo(() => normalizePolicies(hotelData?.policies), [hotelData?.policies])
   const detailedPolicies = policies?.detailed || {}
   const restrictions = policies?.restrictions || {}
   const rooms = hotelData?.rooms || []
   const foods = useMemo(() => normalizeFoodDetails(hotelData?.foods), [hotelData?.foods])
-  const amenities = hotelData?.amenities || []
+  const amenities = useMemo(() => normalizeAmenities(hotelData?.amenities), [hotelData?.amenities])
   const ratingBreakdown = hotelData?.ratingBreakdown || {}
   const ratingDistribution = hotelData?.ratingDistribution || {}
   const gstConfig = hotelData?.gstConfig || {}
@@ -233,8 +339,50 @@ function HotelDetails({ listPath, listLabel }) {
     : basicInfo?.propertyType
       ? [basicInfo.propertyType]
       : []
+
+  const displayHotelName = basicInfo?.name || hotelData?.hotelName || 'Unnamed Property'
+
+  const hotelImages = useMemo(() => {
+    const candidates = [
+      basicInfo?.images,
+      basicInfo?.image,
+      hotelData?.images,
+      hotelData?.image,
+      selectedHotel?.data?.basicInfo?.images,
+      selectedHotel?.data?.images,
+    ]
+
+    for (const candidate of candidates) {
+      const parsed = normalizeImageList(candidate)
+      if (parsed.length) return parsed
+    }
+    return []
+  }, [basicInfo?.image, basicInfo?.images, hotelData?.image, hotelData?.images, selectedHotel])
   
   const displayHotelId = hotelData?.hotelId || id
+  const visibleGalleryCount = Math.min(hotelImages.length, 5)
+  const remainingImagesCount = Math.max(hotelImages.length - visibleGalleryCount, 0)
+
+  const openGallery = (index = 0) => {
+    setActiveImageIndex(Math.max(0, Math.min(index, hotelImages.length - 1)))
+    setGalleryOpen(true)
+  }
+
+  const closeGallery = () => setGalleryOpen(false)
+
+  const showPrevImage = () => {
+    setActiveImageIndex((prev) => {
+      if (!hotelImages.length) return 0
+      return (prev - 1 + hotelImages.length) % hotelImages.length
+    })
+  }
+
+  const showNextImage = () => {
+    setActiveImageIndex((prev) => {
+      if (!hotelImages.length) return 0
+      return (prev + 1) % hotelImages.length
+    })
+  }
 
   if (loading && !hotelData) {
     return (
@@ -333,9 +481,7 @@ function HotelDetails({ listPath, listLabel }) {
                 </span>
               )}
             </div>
-            <h1 className="text-3xl font-black text-slate-900 sm:text-4xl tracking-tight">
-              {basicInfo.name || 'Unnamed Property'}
-            </h1>
+            <h1 className="text-3xl font-black text-slate-900 sm:text-4xl tracking-tight">{displayHotelName}</h1>
             <div className="mt-3 flex flex-wrap items-center gap-4 text-sm font-medium text-slate-600">
               <span className="flex items-center">
                 <MapPin size={16} className="mr-1.5 text-slate-400" />
@@ -397,18 +543,133 @@ function HotelDetails({ listPath, listLabel }) {
           </div>
         )}
 
-        {basicInfo.images?.length > 0 && (
+        {hotelImages.length > 0 && (
           <div className="mb-8 grid h-[300px] md:h-[450px] grid-cols-1 gap-3 overflow-hidden rounded-[24px] md:grid-cols-4">
             <div className="col-span-1 md:col-span-2 h-full">
-              <img src={basicInfo.images[0]} alt={basicInfo.name} className="h-full w-full object-cover transition hover:scale-105 duration-700" />
+              <button
+                type="button"
+                onClick={() => openGallery(0)}
+                className="h-full w-full overflow-hidden focus:outline-none"
+                aria-label="Open hotel gallery"
+              >
+                <img src={hotelImages[0]} alt={displayHotelName || 'Hotel image'} className="h-full w-full object-cover transition hover:scale-105 duration-700" />
+              </button>
             </div>
             <div className="col-span-1 hidden grid-rows-2 gap-3 md:grid h-full">
-              {basicInfo.images[1] ? <img src={basicInfo.images[1]} alt="Gallery 1" className="h-full w-full object-cover transition hover:scale-105 duration-700 rounded-lg" /> : <div className="bg-slate-100 rounded-lg h-full w-full"></div>}
-              {basicInfo.images[2] ? <img src={basicInfo.images[2]} alt="Gallery 2" className="h-full w-full object-cover transition hover:scale-105 duration-700 rounded-lg" /> : <div className="bg-slate-100 rounded-lg h-full w-full"></div>}
+              {hotelImages[1] ? (
+                <button
+                  type="button"
+                  onClick={() => openGallery(1)}
+                  className="h-full w-full overflow-hidden rounded-lg focus:outline-none"
+                  aria-label="Open hotel gallery image 2"
+                >
+                  <img src={hotelImages[1]} alt="Gallery 1" className="h-full w-full object-cover transition hover:scale-105 duration-700 rounded-lg" />
+                </button>
+              ) : <div className="bg-slate-100 rounded-lg h-full w-full"></div>}
+              {hotelImages[2] ? (
+                <button
+                  type="button"
+                  onClick={() => openGallery(2)}
+                  className="h-full w-full overflow-hidden rounded-lg focus:outline-none"
+                  aria-label="Open hotel gallery image 3"
+                >
+                  <img src={hotelImages[2]} alt="Gallery 2" className="h-full w-full object-cover transition hover:scale-105 duration-700 rounded-lg" />
+                </button>
+              ) : <div className="bg-slate-100 rounded-lg h-full w-full"></div>}
             </div>
             <div className="col-span-1 hidden grid-rows-2 gap-3 md:grid h-full">
-              {basicInfo.images[3] ? <img src={basicInfo.images[3]} alt="Gallery 3" className="h-full w-full object-cover transition hover:scale-105 duration-700 rounded-lg" /> : <div className="bg-slate-100 rounded-lg h-full w-full"></div>}
-              {basicInfo.images[4] ? <img src={basicInfo.images[4]} alt="Gallery 4" className="h-full w-full object-cover transition hover:scale-105 duration-700 rounded-lg" /> : <div className="bg-slate-100 rounded-lg h-full w-full"></div>}
+              {hotelImages[3] ? (
+                <button
+                  type="button"
+                  onClick={() => openGallery(3)}
+                  className="h-full w-full overflow-hidden rounded-lg focus:outline-none"
+                  aria-label="Open hotel gallery image 4"
+                >
+                  <img src={hotelImages[3]} alt="Gallery 3" className="h-full w-full object-cover transition hover:scale-105 duration-700 rounded-lg" />
+                </button>
+              ) : <div className="bg-slate-100 rounded-lg h-full w-full"></div>}
+              {hotelImages[4] ? (
+                <button
+                  type="button"
+                  onClick={() => openGallery(4)}
+                  className="relative h-full w-full overflow-hidden rounded-lg focus:outline-none"
+                  aria-label="Open all hotel gallery images"
+                >
+                  <img src={hotelImages[4]} alt="Gallery 4" className="h-full w-full object-cover transition hover:scale-105 duration-700 rounded-lg" />
+                  {remainingImagesCount > 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/55">
+                      <span className="rounded-full bg-white/90 px-3 py-1 text-sm font-black text-slate-900">+{remainingImagesCount} more</span>
+                    </div>
+                  )}
+                </button>
+              ) : <div className="bg-slate-100 rounded-lg h-full w-full"></div>}
+            </div>
+          </div>
+        )}
+
+        {galleryOpen && hotelImages.length > 0 && (
+          <div className="fixed inset-0 z-[100] bg-slate-950/90 p-3 md:p-8" role="dialog" aria-modal="true" aria-label="Hotel images gallery">
+            <button
+              type="button"
+              onClick={closeGallery}
+              className="absolute right-4 top-4 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow-md hover:bg-white"
+              aria-label="Close gallery"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4">
+              <div className="relative flex-1 overflow-hidden rounded-2xl bg-slate-900/40">
+                <img
+                  src={hotelImages[activeImageIndex]}
+                  alt={`${displayHotelName} image ${activeImageIndex + 1}`}
+                  className="h-full w-full object-contain"
+                />
+
+                {hotelImages.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={showPrevImage}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 px-3 py-2 text-sm font-bold text-slate-900 shadow-md hover:bg-white"
+                      aria-label="Previous image"
+                    >
+                      Prev
+                    </button>
+                    <button
+                      type="button"
+                      onClick={showNextImage}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 px-3 py-2 text-sm font-bold text-slate-900 shadow-md hover:bg-white"
+                      aria-label="Next image"
+                    >
+                      Next
+                    </button>
+                  </>
+                )}
+
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-3 py-1 text-xs font-semibold text-white">
+                  {activeImageIndex + 1} / {hotelImages.length}
+                </div>
+              </div>
+
+              {hotelImages.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                  {hotelImages.map((image, index) => {
+                    const isActive = index === activeImageIndex
+                    return (
+                      <button
+                        key={`${image}-${index}`}
+                        type="button"
+                        onClick={() => setActiveImageIndex(index)}
+                        className={`h-16 w-24 flex-none overflow-hidden rounded-lg border-2 ${isActive ? 'border-blue-500' : 'border-transparent'}`}
+                        aria-label={`Open image ${index + 1}`}
+                      >
+                        <img src={image} alt={`Thumbnail ${index + 1}`} className="h-full w-full object-cover" />
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -805,15 +1066,15 @@ function HotelDetails({ listPath, listLabel }) {
                       </div>
                       <div>
                         <span className="block text-slate-500 mb-1">Pets</span>
-                        <span className="font-semibold text-slate-800">{restrictions.petsAllowed || detailedPolicies.petsAllowed === 'Yes' ? 'Allowed' : 'Not Allowed'}</span>
+                        <span className="font-semibold text-slate-800">{isPolicyAllowed(restrictions.petsAllowed) || isPolicyAllowed(detailedPolicies.petsAllowed) ? 'Allowed' : 'Not Allowed'}</span>
                       </div>
                       <div>
                         <span className="block text-slate-500 mb-1">Alcohol</span>
-                        <span className="font-semibold text-slate-800">{restrictions.alcoholAllowed || detailedPolicies.alcoholAllowed === 'Yes' ? 'Allowed' : 'Not Allowed'}</span>
+                        <span className="font-semibold text-slate-800">{isPolicyAllowed(restrictions.alcoholAllowed) || isPolicyAllowed(detailedPolicies.alcoholAllowed) ? 'Allowed' : 'Not Allowed'}</span>
                       </div>
                       <div>
                         <span className="block text-slate-500 mb-1">Smoking</span>
-                        <span className="font-semibold text-slate-800">{restrictions.smokingAllowed || detailedPolicies.smokingAllowed === 'Yes' ? 'Allowed' : 'Not Allowed'}</span>
+                        <span className="font-semibold text-slate-800">{isPolicyAllowed(restrictions.smokingAllowed) || isPolicyAllowed(detailedPolicies.smokingAllowed) ? 'Allowed' : 'Not Allowed'}</span>
                       </div>
                     </div>
                   </div>

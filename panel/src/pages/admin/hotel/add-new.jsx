@@ -18,6 +18,8 @@ import { useRoomTypes } from '../../../../util/additional-fields/roomTypes'
 
 /* ── helpers ── */
 const s = (v) => String(v ?? '').trim()
+const MAX_HOTEL_IMAGES = 50
+const MAX_HOTEL_IMAGES_TOTAL_BYTES = 50 * 1024 * 1024
 
 const createEmptyRoom = () => ({
   type: '', bedTypes: '', price: '', originalPrice: '', countRooms: '1',
@@ -466,7 +468,21 @@ export default function AddNewHotel() {
         return
       }
 
-      images.forEach((f) => fd.append('images', f))
+      if (images.length > MAX_HOTEL_IMAGES) {
+        setStatus({ type: 'error', msg: `Maximum ${MAX_HOTEL_IMAGES} images are allowed.` })
+        setSubmitting(false)
+        return
+      }
+
+      const totalImageBytes = images.reduce((sum, file) => sum + (file?.size || 0), 0)
+      if (totalImageBytes > MAX_HOTEL_IMAGES_TOTAL_BYTES) {
+        setStatus({ type: 'error', msg: 'Total image upload size cannot exceed 50 MB.' })
+        setSubmitting(false)
+        return
+      }
+
+      // Always use server multipart upload (multer-s3) to avoid client-side S3 CORS/preflight failures.
+      images.forEach((image) => fd.append('images', image))
 
       // ✅ Hybrid Approach: Send amenities and policies in single call with error handling
       try {
@@ -484,7 +500,8 @@ export default function AddNewHotel() {
       }
 
       const result  = await dispatch(createHotel(fd)).unwrap()
-      const hotelId = result?.data?.hotelId
+      // Accept multiple server response shapes: { hotelId } or { data: { hotelId } }
+      const hotelId = result?.hotelId || result?.data?.hotelId || result?.id || result?.data?.id
       if (!hotelId) throw new Error('Hotel created but hotelId not received.')
 
       // ✅ Separate API calls for rooms with error handling and rollback
