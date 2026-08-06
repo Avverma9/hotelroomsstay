@@ -26,8 +26,6 @@ const toMB = (bytes) => (Number(bytes || 0) / (1024 * 1024)).toFixed(1)
 const MAX_IMAGE_DIMENSION = 1920
 const TARGET_IMAGE_FILE_SIZE_BYTES = 900 * 1024
 const MIN_IMAGE_QUALITY = 0.56
-const HOTEL_IMAGE_UPLOAD_BATCH_SIZE = 6
-const MAX_HOTEL_IMAGE_BATCH_BYTES = 20 * 1024 * 1024
 
 const getTotalFileBytes = (files = []) => files.reduce((sum, file) => sum + (file?.size || 0), 0)
 
@@ -106,29 +104,6 @@ const optimizeImages = async (files = []) => {
   }
 
   return { optimizedFiles, compressedCount }
-}
-
-const extractUploadedImageUrls = (payload) => {
-  const candidates = [payload?.data, payload?.images, payload?.urls, payload?.files, payload]
-
-  for (const candidate of candidates) {
-    if (!Array.isArray(candidate)) continue
-    const urls = candidate
-      .flatMap((item) => {
-        if (typeof item === 'string') return [item]
-        if (item && typeof item === 'object') {
-          if (typeof item.location === 'string') return [item.location]
-          if (typeof item.url === 'string') return [item.url]
-        }
-        return []
-      })
-      .map((url) => String(url || '').trim())
-      .filter(Boolean)
-
-    if (urls.length) return urls
-  }
-
-  return []
 }
 
 const createEmptyRoom = () => ({
@@ -586,42 +561,6 @@ export default function AddNewHotel() {
   const addFoodItem    = () => setFoods((p) => [...p, createEmptyFood()])
   const removeFoodItem = (fi) => setFoods((p) => { p[fi].imagePreviews.forEach((u) => URL.revokeObjectURL(u)); return p.filter((_, i) => i !== fi) })
 
-  const uploadHotelImagesInBatches = async (files) => {
-    if (!Array.isArray(files) || files.length === 0) return []
-
-    const uploadedUrls = []
-
-    for (let start = 0; start < files.length; start += HOTEL_IMAGE_UPLOAD_BATCH_SIZE) {
-      const batch = files.slice(start, start + HOTEL_IMAGE_UPLOAD_BATCH_SIZE)
-      const batchBytes = getTotalFileBytes(batch)
-
-      if (batchBytes > MAX_HOTEL_IMAGE_BATCH_BYTES) {
-        throw new Error(`Image batch too large (${toMB(batchBytes)} MB). Please choose smaller images.`)
-      }
-
-      setStatus({
-        type: 'warn',
-        msg: `Uploading images ${start + 1}-${start + batch.length} of ${files.length}...`,
-      })
-
-      const batchFormData = new FormData()
-      batch.forEach((file) => batchFormData.append('images', file))
-
-      const response = await api.post('/hotels/upload-images', batchFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-
-      const urls = extractUploadedImageUrls(response?.data)
-      if (!urls.length) {
-        throw new Error('Image upload succeeded but no image URLs returned.')
-      }
-
-      uploadedUrls.push(...urls)
-    }
-
-    return uploadedUrls
-  }
-
   /* submit */
   const handleSubmit = async (e) => {
     e?.preventDefault()
@@ -662,11 +601,8 @@ export default function AddNewHotel() {
         return
       }
 
-      const uploadedHotelImageUrls = await uploadHotelImagesInBatches(images)
-      if (!uploadedHotelImageUrls.length) {
-        throw new Error('Image upload failed. No image URLs received.')
-      }
-      fd.append('images', JSON.stringify(uploadedHotelImageUrls))
+      // Images are sent as files in the same create-hotel request (server uploads them via multer-s3).
+      images.forEach((image) => fd.append('images', image))
 
       // ✅ Hybrid Approach: Send amenities and policies in single call with error handling
       try {
