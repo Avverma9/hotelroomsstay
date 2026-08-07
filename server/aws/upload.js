@@ -39,6 +39,54 @@ const normalizeLocalFileLocation = (file) => {
 const DEFAULT_MAX_FILE_SIZE = parseInt(process.env.MAX_UPLOAD_FILE_SIZE, 10) || 5 * 1024 * 1024; // 5 MB
 const DEFAULT_MAX_FILES = parseInt(process.env.MAX_UPLOAD_FILES, 10) || 20;
 
+const sanitizeName = (value) =>
+  String(value || "file")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]/g, "");
+
+const imageFileFilter = (_req, file, cb) => {
+  if (file?.mimetype && file.mimetype.startsWith("image/")) {
+    cb(null, true);
+    return;
+  }
+  cb(new Error("Invalid file type. Only images are allowed."));
+};
+
+const toUploadErrorResponse = (error) => {
+  if (!error) return null;
+
+  if (error instanceof multer.MulterError) {
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return { status: 400, message: "File too large. Maximum file size limit exceeded." };
+    }
+    if (error.code === "LIMIT_FILE_COUNT") {
+      return { status: 400, message: "Too many files uploaded." };
+    }
+    return { status: 400, message: error.message || "Upload validation failed." };
+  }
+
+  return { status: 400, message: error.message || "Upload failed." };
+};
+
+const wrapMulterMiddleware = (middleware) =>
+  (req, res, next) => {
+    middleware(req, res, (error) => {
+      if (error) {
+        const mapped = toUploadErrorResponse(error);
+        if (mapped) {
+          return res.status(mapped.status).json({ message: mapped.message });
+        }
+        return next(error);
+      }
+
+      if (Array.isArray(req.files)) {
+        req.files = req.files.map(normalizeLocalFileLocation);
+      }
+
+      return next();
+    });
+  };
+
 const createLocalUploadMiddleware = (options = {}) => {
   ensureLocalUploadDir();
 
@@ -49,9 +97,7 @@ const createLocalUploadMiddleware = (options = {}) => {
       cb(null, LOCAL_UPLOAD_DIR);
     },
     filename: (_req, file, cb) => {
-      const safeOriginalName = String(file.originalname || "file")
-        .replace(/\s+/g, "-")
-        .replace(/[^a-zA-Z0-9._-]/g, "");
+      const safeOriginalName = sanitizeName(file.originalname);
       cb(null, `${Date.now()}-${safeOriginalName}`);
     },
   });
@@ -59,24 +105,10 @@ const createLocalUploadMiddleware = (options = {}) => {
   const middleware = multer({
     storage,
     limits: { fileSize: maxFileSize, files: maxFiles },
-    fileFilter: (req, file, cb) => {
-      if (file.mimetype.startsWith("image/")) {
-        cb(null, true);
-      } else {
-        cb(new Error("Invalid file type. Only images are allowed."));
-      }
-    },
+    fileFilter: imageFileFilter,
   }).any();
 
-  return (req, res, next) => {
-    middleware(req, res, (error) => {
-      if (error) return next(error);
-      if (Array.isArray(req.files)) {
-        req.files = req.files.map(normalizeLocalFileLocation);
-      }
-      next();
-    });
-  };
+  return wrapMulterMiddleware(middleware);
 };
 
 const createS3UploadMiddleware = (options = {}) => {
@@ -87,21 +119,16 @@ const createS3UploadMiddleware = (options = {}) => {
       s3,
       bucket: AWS_BUCKET_NAME,
       // Note: Do not set ACL by default. Some buckets enforce "Bucket owner enforced" and reject ACLs.
+      contentType: multerS3.AUTO_CONTENT_TYPE,
       key: function (_req, file, cb) {
-        cb(null, `${Date.now()}-${file.originalname}`);
+        cb(null, `${Date.now()}-${sanitizeName(file.originalname)}`);
       },
     }),
     limits: { fileSize: maxFileSize, files: maxFiles },
-    fileFilter: (req, file, cb) => {
-      if (file.mimetype.startsWith("image/")) {
-        cb(null, true);
-      } else {
-        cb(new Error("Invalid file type. Only images are allowed."));
-      }
-    },
+    fileFilter: imageFileFilter,
   }).any();
 
-  return middleware;
+  return wrapMulterMiddleware(middleware);
 };
 
 if (!AWS_BUCKET_NAME) {
@@ -110,8 +137,14 @@ if (!AWS_BUCKET_NAME) {
   );
 }
 
-const upload = AWS_BUCKET_NAME
-  ? createS3UploadMiddleware()
-  : createLocalUploadMiddleware();
+const createUploadMiddleware = (options = {}) => {
+  if (AWS_BUCKET_NAME) {
+    return createS3UploadMiddleware(options);
+  }
+  return createLocalUploadMiddleware(options);
+};
+
+const upload = createUploadMiddleware();
 
 module.exports.upload = upload;
+module.exports.createUploadMiddleware = createUploadMiddleware;
