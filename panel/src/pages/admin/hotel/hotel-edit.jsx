@@ -14,6 +14,88 @@ import {
 } from '../../../../redux/slices/admin/hotel'
 import api from '../../../api'
 
+/* ─── Image compression helpers ─────────────────────────────── */
+const MAX_IMAGE_DIMENSION = 1920
+const TARGET_IMAGE_FILE_SIZE_BYTES = 900 * 1024
+const MIN_IMAGE_QUALITY = 0.56
+
+const canvasToBlob = (canvas, mimeType, quality) =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob)
+        return
+      }
+      reject(new Error('Unable to convert canvas to blob.'))
+    }, mimeType, quality)
+  })
+
+const compressImageFile = async (file) => {
+  if (!file || !String(file.type || '').startsWith('image/')) {
+    return { file, compressed: false }
+  }
+
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('Invalid image file.'))
+      img.src = objectUrl
+    })
+
+    const originalWidth = image.naturalWidth || image.width
+    const originalHeight = image.naturalHeight || image.height
+    const longestSide = Math.max(originalWidth, originalHeight) || 1
+    const scale = Math.min(1, MAX_IMAGE_DIMENSION / longestSide)
+    const targetWidth = Math.max(1, Math.round(originalWidth * scale))
+    const targetHeight = Math.max(1, Math.round(originalHeight * scale))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = targetWidth
+    canvas.height = targetHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return { file, compressed: false }
+
+    ctx.drawImage(image, 0, 0, targetWidth, targetHeight)
+
+    let quality = 0.82
+    let blob = await canvasToBlob(canvas, 'image/jpeg', quality)
+    while (blob.size > TARGET_IMAGE_FILE_SIZE_BYTES && quality > MIN_IMAGE_QUALITY) {
+      quality = Number((quality - 0.08).toFixed(2))
+      blob = await canvasToBlob(canvas, 'image/jpeg', quality)
+    }
+
+    const shouldKeepOriginal = blob.size >= (file.size || 0) && scale === 1
+    if (shouldKeepOriginal) return { file, compressed: false }
+
+    const baseName = String(file.name || 'image').replace(/\.[^.]+$/, '')
+    const optimizedFile = new File([blob], `${baseName}.jpg`, {
+      type: 'image/jpeg',
+      lastModified: Date.now(),
+    })
+
+    return { file: optimizedFile, compressed: true }
+  } catch (_error) {
+    return { file, compressed: false }
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
+const optimizeImages = async (files = []) => {
+  const optimizedFiles = []
+  let compressedCount = 0
+
+  for (const file of files) {
+    const result = await compressImageFile(file)
+    optimizedFiles.push(result.file)
+    if (result.compressed) compressedCount += 1
+  }
+
+  return { optimizedFiles, compressedCount }
+}
+
 /* ─── Google Fonts injection ─────────────────────────────────── */
 const FontInjector = () => (
   <>
@@ -675,11 +757,13 @@ function HotelEditPage() {
   }
 
   /* ─── Hotel Image Handlers ─────────────────────────────────── */
-  const addHotelImages = (e) => {
+  const addHotelImages = async (e) => {
     const files = Array.from(e.target.files || [])
+    e.target.value = ''
     if (!files.length) return
-    setHotelImages((p) => [...p, ...files])
-    setHotelPreviews((p) => [...p, ...files.map((f) => URL.createObjectURL(f))])
+    const { optimizedFiles } = await optimizeImages(files)
+    setHotelImages((p) => [...p, ...optimizedFiles])
+    setHotelPreviews((p) => [...p, ...optimizedFiles.map((f) => URL.createObjectURL(f))])
   }
   const removeHotelImage = (i) => {
     URL.revokeObjectURL(hotelPreviews[i])
@@ -708,13 +792,15 @@ function HotelEditPage() {
   }
 
   /* ─── Room Image Handlers ──────────────────────────────────── */
-  const addRoomImages = (e) => {
+  const addRoomImages = async (e) => {
     const files = Array.from(e.target.files || [])
+    e.target.value = ''
     if (!files.length) return
+    const { optimizedFiles } = await optimizeImages(files)
     setRoomForm((p) => ({
       ...p,
-      imageFiles: [...p.imageFiles, ...files],
-      imagePreviews: [...p.imagePreviews, ...files.map((f) => URL.createObjectURL(f))],
+      imageFiles: [...p.imageFiles, ...optimizedFiles],
+      imagePreviews: [...p.imagePreviews, ...optimizedFiles.map((f) => URL.createObjectURL(f))],
     }))
   }
   const removeRoomImage = (i) => {
@@ -775,13 +861,15 @@ function HotelEditPage() {
   }
 
   /* ─── Food Image Handlers ──────────────────────────────────── */
-  const addFoodImages = (e) => {
+  const addFoodImages = async (e) => {
     const files = Array.from(e.target.files || [])
+    e.target.value = ''
     if (!files.length) return
+    const { optimizedFiles } = await optimizeImages(files)
     setFoodForm((p) => ({
       ...p,
-      imageFiles: [...p.imageFiles, ...files],
-      imagePreviews: [...p.imagePreviews, ...files.map((f) => URL.createObjectURL(f))],
+      imageFiles: [...p.imageFiles, ...optimizedFiles],
+      imagePreviews: [...p.imagePreviews, ...optimizedFiles.map((f) => URL.createObjectURL(f))],
     }))
   }
   const removeFoodImage = (i) => {
