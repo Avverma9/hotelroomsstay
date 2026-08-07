@@ -413,7 +413,7 @@ function HealthAwareNavigator() {
 
     if (isSignedIn) {
       const userId = await getUserId();
-      dispatch(fetchProfileData());
+      dispatch(fetchProfileData()); // Always fetch fresh profile data
       dispatch(fetchUserCoupons());
 
       if (userId) {

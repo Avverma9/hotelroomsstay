@@ -205,6 +205,7 @@ export default function CabDetails({ navigation, route }) {
 
   const userState = useSelector((state) => state.user);
   const loggedUser = userState?.user || userState?.data || null;
+  const userLoading = userState?.loading;
 
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
   const [selectedSeatIds, setSelectedSeatIds] = useState([]);
@@ -216,6 +217,17 @@ export default function CabDetails({ navigation, route }) {
     email:  user?.email     || "",
   });
   const [passengers, setPassengers] = useState([makePassenger(loggedUser)]);
+
+  // Update passengers when user data becomes available
+  useEffect(() => {
+    if (loggedUser && !userLoading) {
+      setPassengers(prev => {
+        const updated = [...prev];
+        updated[0] = makePassenger(loggedUser);
+        return updated;
+      });
+    }
+  }, [loggedUser, userLoading]);
 
   const updatePassenger = useCallback((idx, field, value) => {
     setPassengers((prev) => {
@@ -284,7 +296,24 @@ export default function CabDetails({ navigation, route }) {
             normalizeSeatToken(seat?.seatNumber ?? seat?.number ?? seat?.seatNo) ??
             seatId?.slice(-4) ??
             "";
-          return seatId ? { seatId, seatLabel } : null;
+          return seatId ? { seatId, seatLabel, isBooked: false } : null;
+        })
+        .filter(Boolean),
+    [seatStats?.seats]
+  );
+
+  // All seats for display (including booked ones)
+  const allSeatChoicesForDisplay = useMemo(
+    () =>
+      (Array.isArray(seatStats?.seats) ? seatStats.seats : [])
+        .map((seat) => {
+          const seatId = getSeatId(seat);
+          const isBooked = isSeatBooked(seat);
+          const seatLabel =
+            normalizeSeatToken(seat?.seatNumber ?? seat?.number ?? seat?.seatNo) ??
+            seatId?.slice(-4) ??
+            "";
+          return seatId ? { seatId, seatLabel, isBooked } : null;
         })
         .filter(Boolean),
     [seatStats?.seats]
@@ -314,9 +343,9 @@ export default function CabDetails({ navigation, route }) {
     setPassengers((prev) => {
       const updated = [...prev];
       updated[0] = {
-        name:   prev[0]?.name   || loggedUser?.userName  || "",
-        mobile: prev[0]?.mobile || loggedUser?.mobile    || "",
-        email:  prev[0]?.email  || loggedUser?.email     || "",
+        name:   loggedUser?.userName  || "",
+        mobile: loggedUser?.mobile    || "",
+        email:  loggedUser?.email     || "",
       };
       return updated;
     });
@@ -801,13 +830,16 @@ export default function CabDetails({ navigation, route }) {
                     Select Seats
                   </Text>
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-                    {availableSeatChoices.map((seat) => {
+                    {allSeatChoicesForDisplay.map((seat) => {
                       const active = selectedSeatIds.some((item) => String(item) === String(seat.seatId));
+                      const isBooked = seat.isBooked;
+                      
                       return (
                         <TouchableOpacity
                           key={seat.seatId}
-                          onPress={() => toggleSeatSelection(seat.seatId)}
-                          activeOpacity={0.85}
+                          onPress={() => !isBooked && toggleSeatSelection(seat.seatId)}
+                          disabled={isBooked}
+                          activeOpacity={isBooked ? 1 : 0.85}
                           style={{
                             height: 36,
                             paddingHorizontal: 14,
@@ -815,20 +847,26 @@ export default function CabDetails({ navigation, route }) {
                             borderWidth: 1,
                             alignItems: "center",
                             justifyContent: "center",
-                            backgroundColor: active ? "#1D4ED8" : "#F8FAFC",
-                            borderColor: active ? "#1D4ED8" : "#E2E8F0",
+                            backgroundColor: isBooked ? "#FEE2E2" : active ? "#1D4ED8" : "#F8FAFC",
+                            borderColor: isBooked ? "#FCA5A5" : active ? "#1D4ED8" : "#E2E8F0",
+                            opacity: isBooked ? 0.6 : 1,
                           }}
                         >
-                          <Text style={{ fontSize: 12, fontWeight: "700", color: active ? "#fff" : "#475569" }}>
+                          <Text style={{ fontSize: 12, fontWeight: "700", color: isBooked ? "#991B1B" : active ? "#fff" : "#475569" }}>
                             S{seat.seatLabel}
                           </Text>
                         </TouchableOpacity>
                       );
                     })}
                   </View>
-                  <Text style={{ fontSize: 11, color: "#94A3B8", marginTop: 7 }}>
-                    Selected: {selectedSeatIds.length}
-                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
+                    <Text style={{ fontSize: 11, color: "#94A3B8" }}>
+                      Selected: {selectedSeatIds.length}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: "#DC2626" }}>
+                      • Booked seats cannot be selected
+                    </Text>
+                  </View>
                 </View>
               ) : isShared ? (
                 <View style={{ backgroundColor: "#FFFBEB", borderRadius: 10, borderWidth: 0.5, borderColor: "#FDE68A", padding: 12, marginBottom: 6 }}>

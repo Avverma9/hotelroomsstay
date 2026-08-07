@@ -320,7 +320,30 @@ export default function Tour({ navigation }) {
 
   const handleViewDetails = (tourId) => {
     if (!tourId) return;
-    nav.navigate("TourDetails", { tourId });
+    const params = { tourId };
+
+    // In tab contexts (especially on larger layouts), route resolution can
+    // stay scoped to the tab navigator. Try local, then parent, then root ref.
+    try {
+      if (typeof nav?.navigate === "function") {
+        nav.navigate("TourDetails", params);
+        return;
+      }
+    } catch {
+      // fall through to parent/root navigation
+    }
+
+    try {
+      const parentNav = typeof nav?.getParent === "function" ? nav.getParent() : null;
+      if (typeof parentNav?.navigate === "function") {
+        parentNav.navigate("TourDetails", params);
+        return;
+      }
+    } catch {
+      // fall through to root navigation ref
+    }
+
+    router.navigate("TourDetails", params);
   };
 
   return (

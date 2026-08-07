@@ -422,3 +422,33 @@ export async function getCarRideHistory(carId: string, page = 1, limit = 30): Pr
     throw err;
   }
 }
+
+/**
+ * POST /travel/bookings/manual
+ * Create a manual booking with customer details (owner/rider only)
+ */
+export async function createManualBooking(body: {
+  carId: string;
+  seatId: string;
+  customerName: string;
+  customerMobile: string;
+  customerEmail?: string;
+  pickupLocation?: string;
+  dropLocation?: string;
+}) {
+  const { data } = await travelApi.post("/bookings/manual", body);
+  return data as {
+    success: boolean;
+    message: string;
+    data: {
+      bookingId: string;
+      _id: string;
+      customerName: string;
+      customerMobile: string;
+      seatNumber: number;
+      price: number;
+      pickupCode: string;
+      dropCode: string;
+    };
+  };
+}

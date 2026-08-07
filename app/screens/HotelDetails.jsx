@@ -314,6 +314,7 @@ const HotelDetails = ({ navigation, route }) => {
   const { bookingStatus, bookingError, monthlyData, gstData, couponStatus, couponError, discountAmount, appliedCoupon, couponResult, createdBookingStatus, createdBookingPendingReason } = useSelector((state) => state.booking);
   const userState = useSelector((state) => state.user);
   const user = userState?.user || userState?.data || null;
+  const userLoading = userState?.loading;
 
   const [checkInDate, setCheckInDate] = useState(paramCheckIn ? new Date(paramCheckIn) : new Date());
   const [checkOutDate, setCheckOutDate] = useState(paramCheckOut ? new Date(paramCheckOut) : new Date(Date.now() + 86400000));
@@ -326,9 +327,9 @@ const HotelDetails = ({ navigation, route }) => {
   const [selectedRoomId, setSelectedRoomId] = useState(null);
 
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
-  const [guestName, setGuestName] = useState(user?.userName || "");
-  const [guestEmail, setGuestEmail] = useState(user?.email || "");
-  const [guestPhone, setGuestPhone] = useState(user?.mobile || "");
+  const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [guestPhone, setGuestPhone] = useState("");
 
   const [showDateModal, setShowDateModal] = useState(false);
   const [dateModalTarget, setDateModalTarget] = useState("in");
@@ -359,21 +360,23 @@ const HotelDetails = ({ navigation, route }) => {
     couponRoomKeyRef.current = null;
   }, [dispatch, hotelId]);
 
+  // Auto-fill guest details when user data loads
   useEffect(() => {
-    if (!user) return;
-    setGuestName(user?.userName || user?.name || "");
-    setGuestEmail(user?.email || "");
-    setGuestPhone(user?.mobile || user?.phone || "");
-  }, [user]);
-
-  // Pre-fill guest details from logged-in user each time the booking modal opens
-  useEffect(() => {
-    if (bookingModalVisible && user) {
+    if (user && !userLoading) {
       setGuestName(user?.userName || user?.name || "");
       setGuestEmail(user?.email || "");
       setGuestPhone(user?.mobile || user?.phone || "");
     }
-  }, [bookingModalVisible]);
+  }, [user, userLoading]);
+
+  // Pre-fill guest details from logged-in user each time the booking modal opens
+  useEffect(() => {
+    if (bookingModalVisible && user && !userLoading) {
+      setGuestName(prev => prev || user?.userName || user?.name || "");
+      setGuestEmail(prev => prev || user?.email || "");
+      setGuestPhone(prev => prev || user?.mobile || user?.phone || "");
+    }
+  }, [bookingModalVisible, user, userLoading]);
 
   const getRoomId = useCallback((room) =>
     room?.id ?? room?._id ?? room?.roomId ?? room?.roomID ?? room?.hotelRoomId ?? room?.typeId ??

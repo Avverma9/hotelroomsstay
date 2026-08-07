@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   ScrollView,
   StyleSheet,
   Switch,
@@ -21,7 +22,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getSeatData, updateCar } from "../../../src/api";
+import { getSeatData, updateCar, createManualBooking } from "../../../src/api";
 import type { Seat } from "../../../src/api";
 import { colors, radii, spacing } from "../../../src/theme";
 import Button from "../../../src/ui";
@@ -33,6 +34,15 @@ export default function SeatManagementScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [bookingModalVisible, setBookingModalVisible] = useState(false);
+  const [selectedSeatForBooking, setSelectedSeatForBooking] = useState<Seat | null>(null);
+  const [bookingForm, setBookingForm] = useState({
+    customerName: "",
+    customerMobile: "",
+    customerEmail: "",
+    pickupLocation: "",
+    dropLocation: "",
+  });
 
   useEffect(() => {
     (async () => {
@@ -50,6 +60,75 @@ export default function SeatManagementScreen() {
   const updateSeat = (seatId: string, patch: Partial<Seat>) => {
     setSeats((prev) => prev.map((s) => (s._id === seatId ? { ...s, ...patch } : s)));
     setDirty(true);
+  };
+
+  const handleToggleBooking = (seat: Seat) => {
+    if (seat.isBooked) {
+      // Already booked, cannot toggle
+      return;
+    }
+    // Open booking form modal
+    setSelectedSeatForBooking(seat);
+    setBookingForm({
+      customerName: "",
+      customerMobile: "",
+      customerEmail: "",
+      pickupLocation: "",
+      dropLocation: "",
+    });
+    setBookingModalVisible(true);
+  };
+
+  const handleCreateBooking = async () => {
+    if (!selectedSeatForBooking) return;
+    
+    // Validate form
+    if (!bookingForm.customerName.trim()) {
+      Alert.alert("Validation Error", "Please enter customer name");
+      return;
+    }
+    if (!bookingForm.customerMobile.trim() || bookingForm.customerMobile.length < 10) {
+      Alert.alert("Validation Error", "Please enter valid 10-digit mobile number");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Call API to create manual booking
+      const result = await createManualBooking({
+        carId: String(id),
+        seatId: selectedSeatForBooking._id,
+        customerName: bookingForm.customerName,
+        customerMobile: bookingForm.customerMobile,
+        customerEmail: bookingForm.customerEmail,
+        pickupLocation: bookingForm.pickupLocation,
+        dropLocation: bookingForm.dropLocation,
+      });
+
+      if (result.success) {
+        // Update seat as booked locally
+        updateSeat(selectedSeatForBooking._id, { isBooked: true });
+        setBookingModalVisible(false);
+        Alert.alert(
+          "Success",
+          `Booking created successfully!\n\nBooking ID: ${result.data.bookingId}\nPickup Code: ${result.data.pickupCode}\nDrop Code: ${result.data.dropCode}`
+        );
+        
+        // Reload seat data to reflect changes from server
+        const res = await getSeatData(String(id));
+        setSeats(res.seats || []);
+      } else {
+        Alert.alert("Error", result.message || "Failed to create booking");
+      }
+    } catch (error: any) {
+      console.error("Manual booking error:", error);
+      Alert.alert(
+        "Error",
+        error?.response?.data?.message || "Failed to create booking. Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSave = async () => {
@@ -110,7 +189,7 @@ export default function SeatManagementScreen() {
             renderItem={({ item }) => (
               <SeatCard
                 seat={item}
-                onToggleBooked={() => updateSeat(item._id, { isBooked: !item.isBooked })}
+                onToggleBooked={() => handleToggleBooking(item)}
                 onPriceChange={(v) => updateSeat(item._id, { seatPrice: Number(v) })}
               />
             )}
@@ -128,6 +207,104 @@ export default function SeatManagementScreen() {
             testID="save-seats-btn"
             style={{ flex: 1 }}
           />
+        </View>
+      )}
+
+      {/* Booking Modal */}
+      {bookingModalVisible && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Create Booking</Text>
+              <TouchableOpacity onPress={() => setBookingModalVisible(false)} disabled={saving}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <Text style={styles.modalSubtitle}>
+                Seat: {selectedSeatForBooking?.seatNumber} · {selectedSeatForBooking?.seatType || "Standard"}
+              </Text>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Customer Name *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={bookingForm.customerName}
+                  onChangeText={(v) => setBookingForm((p) => ({ ...p, customerName: v }))}
+                  placeholder="Enter customer name"
+                  editable={!saving}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Mobile Number *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={bookingForm.customerMobile}
+                  onChangeText={(v) => setBookingForm((p) => ({ ...p, customerMobile: v }))}
+                  placeholder="10-digit mobile number"
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  editable={!saving}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Email (Optional)</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={bookingForm.customerEmail}
+                  onChangeText={(v) => setBookingForm((p) => ({ ...p, customerEmail: v }))}
+                  placeholder="customer@example.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  editable={!saving}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Pickup Location (Optional)</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={bookingForm.pickupLocation}
+                  onChangeText={(v) => setBookingForm((p) => ({ ...p, pickupLocation: v }))}
+                  placeholder="Enter pickup location"
+                  editable={!saving}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Drop Location (Optional)</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={bookingForm.dropLocation}
+                  onChangeText={(v) => setBookingForm((p) => ({ ...p, dropLocation: v }))}
+                  placeholder="Enter drop location"
+                  editable={!saving}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSecondary]}
+                onPress={() => setBookingModalVisible(false)}
+                disabled={saving}
+              >
+                <Text style={styles.modalBtnTextSecondary}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                onPress={handleCreateBooking}
+                disabled={saving}
+              >
+                <Text style={styles.modalBtnTextPrimary}>
+                  {saving ? "Creating..." : "Create Booking"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       )}
     </SafeAreaView>
@@ -179,6 +356,7 @@ function SeatCard({
         <Switch
           value={seat.isBooked}
           onValueChange={onToggleBooked}
+          disabled={seat.isBooked}
           trackColor={{ true: "#DC2626", false: "#059669" }}
           thumbColor="#fff"
           testID={`seat-switch-${seat._id}`}
@@ -228,4 +406,99 @@ const styles = StyleSheet.create({
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   switchLabel: { fontSize: 12, fontWeight: "700" },
   saveBar: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, padding: spacing.md, paddingBottom: 28 },
+  
+  // Modal styles
+  modalOverlay: { 
+    position: "absolute", 
+    top: 0, 
+    left: 0, 
+    right: 0, 
+    bottom: 0, 
+    backgroundColor: "rgba(0,0,0,0.5)", 
+    justifyContent: "center", 
+    alignItems: "center",
+    padding: spacing.lg,
+  },
+  modalContent: { 
+    backgroundColor: colors.surface, 
+    borderRadius: radii.xl, 
+    width: "100%", 
+    maxWidth: 500,
+    maxHeight: "80%",
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeader: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: { fontSize: 18, fontWeight: "800", color: colors.text },
+  modalSubtitle: { 
+    fontSize: 13, 
+    color: colors.textMuted, 
+    backgroundColor: colors.inputBg,
+    padding: spacing.sm,
+    borderRadius: radii.sm,
+    marginBottom: spacing.md,
+  },
+  modalBody: { 
+    padding: spacing.lg,
+    maxHeight: 400,
+  },
+  formGroup: { marginBottom: spacing.md },
+  formLabel: { 
+    fontSize: 12, 
+    fontWeight: "700", 
+    color: colors.textMuted, 
+    marginBottom: spacing.xs,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  formInput: { 
+    backgroundColor: colors.inputBg, 
+    borderRadius: radii.md, 
+    padding: spacing.sm, 
+    fontSize: 15, 
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalFooter: { 
+    flexDirection: "row", 
+    gap: spacing.sm,
+    padding: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  modalBtn: { 
+    flex: 1, 
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radii.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalBtnSecondary: { 
+    backgroundColor: colors.inputBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalBtnPrimary: { 
+    backgroundColor: colors.primary,
+  },
+  modalBtnTextSecondary: { 
+    fontSize: 15, 
+    fontWeight: "700", 
+    color: colors.text,
+  },
+  modalBtnTextPrimary: { 
+    fontSize: 15, 
+    fontWeight: "700", 
+    color: "#fff",
+  },
 });
