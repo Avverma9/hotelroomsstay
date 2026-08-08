@@ -5,7 +5,8 @@ const roomSchema = RoomModel.roomSchema;
 const generateHotelId = () => {
     const min = 10000000; // Minimum 8-digit number
     const max = 99999999; // Maximum 8-digit number
-    return Math.floor(Math.random() * (max - min + 1)) + min;
+    const numericId = Math.floor(Math.random() * (max - min + 1)) + min;
+    return `HTL${numericId}`;
 };
 const hotelsSchema = new mongoose.Schema(
     {

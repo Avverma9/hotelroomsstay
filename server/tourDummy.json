@@ -1,0 +1,80 @@
+[
+  {
+    "travelAgencyName": "Rajasthan Explorers",
+    "agencyId": "AGY001",
+    "agencyPhone": "9810012345",
+    "agencyEmail": "info@rajasthanexplorers.com",
+    "country": "India",
+    "state": "Rajasthan",
+    "city": "Jaipur",
+    "visitngPlaces": "Jaipur, Jodhpur, Udaipur",
+    "themes": "Heritage",
+    "price": 22000,
+    "nights": 5,
+    "days": 6,
+    "from": "2026-11-10T00:00:00.000Z",
+    "to": "2026-11-16T00:00:00.000Z",
+    "amenities": ["Breakfast", "Pickup & Drop", "Guide"],
+    "inclusion": ["Hotel stay", "Sightseeing"],
+    "exclusion": ["Flights", "Personal expenses"],
+    "dayWise": [
+      { "day": 1, "description": "Arrive Jaipur - City tour" },
+      { "day": 2, "description": "Drive to Jodhpur - Mehrangarh" },
+      { "day": 3, "description": "Jodhpur to Udaipur" }
+    ],
+    "starRating": 4,
+    "images": ["https://images.unsplash.com/photo-1500530855697-b586d89ba3ee"],
+    "vehicles": [
+      {
+        "name": "Tempo Traveller",
+        "vehicleNumber": "RJ14TT001",
+        "totalSeats": 12,
+        "seatConfig": { "rows": 6, "left": 2, "right": 2, "aisle": true },
+        "seaterType": "2x2",
+        "pricePerSeat": 1800
+      }
+    ],
+    "tourStartDate": "2026-11-10T06:00:00.000Z",
+    "tourEndDate": "2026-11-16T18:00:00.000Z",
+    "route": "Jaipur->Jodhpur->Udaipur"
+  },
+  {
+    "travelAgencyName": "Coastal Getaways",
+    "agencyId": "AGY002",
+    "agencyPhone": "9922012345",
+    "agencyEmail": "hello@coastalgetaways.in",
+    "country": "India",
+    "state": "Kerala",
+    "city": "Kochi",
+    "visitngPlaces": "Kochi, Munnar, Alleppey",
+    "themes": "Nature",
+    "price": 18000,
+    "nights": 4,
+    "days": 5,
+    "from": "2026-12-01T00:00:00.000Z",
+    "to": "2026-12-06T00:00:00.000Z",
+    "amenities": ["Breakfast", "Houseboat"],
+    "inclusion": ["Stay", "Houseboat cruise"],
+    "exclusion": ["Flights", "Tips"],
+    "dayWise": [
+      { "day": 1, "description": "Arrive Kochi - Fort Kochi" },
+      { "day": 2, "description": "Munnar sightseeing" },
+      { "day": 3, "description": "Backwaters - Alleppey houseboat" }
+    ],
+    "starRating": 4,
+    "images": ["https://images.unsplash.com/photo-1507525428034-b723cf961d3e"],
+    "vehicles": [
+      {
+        "name": "Innova Crysta",
+        "vehicleNumber": "KL07IC100",
+        "totalSeats": 6,
+        "seatConfig": { "rows": 3, "left": 1, "right": 2, "aisle": true },
+        "seaterType": "2x2",
+        "pricePerSeat": 2200
+      }
+    ],
+    "tourStartDate": "2026-12-01T08:00:00.000Z",
+    "tourEndDate": "2026-12-05T20:00:00.000Z",
+    "route": "Kochi->Munnar->Alleppey"
+  }
+]

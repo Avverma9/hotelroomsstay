@@ -1448,6 +1448,10 @@ exports.getBookingBookedBy = async (req, res) => {
  * POST /api/travel/bookings/manual
  */
 exports.createManualBooking = async (req, res) => {
+  let reservedPrivateCarId = null;
+  let reservedPrivateSeatIds = [];
+  let createdManualBookingId = null;
+
   try {
     const {
       carId,
@@ -1508,12 +1512,59 @@ exports.createManualBooking = async (req, res) => {
       });
     }
 
-    // Check if seat is already booked
-    if (seat.isBooked) {
-      return res.status(409).json({ 
-        success: false, 
-        message: "Seat is already booked" 
+    const isPrivate = car.sharingType === "Private";
+    let bookingCar = car;
+    let bookingSeatIds = [];
+
+    if (isPrivate) {
+      // A private booking reserves the complete vehicle atomically. The
+      // seatId from the owner UI is only used to identify the car's layout;
+      // it must never allow a one-seat booking on a private vehicle.
+      const privateSeatUpdate = {};
+      (car.seatConfig || []).forEach((configuredSeat, index) => {
+        privateSeatUpdate[`seatConfig.${index}.isBooked`] = true;
+        privateSeatUpdate[`seatConfig.${index}.bookedBy`] = "owner";
       });
+
+      bookingCar = await Car.findOneAndUpdate(
+        {
+          _id: carId,
+          sharingType: "Private",
+          isAvailable: true,
+          "seatConfig.isBooked": { $ne: true },
+        },
+        {
+          $set: {
+            ...privateSeatUpdate,
+            isAvailable: false,
+            runningStatus: "On A Trip",
+          },
+        },
+        { new: true },
+      );
+
+      if (!bookingCar) {
+        return res.status(409).json({
+          success: false,
+          message: "Private vehicle is no longer available for booking",
+        });
+      }
+
+      bookingSeatIds = (bookingCar.seatConfig || []).map((configuredSeat) =>
+        String(configuredSeat._id),
+      );
+      reservedPrivateCarId = String(carId);
+      reservedPrivateSeatIds = [...bookingSeatIds];
+    } else {
+      // Shared/manual booking reserves exactly one requested seat.
+      if (seat.isBooked) {
+        return res.status(409).json({
+          success: false,
+          message: "Seat is already booked",
+        });
+      }
+
+      bookingSeatIds = [String(seat._id)];
     }
 
     // Generate verification codes
@@ -1525,31 +1576,33 @@ exports.createManualBooking = async (req, res) => {
     const dropCode = generateVerificationCode();
 
     // Calculate pricing
-    const basePrice = seat.seatPrice || car.perPersonCost || 0;
+    const basePrice = isPrivate
+      ? Number(bookingCar.price || 0)
+      : Number(seat.seatPrice || bookingCar.perPersonCost || 0);
     const gstRate = 5; // 5% GST for cab bookings
     const gstAmount = (basePrice * gstRate) / 100;
     const finalPrice = basePrice + gstAmount;
 
     // Create booking
     const newBooking = await CarBooking.create({
-      carId: car._id,
+      carId: bookingCar._id,
       userId: "MANUAL_" + Date.now(), // Generate unique userId for manual bookings
       passengerName: customerName.trim(),
       customerMobile: customerMobile.trim(),
       customerEmail: (customerEmail || "").trim(),
       bookedBy: "owner", // Mark as owner-created booking
-      vehicleType: car.vehicleType || "Car",
-      sharingType: car.sharingType || "Shared",
-      vehicleNumber: car.vehicleNumber || "",
-      make: car.make || "",
-      model: car.model || "",
-      color: car.color || "",
+      vehicleType: bookingCar.vehicleType || "Car",
+      sharingType: bookingCar.sharingType || "Shared",
+      vehicleNumber: bookingCar.vehicleNumber || "",
+      make: bookingCar.make || "",
+      model: bookingCar.model || "",
+      color: bookingCar.color || "",
       pickupP: pickupLocation || "",
       dropP: dropLocation || "",
-      pickupD: car.pickupD || new Date(),
-      dropD: car.dropD || new Date(),
-      seats: [seat.seatNumber],
-      totalSeatsBooked: 1,
+      pickupD: bookingCar.pickupD || new Date(),
+      dropD: bookingCar.dropD || new Date(),
+      seats: bookingSeatIds,
+      totalSeatsBooked: bookingSeatIds.length,
       passengers: [{
         name: customerName.trim(),
         mobile: customerMobile.trim(),
@@ -1571,22 +1624,33 @@ exports.createManualBooking = async (req, res) => {
       assignedDriverId: String(ownerId),
       assignedDriverName: req.user?.name || "Owner",
     });
+    createdManualBookingId = newBooking._id;
 
-    // Mark seat as booked in car's seatConfig
-    await Car.updateOne(
-      { _id: carId, "seatConfig._id": seatId },
-      { 
-        $set: { 
-          "seatConfig.$.isBooked": true,
-          "seatConfig.$.bookingId": newBooking._id
-        } 
-      }
-    );
+    // Shared seats are locked after the booking is created. Private seats
+    // were already locked atomically above and now receive the booking id.
+    if (isPrivate) {
+      await Car.updateOne(
+        { _id: carId },
+        { $set: { "seatConfig.$[seat].bookingId": newBooking._id } },
+        { arrayFilters: [{ "seat._id": { $in: bookingSeatIds } }] },
+      );
+    } else {
+      await Car.updateOne(
+        { _id: carId, "seatConfig._id": seatId },
+        {
+          $set: {
+            "seatConfig.$.isBooked": true,
+            "seatConfig.$.bookedBy": "owner",
+            "seatConfig.$.bookingId": newBooking._id,
+          },
+        },
+      );
+    }
 
     // Log ride event
     if (car && newBooking) {
       await logNewRideEvent({
-        car,
+        car: bookingCar,
         booking: newBooking,
         source: "MANUAL_BOOKING",
         metadata: {
@@ -1604,13 +1668,36 @@ exports.createManualBooking = async (req, res) => {
         _id: newBooking._id,
         customerName: newBooking.passengerName,
         customerMobile: newBooking.customerMobile,
-        seatNumber: seat.seatNumber,
+        seatNumber: isPrivate ? "All seats" : seat.seatNumber,
         price: newBooking.price,
         pickupCode: newBooking.pickupCode,
         dropCode: newBooking.dropCode,
       },
     });
   } catch (error) {
+    // Do not leave a private vehicle locked if booking creation/logging fails.
+    try {
+      if (createdManualBookingId) {
+        await CarBooking.deleteOne({ _id: createdManualBookingId });
+      }
+      if (reservedPrivateCarId && reservedPrivateSeatIds.length > 0) {
+        await Car.updateOne(
+          { _id: reservedPrivateCarId },
+          {
+            $set: {
+              "seatConfig.$[seat].isBooked": false,
+              "seatConfig.$[seat].bookedBy": "",
+              isAvailable: true,
+              runningStatus: "Available",
+            },
+            $unset: { "seatConfig.$[seat].bookingId": "" },
+          },
+          { arrayFilters: [{ "seat._id": { $in: reservedPrivateSeatIds } }] },
+        );
+      }
+    } catch (rollbackError) {
+      console.error("Manual booking rollback failed:", rollbackError.message || rollbackError);
+    }
     console.error("Error creating manual booking:", error);
     return res.status(500).json({ 
       success: false, 

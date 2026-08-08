@@ -307,10 +307,19 @@ exports.getSeatsData = async (req, res) => {
   }
 };
 
-exports.getAllCars = async (_, res) => {
+exports.getAllCars = async (req, res) => {
   try {
-    const findData = await Car.find();
-    return res.status(200).json(findData);
+    // Support pagination to avoid returning entire collection
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(5, Number(req.query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const [total, data] = await Promise.all([
+      Car.countDocuments(),
+      Car.find().skip(skip).limit(limit).lean(),
+    ]);
+
+    return res.status(200).json({ data, total, page, limit });
   } catch (error) {
     console.error('getAllCars error:', error);
     return res.status(500).json({ message: error.message });
