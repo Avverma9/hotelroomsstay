@@ -509,6 +509,7 @@ const styles = StyleSheet.create({
   summaryCard: { marginTop: 16, backgroundColor: colors.inputBg, borderRadius: radii.lg, padding: 14 },
   summaryTitle: { fontSize: 14, fontWeight: "700", color: colors.text },
   summaryText: { fontSize: 12, color: colors.textMuted, marginTop: 2, marginBottom: 4 },
+  summaryItem: { paddingTop: 10, paddingBottom: 2 },
   summaryItemTitle: { fontSize: 14, fontWeight: "600", color: colors.text, marginBottom: 4 },
   summaryItemMeta: { fontSize: 12, color: colors.textMuted, fontWeight: "500" },
   summaryStatusBadge: { fontSize: 10, fontWeight: "700", color: colors.primary, backgroundColor: colors.primarySoft, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },

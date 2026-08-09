@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { optimizeImage, srcSetFor } from "../../utils/image";
+import { FixedSizeList as List } from 'react-window';
 import { useDispatch } from "react-redux";
 import { getAllCars } from "../../redux/slices/car"; 
 import { useNavigate } from "react-router-dom";
@@ -279,14 +281,25 @@ export default function CarsPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    let mounted = true;
     (async () => {
-      try { 
-        const res = await dispatch(getAllCars()); 
-        setCabs(res.payload || []); 
+      try {
+        setIsLoading(true);
+        const res = await dispatch(getAllCars({ page: 1, limit: 40 }));
+        if (!mounted) return;
+        const payload = res.payload || { data: [], total: 0 };
+        setCabs(payload.data || []);
+        setHasMore((payload.page * payload.limit) < (payload.total || 0));
+        setPage(1);
       } catch (err) { console.error(err); }
-      finally { setIsLoading(false); }
+      finally { if (mounted) setIsLoading(false); }
     })();
+    return () => { mounted = false; };
   }, [dispatch]);
+
+  // pagination state
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
 
   // Derived Options
   const options = useMemo(() => {
@@ -337,6 +350,21 @@ export default function CarsPage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchParams, filters, cabs]);
+
+  // Load more handler for infinite loading
+  const loadMore = async () => {
+    if (!hasMore) return;
+    const next = page + 1;
+    try {
+      const res = await dispatch(getAllCars({ page: next, limit: 40 }));
+      const payload = res.payload || { data: [], total: 0 };
+      setCabs((prev) => [...prev, ...(payload.data || [])]);
+      setPage(next);
+      setHasMore((payload.page * payload.limit) < (payload.total || 0));
+    } catch (e) {
+      console.error('loadMore error', e);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-24 lg:pb-10 overflow-x-hidden">
@@ -393,79 +421,16 @@ export default function CarsPage() {
              </div>
              
              <div className="space-y-4">
-               {filteredCabs.map(cab => {
-                 const fare = resolveCabFare(cab);
-                 const bookingState = resolveCabBookingState(cab);
-                 const isShared = String(cab.sharingType || "").toLowerCase() === "shared";
-                 const fareLabel = isShared ? "Per Person" : "Fare";
-                 return (
-                 <div key={cab._id} className={`bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex flex-col sm:flex-row gap-5 transition-all group ${bookingState.canBook ? "hover:shadow-xl hover:border-blue-100" : "opacity-75"}`}>
-                    {/* Image */}
-                    <div className="sm:w-60 h-48 sm:h-auto bg-gray-100 rounded-xl overflow-hidden flex-shrink-0 relative">
-                       <img src={cab.images || `https://placehold.co/600x400?text=${cab.make}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Car" />
-                       <div className="absolute top-2 left-2 flex gap-1">
-                           <span className="bg-white/95 backdrop-blur px-2 py-1 rounded-md text-[10px] font-bold uppercase shadow-sm flex items-center gap-1"><Icons.Fuel /> {cab.fuelType}</span>
-                           <span className="bg-gray-900 text-white px-2 py-1 rounded-md text-[10px] font-bold uppercase shadow-sm">{cab.vehicleType}</span>
-                       </div>
-                       {!bookingState.canBook && (
-                         <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                           <span className="bg-white text-gray-800 text-xs font-bold px-3 py-1.5 rounded-full shadow">{bookingState.label}</span>
-                         </div>
-                       )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 flex flex-col">
-                       <div className="flex justify-between items-start mb-2">
-                          <div>
-                             <h3 className="font-bold text-lg text-gray-900 group-hover:text-blue-600 transition-colors">{cab.make} {cab.model}</h3>
-                             <div className="flex items-center text-xs text-gray-500 mt-1 space-x-2">
-                                <span className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-md"><Icons.Users /> {getTotalSeats(cab)} Seater</span>
-                                <span className="bg-gray-50 px-2 py-1 rounded-md">{cab.sharingType}</span>
-                                {!bookingState.canBook && (
-                                  <span className="bg-rose-50 text-rose-700 border border-rose-100 px-2 py-1 rounded-md font-bold">{bookingState.label}</span>
-                                )}
-                             </div>
-                          </div>
-                          <div className="text-right">
-                             <span className="block text-2xl font-bold text-gray-900">
-                               {fare !== null ? `₹${fare}` : "—"}
-                             </span>
-                             <span className="text-[10px] text-gray-400 font-medium uppercase">{fareLabel}</span>
-                          </div>
-                       </div>
-
-                       {/* Route Line */}
-                       <div className="flex items-center gap-3 my-3 bg-gray-50 p-3 rounded-xl border border-dashed border-gray-200">
-                          <div className="flex-1 min-w-0">
-                             <p className="text-xs text-gray-400 font-bold uppercase">Pickup</p>
-                             <p className="text-sm font-semibold text-gray-800 truncate" title={cab.pickupP}>{cab.pickupP}</p>
-                          </div>
-                          <div className="text-gray-300">➔</div>
-                          <div className="flex-1 min-w-0 text-right">
-                             <p className="text-xs text-gray-400 font-bold uppercase">Drop</p>
-                             <p className="text-sm font-semibold text-gray-800 truncate" title={cab.dropP}>{cab.dropP}</p>
-                          </div>
-                       </div>
-
-                       <button
-                         onClick={() => bookingState.canBook && navigate(`/cab-booking/${cab._id}`)}
-                         disabled={!bookingState.canBook}
-                         className={`mt-auto w-full px-6 py-3 rounded-xl text-sm font-bold shadow-md flex items-center justify-center gap-2 ${
-                           bookingState.canBook
-                             ? "bg-gray-900 text-white hover:bg-blue-600 hover:shadow-lg active:scale-95 transition-all"
-                             : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                         }`}
-                       >
-                         {bookingState.canBook ? "Book This Ride" : bookingState.label}
-                         {bookingState.canBook && (
-                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                         )}
-                       </button>
-                    </div>
+               {filteredCabs.length > 0 ? (
+                 <div>
+                   <VirtualizedCabs items={filteredCabs} navigate={navigate} />
+                   {hasMore && (
+                     <div className="text-center py-4">
+                       <button onClick={loadMore} className="px-4 py-2 bg-gray-900 text-white rounded-md">Load more</button>
+                     </div>
+                   )}
                  </div>
-                 );
-               })}
+               ) : null}
 
                {filteredCabs.length === 0 && !isLoading && (
                  <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
@@ -498,5 +463,113 @@ export default function CarsPage() {
       <FilterPanel isMobile={true} isOpen={isMobileFilterOpen} onClose={() => setMobileFilterOpen(false)} filters={filters} setFilters={setFilters} options={options} />
       <SearchModal isOpen={isSearchModalOpen} onClose={() => setSearchModalOpen(false)} searchParams={searchParams} setSearchParams={setSearchParams} onSearch={() => {}} />
     </div>
+  );
+}
+
+// --- Memoized Cab Card ---
+const CabCard = React.memo(function CabCard({ cab, navigate }) {
+  const fare = resolveCabFare(cab);
+  const bookingState = resolveCabBookingState(cab);
+  const isShared = String(cab.sharingType || "").toLowerCase() === "shared";
+  const fareLabel = isShared ? "Per Person" : "Fare";
+
+  const rawImg = (Array.isArray(cab.images) ? cab.images[0] : cab.images) || `https://placehold.co/600x400?text=${cab.make}`;
+  const imgSrc = optimizeImage(rawImg, { w: 800 });
+  const imgSrcSet = srcSetFor(rawImg, [400, 800, 1200]);
+
+  return (
+    <div className={`bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex flex-col sm:flex-row gap-5 transition-all group ${bookingState.canBook ? "hover:shadow-xl hover:border-blue-100" : "opacity-75"}`}>
+      <div className="sm:w-60 h-48 sm:h-auto bg-gray-100 rounded-xl overflow-hidden flex-shrink-0 relative">
+        <img
+          src={imgSrc}
+          srcSet={imgSrcSet}
+          sizes="(max-width: 640px) 100vw, 240px"
+          loading="lazy"
+          decoding="async"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          alt={`${cab.make} ${cab.model}`}
+        />
+        <div className="absolute top-2 left-2 flex gap-1">
+          <span className="bg-white/95 backdrop-blur px-2 py-1 rounded-md text-[10px] font-bold uppercase shadow-sm flex items-center gap-1"><Icons.Fuel /> {cab.fuelType}</span>
+          <span className="bg-gray-900 text-white px-2 py-1 rounded-md text-[10px] font-bold uppercase shadow-sm">{cab.vehicleType}</span>
+        </div>
+        {!bookingState.canBook && (
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+            <span className="bg-white text-gray-800 text-xs font-bold px-3 py-1.5 rounded-full shadow">{bookingState.label}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 flex flex-col">
+        <div className="flex justify-between items-start mb-2">
+          <div>
+            <h3 className="font-bold text-lg text-gray-900 group-hover:text-blue-600 transition-colors">{cab.make} {cab.model}</h3>
+            <div className="flex items-center text-xs text-gray-500 mt-1 space-x-2">
+              <span className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-md"><Icons.Users /> {getTotalSeats(cab)} Seater</span>
+              <span className="bg-gray-50 px-2 py-1 rounded-md">{cab.sharingType}</span>
+              {!bookingState.canBook && (
+                <span className="bg-rose-50 text-rose-700 border border-rose-100 px-2 py-1 rounded-md font-bold">{bookingState.label}</span>
+              )}
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="block text-2xl font-bold text-gray-900">
+              {fare !== null ? `₹${fare}` : "—"}
+            </span>
+            <span className="text-[10px] text-gray-400 font-medium uppercase">{fareLabel}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 my-3 bg-gray-50 p-3 rounded-xl border border-dashed border-gray-200">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-gray-400 font-bold uppercase">Pickup</p>
+            <p className="text-sm font-semibold text-gray-800 truncate" title={cab.pickupP}>{cab.pickupP}</p>
+          </div>
+          <div className="text-gray-300">➔</div>
+          <div className="flex-1 min-w-0 text-right">
+            <p className="text-xs text-gray-400 font-bold uppercase">Drop</p>
+            <p className="text-sm font-semibold text-gray-800 truncate" title={cab.dropP}>{cab.dropP}</p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => bookingState.canBook && navigate(`/cab-booking/${cab._id}`)}
+          disabled={!bookingState.canBook}
+          className={`mt-auto w-full px-6 py-3 rounded-xl text-sm font-bold shadow-md flex items-center justify-center gap-2 ${
+            bookingState.canBook
+              ? "bg-gray-900 text-white hover:bg-blue-600 hover:shadow-lg active:scale-95 transition-all"
+              : "bg-gray-100 text-gray-400 cursor-not-allowed"
+          }`}
+        >
+          {bookingState.canBook ? "Book This Ride" : bookingState.label}
+          {bookingState.canBook && (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+});
+
+// --- Virtualized list wrapper ---
+function VirtualizedCabs({ items, navigate }) {
+  const Row = ({ index, style }) => (
+    <div style={style} className="px-0">
+      <CabCard cab={items[index]} navigate={navigate} />
+    </div>
+  );
+
+  const itemHeight = 220; // estimate card height
+  const listHeight = Math.min(items.length * itemHeight, 800);
+
+  return (
+    <List
+      height={listHeight}
+      itemCount={items.length}
+      itemSize={itemHeight}
+      width={'100%'}
+    >
+      {Row}
+    </List>
   );
 }

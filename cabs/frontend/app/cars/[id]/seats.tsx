@@ -22,14 +22,15 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getSeatData, updateCar, createManualBooking } from "../../../src/api";
-import type { Seat } from "../../../src/api";
+import { getCarById, getSeatData, updateCar, createManualBooking } from "../../../src/api";
+import type { Car, Seat } from "../../../src/api";
 import { colors, radii, spacing } from "../../../src/theme";
 import Button from "../../../src/ui";
 
 export default function SeatManagementScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const [car, setCar] = useState<Car | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -47,8 +48,12 @@ export default function SeatManagementScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await getSeatData(String(id));
-        setSeats(res.seats || []);
+        const [carData, seatData] = await Promise.all([
+          getCarById(String(id)),
+          getSeatData(String(id)),
+        ]);
+        setCar(carData);
+        setSeats(seatData.seats || []);
       } catch {
         setSeats([]);
       } finally {
@@ -63,6 +68,10 @@ export default function SeatManagementScreen() {
   };
 
   const handleToggleBooking = (seat: Seat) => {
+    if (car?.sharingType === "Private") {
+      Alert.alert("Private vehicle", "Private booking reserves the complete vehicle. Individual seat booking is not available.");
+      return;
+    }
     if (seat.isBooked) {
       // Already booked, cannot toggle
       return;
@@ -81,6 +90,11 @@ export default function SeatManagementScreen() {
 
   const handleCreateBooking = async () => {
     if (!selectedSeatForBooking) return;
+    if (car?.sharingType === "Private") {
+      Alert.alert("Private vehicle", "Private booking reserves the complete vehicle.");
+      setBookingModalVisible(false);
+      return;
+    }
     
     // Validate form
     if (!bookingForm.customerName.trim()) {
@@ -176,6 +190,14 @@ export default function SeatManagementScreen() {
             <SummaryChip label="Available" value={availableCount} color="#059669" bg="#D1FAE5" />
             <SummaryChip label="Booked" value={bookedCount} color="#DC2626" bg="#FEE2E2" />
           </View>
+
+          {car?.sharingType === "Private" && (
+            <View style={{ marginBottom: spacing.md, padding: spacing.md, borderRadius: radii.lg, backgroundColor: "#FFFBEB", borderWidth: 1, borderColor: "#FDE68A" }}>
+              <Text style={{ color: "#92400E", fontSize: 12, fontWeight: "700" }}>
+                Private vehicle: booking reserves the complete cab. Individual seat booking is disabled.
+              </Text>
+            </View>
+          )}
 
           <Text style={styles.sectionTitle}>Seats</Text>
 

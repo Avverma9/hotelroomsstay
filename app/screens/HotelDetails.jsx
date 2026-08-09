@@ -221,6 +221,31 @@ const getFoodAccent = (type) => {
   return { color: C.red, bg: C.redBg, icon: "restaurant-outline" };
 };
 
+// Optimize image URIs for lower bandwidth and faster rendering when possible.
+const getOptimizedUri = (uri, displayWidth = 400) => {
+  if (!uri || typeof uri !== "string") return uri;
+  try {
+    // Only attempt to add resizing params for remote URLs and common CDNs/origin hosts
+    const parsed = new URL(uri);
+    const host = (parsed.hostname || "").toLowerCase();
+    const indicators = ["s3.", "cloudfront", "imgix", "cdn.", "amazonaws", "hotelroomsstay.com", "images."];
+    const shouldAppend = indicators.some((i) => host.includes(i) || uri.includes(i));
+    if (!shouldAppend) return uri;
+    const w = Math.max(100, Math.min(2000, Math.round(displayWidth)));
+    // Set or replace width/quality params conservatively
+    if (parsed.search) {
+      parsed.searchParams.set("w", String(w));
+      parsed.searchParams.set("q", "70");
+      return parsed.toString();
+    }
+    parsed.searchParams.append("w", String(w));
+    parsed.searchParams.append("q", "70");
+    return parsed.toString();
+  } catch (e) {
+    return uri;
+  }
+};
+
 // ─── DESIGN PRIMITIVES ───────────────────────────────────────────────────────
 
 /** Thin gold divider */
@@ -431,7 +456,8 @@ const HotelDetails = ({ navigation, route }) => {
     }
   }, [mustPayOnline]);
 
-  const basicInfo = hotel?.basicInfo || {};
+  // Prefer nested `basicInfo` when present, otherwise fall back to top-level hotel object.
+  const basicInfo = hotel?.basicInfo || hotel || {};
   const pricingOverview = hotel?.pricingOverview || {};
   const rawPolicies = hotel?.policies ?? basicInfo?.policies ?? hotel?.policy ?? basicInfo?.policy ?? null;
 
@@ -523,8 +549,15 @@ const HotelDetails = ({ navigation, route }) => {
   const checkInChipText = useMemo(() => { const v = String(checkInPolicyValue || "").trim(); if (!v) return null; const l = v.toLowerCase(); if (l.includes("check in") || l.includes("check-in")) return v; return `Check-in ${v}`; }, [checkInPolicyValue]);
   const checkOutChipText = useMemo(() => { const v = String(checkOutPolicyValue || "").trim(); if (!v) return null; const l = v.toLowerCase(); if (l.includes("check out") || l.includes("check-out")) return v; return `Check-out ${v}`; }, [checkOutPolicyValue]);
 
-  const galleryImages = useMemo(() => toList(basicInfo?.images).filter(Boolean), [basicInfo?.images]);
-  const mainImage = galleryImages[0];
+  const galleryImages = useMemo(() => {
+    const candidates = (
+      basicInfo?.images || hotel?.images || basicInfo?.photos || hotel?.photos || basicInfo?.gallery || hotel?.gallery || []
+    );
+    const list = toList(candidates).filter(Boolean);
+    // Ensure full URLs where possible (avoid rendering relative empty strings)
+    return list;
+  }, [basicInfo, hotel]);
+  const mainImage = galleryImages[0] || null;
   const otherImages = galleryImages.slice(1, 9);
   const screenWidth = Dimensions.get("window").width;
 
@@ -768,7 +801,7 @@ const HotelDetails = ({ navigation, route }) => {
         <View style={{ height: 300 }}>
           {mainImage ? (
             <TouchableOpacity activeOpacity={0.95} onPress={() => openGalleryAt(0)} style={{ flex: 1 }}>
-              <Image source={{ uri: mainImage }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+              <Image source={{ uri: getOptimizedUri(mainImage, screenWidth) }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
             </TouchableOpacity>
           ) : (
             <View style={{ flex: 1, backgroundColor: C.slate2, alignItems: "center", justifyContent: "center" }}>
@@ -797,7 +830,7 @@ const HotelDetails = ({ navigation, route }) => {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ position: "absolute", bottom: 12, left: 0, right: 0 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
               {otherImages.map((img, i) => (
                 <TouchableOpacity key={`${img}-${i}`} activeOpacity={0.85} onPress={() => openGalleryAt(i + 1)}>
-                  <Image source={{ uri: img }} style={{ width: 54, height: 54, borderRadius: 12, borderWidth: 2, borderColor: "rgba(255,255,255,0.5)" }} />
+                  <Image source={{ uri: getOptimizedUri(img, 128) }} style={{ width: 54, height: 54, borderRadius: 12, borderWidth: 2, borderColor: "rgba(255,255,255,0.5)" }} resizeMode="cover" />
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -1009,7 +1042,7 @@ const HotelDetails = ({ navigation, route }) => {
                   <View style={{ flexDirection: "row", padding: 12, gap: 10 }}>
                     {/* Room image */}
                     {room?.images?.[0] ? (
-                      <Image source={{ uri: room.images[0] }} style={{ width: 88, height: 88, borderRadius: 12 }} resizeMode="cover" />
+                      <Image source={{ uri: getOptimizedUri(room.images[0], 176) }} style={{ width: 88, height: 88, borderRadius: 12 }} resizeMode="cover" />
                     ) : (
                       <View style={{ width: 88, height: 88, borderRadius: 12, backgroundColor: C.slate1, alignItems: "center", justifyContent: "center" }}>
                         <Ionicons name="bed-outline" size={24} color={C.slate3} />
@@ -1096,7 +1129,7 @@ const HotelDetails = ({ navigation, route }) => {
                   <View key={`${food.id}-${index}`} style={s.roomCard}>
                     <View style={{ flexDirection: "row", padding: 12, gap: 10 }}>
                       {food?.images?.[0] ? (
-                        <Image source={{ uri: food.images[0] }} style={{ width: 88, height: 88, borderRadius: 12 }} resizeMode="cover" />
+                        <Image source={{ uri: getOptimizedUri(food.images[0], 176) }} style={{ width: 88, height: 88, borderRadius: 12 }} resizeMode="cover" />
                       ) : (
                         <View style={{ width: 88, height: 88, borderRadius: 12, backgroundColor: C.slate1, alignItems: "center", justifyContent: "center" }}>
                           <Ionicons name="restaurant-outline" size={24} color={C.slate3} />
@@ -1271,7 +1304,7 @@ const HotelDetails = ({ navigation, route }) => {
           <ScrollView ref={galleryScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={{ flex: 1 }} onMomentumScrollEnd={(e) => { const i = Math.round(e.nativeEvent.contentOffset.x / screenWidth); setGalleryIndex(clamp(i, 0, Math.max(galleryImages.length - 1, 0))); }}>
             {galleryImages.map((img, i) => (
               <View key={`${img}-${i}`} style={{ width: screenWidth, flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 }}>
-                <Image source={{ uri: img }} style={{ width: "100%", height: "75%" }} resizeMode="contain" />
+                <Image source={{ uri: getOptimizedUri(img, screenWidth) }} style={{ width: "100%", height: "75%" }} resizeMode="contain" />
               </View>
             ))}
           </ScrollView>
@@ -1356,7 +1389,7 @@ const HotelDetails = ({ navigation, route }) => {
                 <View style={[s.summaryBox, { marginTop: 16, marginBottom: 20 }]}>
                   <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
                     {!!selectedRoomData?.images?.[0] && (
-                      <Image source={{ uri: selectedRoomData.images[0] }} style={{ width: 60, height: 60, borderRadius: 12 }} />
+                      <Image source={{ uri: getOptimizedUri(selectedRoomData.images[0], 120) }} style={{ width: 60, height: 60, borderRadius: 12 }} resizeMode="cover" />
                     )}
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontWeight: "800", color: C.white, fontSize: 14, marginBottom: 2 }}>{basicInfo?.name}</Text>

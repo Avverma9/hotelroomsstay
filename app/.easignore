@@ -17,4 +17,12 @@ coverage/
 dist/
 build/
 android/build/
+android/app/build/
+android/app/build
+android/.gradle/
+android/**/build/
+android/**/build
+android/**/.cxx/
+android/app/.cxx
+android/**/.gradle/
 ios/build/

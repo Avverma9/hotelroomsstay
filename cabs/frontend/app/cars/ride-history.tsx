@@ -318,7 +318,7 @@ function RideCard({ ride }: { ride: RideHistoryEvent }) {
       {isRouteChange && ride.previousRoute && (
         <View style={styles.sharingRow}>
           <Text style={styles.vehicleNum} numberOfLines={1}>
-            From: {ride.previousRoute.pickupP || "-"} -> {ride.previousRoute.dropP || "-"}
+            From: {ride.previousRoute.pickupP || "-"} {'->'} {ride.previousRoute.dropP || "-"}
           </Text>
         </View>
       )}

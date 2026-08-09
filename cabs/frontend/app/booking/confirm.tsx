@@ -39,6 +39,7 @@ export default function BookingConfirmScreen() {
 
   const [car, setCar] = useState<Car | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
+  const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>(seatIds);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,27 +55,36 @@ export default function BookingConfirmScreen() {
         setCar(c);
         if (sharingType === "Shared") {
           const data = await getSeatData(String(carId));
-          const picked = (data.seats || []).filter((s) => seatIds.includes(s._id));
-          setSeats(picked);
+          setSeats(data.seats || []);
+          setSelectedSeatIds(seatIds);
         }
       } finally {
         setLoading(false);
       }
     })();
-  }, [carId, sharingType, seatIds]);
+  }, [carId, sharingType, seatsStr]);
+
+  const selectedSeats = useMemo(
+    () => seats.filter((seat) => selectedSeatIds.includes(seat._id)),
+    [seats, selectedSeatIds],
+  );
 
   const { base, gst, total } = useMemo(() => {
     let b = 0;
-    if (sharingType === "Shared") b = seats.reduce((sum, s) => sum + (s.seatPrice || 0), 0);
+    if (sharingType === "Shared") b = selectedSeats.reduce((sum, s) => sum + (s.seatPrice || 0), 0);
     else b = car?.price || 0;
     const g = Math.round(b * 0.05 * 100) / 100;
     return { base: b, gst: g, total: Math.round((b + g) * 100) / 100 };
-  }, [seats, car, sharingType]);
+  }, [selectedSeats, car, sharingType]);
 
   const onConfirm = async () => {
     setErr(null);
     if (!name.trim() || !mobile.trim() || !email.trim()) {
       setErr("Please fill passenger details");
+      return;
+    }
+    if (sharingType === "Shared" && selectedSeatIds.length === 0) {
+      setErr("Please select at least one available seat");
       return;
     }
     if (!user) return;
@@ -93,7 +103,7 @@ export default function BookingConfirmScreen() {
         isPaid: true,
         confirmOnCreate: true,
       };
-      if (sharingType === "Shared") payload.seats = seatIds;
+      if (sharingType === "Shared") payload.seats = selectedSeatIds;
       const res = await createBooking(payload);
       if (!res.success) throw new Error(res.message || "Booking failed");
       Alert.alert("Booking confirmed!", `Booking ID: ${res.data.bookingId}`, [
@@ -153,9 +163,47 @@ export default function BookingConfirmScreen() {
 
           {sharingType === "Shared" && (
             <View style={styles.seatList}>
-              <Text style={styles.sectionTitle}>Selected seats</Text>
+              <Text style={styles.sectionTitle}>Select seats</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                {seats.map((seat) => {
+                  const booked = Boolean(seat.isBooked);
+                  const selected = selectedSeatIds.includes(seat._id);
+                  return (
+                    <TouchableOpacity
+                      key={seat._id}
+                      disabled={booked}
+                      onPress={() => setSelectedSeatIds((current) =>
+                        selected
+                          ? current.filter((id) => id !== seat._id)
+                          : [...current, seat._id],
+                      )}
+                      style={{
+                        minWidth: 72,
+                        paddingVertical: 9,
+                        paddingHorizontal: 10,
+                        borderRadius: 9,
+                        borderWidth: 1,
+                        borderColor: booked ? "#FECACA" : selected ? colors.primary : "#CBD5E1",
+                        backgroundColor: booked ? "#FEF2F2" : selected ? colors.primary : "#FFFFFF",
+                        opacity: booked ? 0.65 : 1,
+                        alignItems: "center",
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: booked ? "#B91C1C" : selected ? "#FFFFFF" : colors.text }}>
+                        Seat {seat.seatNumber}
+                      </Text>
+                      <Text style={{ fontSize: 10, marginTop: 2, color: booked ? "#B91C1C" : selected ? "#DBEAFE" : colors.textMuted }}>
+                        {booked ? "Booked" : `₹${seat.seatPrice || 0}`}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 8 }}>
+                {selectedSeatIds.length} seat{selectedSeatIds.length === 1 ? "" : "s"} selected
+              </Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                {seats.map((s) => (
+                {selectedSeats.map((s) => (
                   <View key={s._id} style={styles.seatChip}>
                     <Text style={styles.seatChipText}>Seat #{s.seatNumber}</Text>
                     <Text style={styles.seatChipPrice}>₹{s.seatPrice}</Text>

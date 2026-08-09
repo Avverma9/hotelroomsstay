@@ -551,10 +551,10 @@ function RouteChangeDetailRow({ item }: { item: RideHistoryEvent }) {
     <View style={[styles.revenueRow, { flexDirection: "column", alignItems: "flex-start", gap: 4, borderBottomColor: colors.border }]}> 
       <Text style={[styles.revenueLabel, { color: colors.text, fontWeight: "800" }]}>Route Changed • #{item.bookingCode || item._id.slice(-5)}</Text>
       <Text style={styles.bookingDate}>Changed At: {fmt(item.createdAt)}</Text>
-      <Text style={styles.bookingDate}>Old Route: {prev.pickupP || "-"} -> {prev.dropP || "-"}</Text>
-      <Text style={styles.bookingDate}>Old Date: {fmt(prev.pickupD)} -> {fmt(prev.dropD)}</Text>
-      <Text style={styles.bookingDate}>New Route: {next.pickupP || "-"} -> {next.dropP || "-"}</Text>
-      <Text style={styles.bookingDate}>New Date: {fmt(next.pickupD)} -> {fmt(next.dropD)}</Text>
+      <Text style={styles.bookingDate}>Old Route: {prev.pickupP || "-"} {'->'} {prev.dropP || "-"}</Text>
+      <Text style={styles.bookingDate}>Old Date: {fmt(prev.pickupD)} {'->'} {fmt(prev.dropD)}</Text>
+      <Text style={styles.bookingDate}>New Route: {next.pickupP || "-"} {'->'} {next.dropP || "-"}</Text>
+      <Text style={styles.bookingDate}>New Date: {fmt(next.pickupD)} {'->'} {fmt(next.dropD)}</Text>
     </View>
   );
 }

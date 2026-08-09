@@ -332,7 +332,7 @@ const SeatButton = ({ seat, selected, booked, onPress }) => {
         booked
           ? "bg-gray-100 border-gray-200"
           : selected
-            ? "bg-blue-600 border-blue-600 shadow-blue-200"
+            ? "bg-blue-600 border-blue-600"
             : "bg-white border-gray-200"
       }`}
     >
@@ -505,6 +505,13 @@ export default function TourDetails({ navigation, route }) {
   const totalAmount = Math.max(packagePrice + seatTotal, defaultSeatPrice);
   const advanceAmount = Math.round(totalAmount * 0.2);
   const payableAmount = payType === "full" ? totalAmount : advanceAmount;
+  const activePassenger = passengerForm?.[activeSeatTab] || {
+    type: "Adult",
+    name: "",
+    age: "",
+    dob: "",
+    gender: "Male",
+  };
 
   // Initialize form when seats change
   useEffect(() => {
@@ -516,8 +523,9 @@ export default function TourDetails({ navigation, route }) {
     setPassengerForm((prev) => {
       const next = { ...prev };
       selectedSeats.forEach((seat) => {
-        if (!next[seat]) {
-          next[seat] = {
+        const seatKey = String(seat || "").trim();
+        if (seatKey && !next[seatKey]) {
+          next[seatKey] = {
             type: "Adult",
             name: "",
             age: "",
@@ -531,17 +539,56 @@ export default function TourDetails({ navigation, route }) {
       });
       return next;
     });
-    if (!activeSeatTab || !selectedSeats.includes(activeSeatTab)) {
-      setActiveSeatTab(selectedSeats[0]);
-    }
+    setActiveSeatTab((current) =>
+      current && selectedSeats.includes(current) ? current : selectedSeats[0] || ""
+    );
   }, [selectedSeats]);
 
   const toggleSeat = (seat) => {
-    if (bookedSeats.includes(seat)) return;
+    const seatKey = String(seat || "").trim();
+    if (!seatKey || bookedSeats.includes(seatKey)) return;
     setSelectedSeats((prev) => {
-      if (prev.includes(seat)) return prev.filter((x) => x !== seat);
-      return [...prev, seat].sort(seatSort);
+      if (prev.includes(seatKey)) return prev.filter((x) => x !== seatKey);
+      return [...prev, seatKey].sort(seatSort);
     });
+  };
+
+  const continueToPassengerDetails = () => {
+    try {
+      const seats = Array.isArray(selectedSeats) ? selectedSeats.map((s) => String(s || "").trim()).filter(Boolean) : [];
+      const firstSeat = seats[0];
+      if (!firstSeat) return;
+
+      setActiveSeatTab((current) => current || firstSeat);
+      setPassengerForm((prevRaw) => {
+        const prev = prevRaw && typeof prevRaw === "object" ? { ...prevRaw } : {};
+        // Ensure entries exist for all selected seats
+        for (const seat of seats) {
+          if (!prev[seat]) {
+            prev[seat] = { type: "Adult", name: "", age: "", dob: "", gender: "Male" };
+          }
+        }
+        // Remove stale entries
+        Object.keys(prev).forEach((k) => { if (!seats.includes(k)) delete prev[k]; });
+        return prev;
+      });
+      setBookingStep(2);
+    } catch (err) {
+      console.error("continueToPassengerDetails error:", err);
+      showError("Unexpected error", String(err?.message || err));
+    }
+  };
+
+  // Safe wrapper used directly by the Continue button to guard against sync exceptions
+  const handleContinuePress = () => {
+    try {
+      console.log("[TourDetails] handleContinuePress - selectedSeats:", selectedSeats);
+      console.log("[TourDetails] passengerForm before continue:", passengerForm);
+      continueToPassengerDetails();
+    } catch (err) {
+      console.error("handleContinuePress sync error:", err);
+      showError("Error", "Unable to continue — try again.");
+    }
   };
 
   const openBooking = () => {
@@ -583,6 +630,8 @@ export default function TourDetails({ navigation, route }) {
   };
 
   const submitBooking = async () => {
+    console.log("[TourDetails] submitBooking - selectedSeats:", selectedSeats);
+    console.log("[TourDetails] submitBooking - passengerForm:", passengerForm);
     if (!selectedVehicle?._id) {
       showError("Error", "Vehicle not selected");
       return;
@@ -1142,7 +1191,7 @@ export default function TourDetails({ navigation, route }) {
                                         seat={seat}
                                         booked={bookedSeats.includes(seat)}
                                         selected={selectedSeats.includes(seat)}
-                                        onPress={() => toggleSeat(seat)}
+                                         onPress={() => toggleSeat(String(seat))}
                                       />
                                     ) : (
                                       <View className="w-11 h-11" />
@@ -1166,7 +1215,7 @@ export default function TourDetails({ navigation, route }) {
                                           seat={seat}
                                           booked={bookedSeats.includes(seat)}
                                           selected={selectedSeats.includes(seat)}
-                                          onPress={() => toggleSeat(seat)}
+                                           onPress={() => toggleSeat(String(seat))}
                                         />
                                       ) : (
                                         <View className="w-11 h-11" />
@@ -1195,9 +1244,9 @@ export default function TourDetails({ navigation, route }) {
                               <Text className="text-2xl font-extrabold text-blue-600">{formatINR(seatTotal)}</Text>
                           </View>
                       </View>
-                      <TouchableOpacity 
+                        <TouchableOpacity 
                           disabled={selectedSeats.length === 0}
-                          onPress={() => setBookingStep(2)}
+                           onPress={handleContinuePress}
                           className={`w-full py-4 rounded-2xl flex-row justify-center items-center shadow-lg ${selectedSeats.length > 0 ? 'bg-blue-600 shadow-blue-200' : 'bg-gray-100 shadow-none'}`}
                       >
                           <Text className={`font-bold text-base ${selectedSeats.length > 0 ? 'text-white' : 'text-gray-400'}`}>Continue</Text>
@@ -1243,13 +1292,13 @@ export default function TourDetails({ navigation, route }) {
                                           [activeSeatTab]: { ...prev[activeSeatTab], type }
                                       }))}
                                       className={`flex-1 py-3.5 rounded-xl border items-center flex-row justify-center gap-2 transition-all ${
-                                          passengerForm[activeSeatTab]?.type === type 
+                                           activePassenger.type === type 
                                           ? 'bg-blue-50 border-blue-600' 
                                           : 'bg-white border-gray-200'
                                       }`}
                                    >
-                                       <Ionicons name={type === 'Adult' ? 'person' : 'happy'} size={16} color={passengerForm[activeSeatTab]?.type === type ? '#2563EB' : '#9CA3AF'} />
-                                       <Text className={`font-bold text-sm ${passengerForm[activeSeatTab]?.type === type ? 'text-blue-700' : 'text-gray-500'}`}>{type}</Text>
+                                       <Ionicons name={type === 'Adult' ? 'person' : 'happy'} size={16} color={activePassenger.type === type ? '#2563EB' : '#9CA3AF'} />
+                                        <Text className={`font-bold text-sm ${activePassenger.type === type ? 'text-blue-700' : 'text-gray-500'}`}>{type}</Text>
                                    </TouchableOpacity>
                                ))}
                            </View>
@@ -1259,7 +1308,7 @@ export default function TourDetails({ navigation, route }) {
                               <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Full Name</Text>
                               <TextInput 
                                   placeholder="e.g. John Doe"
-                                  value={passengerForm[activeSeatTab]?.name || ''}
+                                   value={activePassenger.name}
                                   onChangeText={(text) => setPassengerForm(prev => ({...prev, [activeSeatTab]: {...prev[activeSeatTab], name: text}}))}
                                   className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 font-semibold text-base"
                               />
@@ -1269,13 +1318,13 @@ export default function TourDetails({ navigation, route }) {
                                {/* Dynamic Age / DOB Input */}
                                <View className="flex-1">
                                    <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
-                                       {passengerForm[activeSeatTab]?.type === 'Child' ? 'Date of Birth' : 'Age'}
+                                        {activePassenger.type === 'Child' ? 'Date of Birth' : 'Age'}
                                    </Text>
                                    <TextInput 
-                                       placeholder={passengerForm[activeSeatTab]?.type === 'Child' ? 'DD/MM/YYYY' : 'Years'}
-                                       value={passengerForm[activeSeatTab]?.type === 'Child' ? (passengerForm[activeSeatTab]?.dob || '') : (passengerForm[activeSeatTab]?.age || '')}
+                                        placeholder={activePassenger.type === 'Child' ? 'DD/MM/YYYY' : 'Years'}
+                                        value={activePassenger.type === 'Child' ? activePassenger.dob : activePassenger.age}
                                        onChangeText={(text) => {
-                                           const isChild = passengerForm[activeSeatTab]?.type === 'Child';
+                                            const isChild = activePassenger.type === 'Child';
                                            setPassengerForm(prev => ({
                                                ...prev, 
                                                [activeSeatTab]: {
@@ -1284,7 +1333,7 @@ export default function TourDetails({ navigation, route }) {
                                                }
                                            }))
                                        }}
-                                       keyboardType={passengerForm[activeSeatTab]?.type === 'Child' ? 'numbers-and-punctuation' : 'number-pad'}
+                                        keyboardType="number-pad"
                                        className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 font-semibold text-base"
                                    />
                                </View>
@@ -1297,9 +1346,9 @@ export default function TourDetails({ navigation, route }) {
                                            <TouchableOpacity 
                                               key={g}
                                               onPress={() => setPassengerForm(prev => ({...prev, [activeSeatTab]: {...prev[activeSeatTab], gender: g}}))}
-                                              className={`flex-1 rounded-lg items-center justify-center ${passengerForm[activeSeatTab]?.gender === g ? 'bg-white shadow-sm' : 'bg-transparent'}`}
+                                               className={`flex-1 rounded-lg items-center justify-center ${activePassenger.gender === g ? 'bg-white shadow-sm' : 'bg-transparent'}`}
                                            >
-                                               <Text className={`font-bold text-xs ${passengerForm[activeSeatTab]?.gender === g ? 'text-blue-600' : 'text-gray-400'}`}>{g.charAt(0)}</Text>
+                                                <Text className={`font-bold text-xs ${activePassenger.gender === g ? 'text-blue-600' : 'text-gray-400'}`}>{g.charAt(0)}</Text>
                                            </TouchableOpacity>
                                        ))}
                                    </View>

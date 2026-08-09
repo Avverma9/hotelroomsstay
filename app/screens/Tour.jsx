@@ -93,8 +93,8 @@ function TourCard({ tour, onPressDetails }) {
 
   return (
     <View className="mx-4 mb-2.5 bg-white rounded-xl border border-slate-200 p-2 overflow-hidden">
-      <View className="flex-row h-[120px]">
-        <View className="w-[98px] h-[120px] rounded-[10px] overflow-hidden bg-slate-200 relative">
+      <View className="flex-row min-h-[140px]">
+        <View className="w-[98px] h-[140px] rounded-[10px] overflow-hidden bg-slate-200 relative">
           {mainImage ? (
             <Image source={{ uri: mainImage }} className="w-full h-full" resizeMode="cover" />
           ) : (
@@ -107,7 +107,7 @@ function TourCard({ tour, onPressDetails }) {
           </View>
         </View>
 
-        <View className="flex-1 ml-2.5 justify-between" style={{ minWidth: 0 }}>
+        <View className="flex-1 ml-2.5 justify-between" style={{ minWidth: 0, minHeight: 140 }}>
           <View>
             <Text className="text-[13px] leading-[16px] font-black text-slate-900" numberOfLines={2} ellipsizeMode="tail">
               {places}
@@ -145,7 +145,7 @@ function TourCard({ tour, onPressDetails }) {
             </View>
           </View>
 
-          <View className="flex-row items-end justify-between mt-1" style={{ minWidth: 0 }}>
+          <View className="flex-row items-end justify-between mt-2" style={{ minWidth: 0 }}>
             <View className="flex-1 pr-1.5" style={{ minWidth: 0 }}>
               <Text className="text-[8px] font-black tracking-wider text-slate-400">STARTING FROM</Text>
               <Text

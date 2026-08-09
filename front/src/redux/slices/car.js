@@ -26,9 +26,10 @@ export const getCarById = createAsyncThunk('car/getCarById', async (id, { reject
   }
 });
 
-export const getAllCars = createAsyncThunk('car/getAll', async (_, { rejectWithValue }) => {
+export const getAllCars = createAsyncThunk('car/getAll', async ({ page = 1, limit = 20 } = {}, { rejectWithValue }) => {
   try {
-    const response = await apiClient.get('/travel/get-all-car');
+    const response = await apiClient.get(`/travel/get-all-car?page=${page}&limit=${limit}`);
+    // expect { data, total, page, limit }
     return response.data;
   } catch (error) {
     const errorMessage = error.response?.data?.message || error.message;

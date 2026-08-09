@@ -165,8 +165,8 @@ const TripInfoCard = ({ selectedCab }) => (
   <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
     <div className="relative">
       <img
-        src={selectedCab.images?.[0]}
-        alt={`${selectedCab.make} ${selectedCab.model}`}
+        src={(Array.isArray(selectedCab?.images) ? selectedCab.images[0] : selectedCab?.images) || `https://placehold.co/800x400?text=${selectedCab?.make}`}
+        alt={`${selectedCab?.make || ''} ${selectedCab?.model || ''}`}
         className="w-full h-48 sm:h-56 object-cover"
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
