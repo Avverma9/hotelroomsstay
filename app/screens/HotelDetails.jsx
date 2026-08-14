@@ -388,18 +388,24 @@ const HotelDetails = ({ navigation, route }) => {
   // Auto-fill guest details when user data loads
   useEffect(() => {
     if (user && !userLoading) {
-      setGuestName(user?.userName || user?.name || "");
-      setGuestEmail(user?.email || "");
-      setGuestPhone(user?.mobile || user?.phone || "");
+      const resolvedName = user?.userName || user?.name || user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "";
+      const resolvedEmail = user?.email || user?.emails?.[0] || user?.contactEmail || "";
+      const resolvedPhone = user?.mobile || user?.phone || user?.contact || user?.number || "";
+      setGuestName(resolvedName);
+      setGuestEmail(resolvedEmail);
+      setGuestPhone(resolvedPhone);
     }
   }, [user, userLoading]);
 
   // Pre-fill guest details from logged-in user each time the booking modal opens
   useEffect(() => {
     if (bookingModalVisible && user && !userLoading) {
-      setGuestName(prev => prev || user?.userName || user?.name || "");
-      setGuestEmail(prev => prev || user?.email || "");
-      setGuestPhone(prev => prev || user?.mobile || user?.phone || "");
+      const resolvedName = user?.userName || user?.name || user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "";
+      const resolvedEmail = user?.email || user?.emails?.[0] || user?.contactEmail || "";
+      const resolvedPhone = user?.mobile || user?.phone || user?.contact || user?.number || "";
+      setGuestName(prev => prev || resolvedName);
+      setGuestEmail(prev => prev || resolvedEmail);
+      setGuestPhone(prev => prev || resolvedPhone);
     }
   }, [bookingModalVisible, user, userLoading]);
 
@@ -458,6 +464,9 @@ const HotelDetails = ({ navigation, route }) => {
 
   // Prefer nested `basicInfo` when present, otherwise fall back to top-level hotel object.
   const basicInfo = hotel?.basicInfo || hotel || {};
+  const hotelDisplayName = (
+    basicInfo?.name || basicInfo?.hotelName || hotel?.hotelName || hotel?.name || hotel?.title || ""
+  ).trim();
   const pricingOverview = hotel?.pricingOverview || {};
   const rawPolicies = hotel?.policies ?? basicInfo?.policies ?? hotel?.policy ?? basicInfo?.policy ?? null;
 
@@ -757,7 +766,7 @@ const HotelDetails = ({ navigation, route }) => {
       couponCode: appliedCoupon || undefined,
       discountPrice: pricing.discount || 0,
       hotelDetails: {
-        hotelName: basicInfo?.name || hotel?.hotelName || "",
+        hotelName: hotelDisplayName || "",
         hotelEmail: basicInfo?.email || hotel?.email || hotel?.hotelEmail || "",
         hotelCity: basicInfo?.location?.city || hotel?.hotelCity || "",
         hotelOwnerName: basicInfo?.ownerName || hotel?.hotelOwnerName || hotel?.createdBy?.user || "",
@@ -772,7 +781,7 @@ const HotelDetails = ({ navigation, route }) => {
     const addr = [basicInfo?.location?.address, basicInfo?.location?.city, basicInfo?.location?.state].filter(Boolean).join(", ");
     try { await Share.share({ title: name, message: [name, addr, mainImage].filter(Boolean).join("\n") }); } catch { }
   }, [basicInfo, mainImage]);
-  const handleViewAllPolicies = useCallback(() => { navigation?.navigate?.("PolicyScreen", { hotelName: basicInfo?.name || hotel?.hotelName || "Hotel", policyItems }); }, [navigation, basicInfo?.name, hotel?.hotelName, policyItems]);
+  const handleViewAllPolicies = useCallback(() => { navigation?.navigate?.("PolicyScreen", { hotelName: hotelDisplayName || "Hotel", policyItems }); }, [navigation, hotelDisplayName, policyItems]);
 
   const sbPad = Platform.OS === "android" ? StatusBar.currentHeight || 0 : 0;
   const heroTop = sbPad + (Platform.OS === "android" ? 10 : 44);
@@ -844,7 +853,7 @@ const HotelDetails = ({ navigation, route }) => {
           <View style={[s.card, { marginBottom: 12 }]}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
               <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={{ fontSize: 22, fontWeight: "800", color: C.text1, letterSpacing: -0.5, lineHeight: 28 }}>{basicInfo?.name || "Hotel"}</Text>
+                <Text style={{ fontSize: 22, fontWeight: "800", color: C.text1, letterSpacing: -0.5, lineHeight: 28 }}>{hotelDisplayName || "Hotel"}</Text>
                 {!!basicInfo?.location && (
                   <View style={{ flexDirection: "row", alignItems: "flex-start", marginTop: 6 }}>
                     <Ionicons name="location-sharp" size={13} color={C.slate4} style={{ marginTop: 1 }} />

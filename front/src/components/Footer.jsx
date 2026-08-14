@@ -38,7 +38,7 @@ export default function Footer() {
     ['About Us', '/about'], ['Contact', '/contact'], ['Careers', '/careers'], ['Partner', '/partner'],
   ];
   const legal = [
-    ['Privacy Policy', '/privacy'], ['Terms', '/terms'], ['Cookies', '/cookies'],
+    ['Privacy Policy', '/privacy'], ['Terms', '/terms'], ['Data Security', '/data-security'], ['Cookies', '/cookies'],
   ];
   const social = [
     { icon: <Facebook className="w-5 h-5" />, href: '#' }, 

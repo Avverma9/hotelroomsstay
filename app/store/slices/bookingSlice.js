@@ -43,7 +43,13 @@ export const applyCouponCode = createAsyncThunk(
   "booking/applyCouponCode",
   async (payload, { rejectWithValue }) => {
     try {
-      const res = await api.patch("/coupons/coupon/apply", payload);
+      // Normalize payload to support either singular ids or arrays
+      const body = { ...(payload || {}) };
+      if (body.hotelId && !body.hotelIds) body.hotelIds = Array.isArray(body.hotelId) ? body.hotelId : [String(body.hotelId)];
+      if (body.roomId && !body.roomIds) body.roomIds = Array.isArray(body.roomId) ? body.roomId : [String(body.roomId)];
+      if (body.userId && !body.userIds) body.userIds = Array.isArray(body.userId) ? body.userId : [String(body.userId)];
+
+      const res = await api.patch("/coupons/coupon/apply", body);
       return res?.data ?? null;
     } catch (err) {
       const message = err?.response?.data?.message || err?.message || "Unable to apply coupon";

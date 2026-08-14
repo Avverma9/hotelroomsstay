@@ -34,6 +34,7 @@ import AboutPage from './pages/about';
 import ContactPage from './pages/Contact';
 import PoliciesPage from './pages/PolicyPage';
 import TermsPage from './pages/TermsPage';
+import DataSecurityPage from './pages/DataSecurityPage';
 import Careers from './pages/Careers';
 import Offered from './pages/Offered';
 
@@ -202,6 +203,7 @@ function App() {
           <Route path="/privacy" element={<PoliciesPage />} />
           <Route path="/policies" element={<PoliciesPage />} />
           <Route path="/terms" element={<TermsPage />} />
+          <Route path="/data-security" element={<DataSecurityPage />} />
           <Route path="/careers" element={<Careers />} />
 
           {/* Catch all - redirect to home or login */}

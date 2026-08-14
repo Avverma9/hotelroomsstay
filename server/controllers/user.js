@@ -882,6 +882,90 @@ const findUser = async (req, res) => {
   }
 };
 
+const findUserForSelfDelete = async (req, res) => {
+  try {
+    const { email } = req.query || {};
+    const normalizedEmail = String(email || '').trim();
+
+    if (!normalizedEmail) {
+      return res.status(400).json({ success: false, message: 'Email is required.' });
+    }
+
+    const foundUser = await userModel
+      .findOne({ email: { $regex: '^' + escapeRegex(normalizedEmail) + '$', $options: 'i' } })
+      .select('-password -refreshToken')
+      .lean();
+
+    if (!foundUser) {
+      return res.status(404).json({ success: false, message: 'No user account found for this email.' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...foundUser,
+        userId: foundUser.userId || foundUser.uid || null,
+      },
+    });
+  } catch (error) {
+    console.error('findUserForSelfDelete error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+const deleteUserAccountSelfService = async (req, res) => {
+  try {
+    const { email, confirm } = req.body || {};
+    const normalizedEmail = String(email || '').trim();
+
+    if (!normalizedEmail) {
+      return res.status(400).json({ success: false, message: 'Email is required to delete the account.' });
+    }
+
+    if (confirm !== true) {
+      return res.status(400).json({
+        success: false,
+        message: 'Confirmation is required before deleting the account and all associated bookings.',
+      });
+    }
+
+    const user = await userModel.findOne({
+      email: { $regex: '^' + escapeRegex(normalizedEmail) + '$', $options: 'i' },
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'No matching account found.' });
+    }
+
+    const userId = String(user.userId || user.uid || '');
+    const userObjectId = user._id;
+
+    await Promise.all([
+      userModel.deleteOne({ _id: userObjectId }),
+      booking.deleteMany({ $or: [{ 'user.userId': userId }, { userId }] }),
+      TourBooking.deleteMany({ userId }),
+      CarBooking.deleteMany({ userId }),
+      Review.deleteMany({ userId }),
+      Coupon.deleteMany({
+        $or: [
+          { userId },
+          { targetUserId: userId },
+          { assignedTo: { $regex: '^' + escapeRegex(normalizedEmail) + '$', $options: 'i' } },
+        ],
+      }),
+      Complaint.deleteMany({ userId: userObjectId }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Account and its associated bookings and data have been deleted successfully.',
+    });
+  } catch (error) {
+    console.error('deleteUserAccountSelfService error:', error);
+    return res.status(500).json({ success: false, message: 'Server error while deleting the account.' });
+  }
+};
+
 const getAllUserBulkById = async (req, res) => {
   try {
     const { userIds } = req.body;
@@ -1312,6 +1396,8 @@ module.exports = {
   getAllUsers,
   totalUser,
   findUser,
+  findUserForSelfDelete,
+  deleteUserAccountSelfService,
   getAllUserDetails,
   loginWithOtp,
   verifyOTP,

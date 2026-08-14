@@ -3,6 +3,8 @@ const router = express.Router();
 const { upload } = require('../aws/upload');
 const userController = require('../controllers/user');
 
+router.get('/account/self-delete/find', userController.findUserForSelfDelete);
+router.delete('/account/self-delete', userController.deleteUserAccountSelfService);
 router.post('/Signup', upload, userController.createSignup);
 router.get('/get/:userId', userController.getUserById);
 router.get('/get/user/by/query', userController.findUser);

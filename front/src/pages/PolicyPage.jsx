@@ -39,21 +39,83 @@ const HrsPolicy = () => {
 
   const privacySections = [
     {
-      title: "1. Information We Collect",
+      id: 'information',
+      title: '1. Information We Collect',
       content: [
-        { label: "Personal Data", text: "Personally identifiable information, such as your name, email address, mobile number, and password, that you voluntarily give to us when you register for an account or make a booking." },
-        { label: "Partner Data", text: "If you register as a Partner (e.g., hotel, travel agent), we collect extensive information, including but not limited to business name, address, contact person details, business registration documents, and bank account information." },
-        { label: "Booking Information", text: "Details related to your bookings, such as travel dates, accommodation details, cab bookings, tour packages, and payment information." },
-        { label: "Derivative Data", text: "Information our servers automatically collect when you access the Platform, such as your IP address, browser type, operating system, and access times." }
+        { label: 'Personal Data', text: 'Name, email, mobile number and password you provide when creating an account or making a booking.' },
+        { label: 'Partner Data', text: 'Business name, address, contact person details, registration documents and bank details for partners and vendors.' },
+        { label: 'Booking Information', text: 'Travel dates, accommodation details, cab bookings, payment status and any special requests.' },
+        { label: 'Automatic Data', text: 'IP address, device and browser information, access times and crash/log data collected automatically.' }
       ]
     },
     {
-      title: "2. How We Use Your Information",
+      id: 'use',
+      title: '2. How We Use Your Information',
+      bullets: [
+        'Create and manage your account, process bookings and related payments.',
+        'Facilitate communication between customers and Partners to complete bookings.',
+        'Provide customer support and respond to inquiries or complaints.',
+        'Detect and prevent fraud, abuse, and other illegal activity.',
+        'Comply with legal, regulatory and tax obligations.'
+      ]
+    },
+    {
+      id: 'sharing',
+      title: '3. Data Sharing',
       content: [
-        { label: "Management", text: "Create and manage your account, process bookings and payments." },
-        <li>Facilitate communication between you and our Partners.</li>,
-        <li>Respond to your inquiries, complaints, and provide customer support.</li>,
-        <li>Prevent fraudulent transactions, monitor against theft, and protect against criminal activity.</li>
+        { text: 'We share the minimum required information with Partners to fulfil bookings (for example, guest name and booking details). We also share data with payment processors, hosting providers and other service vendors under contract.' }
+      ]
+    },
+    {
+      id: 'cookies',
+      title: '4. Cookies & Tracking',
+      content: [
+        { text: 'We use cookies and similar technologies to provide, protect and improve our services. You can control cookie settings via your browser; disabling some cookies may affect functionality.' }
+      ]
+    },
+    {
+      id: 'security',
+      title: '5. Security',
+      content: [
+        { text: 'We implement reasonable administrative, technical and physical safeguards to protect personal data. However, no system is completely secure and we cannot guarantee absolute security of data in transit or at rest.' }
+      ]
+    },
+    {
+      id: 'retention',
+      title: '6. Data Retention',
+      content: [
+        { text: 'We retain personal data for as long as necessary to provide services, comply with legal obligations, resolve disputes and enforce our agreements.' }
+      ]
+    },
+    {
+      id: 'rights',
+      title: '7. Your Rights & Choices',
+      bullets: [
+        'Access and obtain a copy of your personal data.',
+        'Correct inaccurate or incomplete information.',
+        'Request deletion of personal data where applicable.',
+        'Opt-out of marketing communications.'
+      ]
+    },
+    {
+      id: 'children',
+      title: '8. Children',
+      content: [
+        { text: 'Our services are not intended for children under 13. We do not knowingly collect personal data from children under 13. If you believe we have collected such data, contact us to request removal.' }
+      ]
+    },
+    {
+      id: 'changes',
+      title: '9. Changes to This Policy',
+      content: [
+        { text: 'We may update this policy from time to time. Material changes will be notified via the website or email and the "Last Updated" date will be revised.' }
+      ]
+    },
+    {
+      id: 'contact',
+      title: '10. Contact Us',
+      content: [
+        { text: 'For privacy-related questions or requests, email us at info@hotelroomsstay.com or write to our registered address.' }
       ]
     }
   ];
@@ -120,41 +182,40 @@ const HrsPolicy = () => {
             <h2 style={styles.sectionTitle}>Privacy Policy</h2>
           </div>
           <div style={{...styles.contentBox, background: '#0f0f0f'}}>
-            <div style={{marginBottom: '2rem', padding: '1rem', background: '#1a1a1a', borderRadius: '0.5rem', borderLeft: '4px solid #2dd4bf'}}>
-              <p style={{margin: 0, fontSize: '0.9rem', color: '#888'}}>Last Updated: December 16, 2025</p>
-              <p style={{marginTop: '0.5rem', color: '#fff'}}>Happy Hotel Stay Service ("we," "us," or "our") is committed to protecting your privacy.</p>
+            <div style={{marginBottom: '1.5rem', padding: '1rem', background: '#1a1a1a', borderRadius: '0.5rem', borderLeft: '4px solid #2dd4bf'}}>
+              <p style={{margin: 0, fontSize: '0.95rem', color: '#888'}}>Last Updated: August 10, 2026</p>
+              <p style={{marginTop: '0.5rem', color: '#fff'}}>Happy Hotel Stay Service ("we," "us," or "our") is committed to protecting your privacy and being transparent about how we use your information.</p>
             </div>
 
-            <div style={{display: 'flex', flexDirection: 'column', gap: '3rem'}}>
-              <div>
-                <h3 style={{color: '#2dd4bf', fontSize: '1.4rem', marginBottom: '1.5rem'}}>1. Information We Collect</h3>
-                <div style={{display: 'flex', flexDirection: 'column', gap: '1.5rem'}}>
-                  <p style={{lineHeight: 1.6, color: '#d1d1d1'}}><strong style={{color: '#fff'}}>Personal Data:</strong> Name, email, mobile number, and password provided voluntarily during registration.</p>
-                  <p style={{lineHeight: 1.6, color: '#d1d1d1'}}><strong style={{color: '#fff'}}>Partner Data:</strong> Business name, address, contact person details, business registration, and bank information for vendors.</p>
-                  <p style={{lineHeight: 1.6, color: '#d1d1d1'}}><strong style={{color: '#fff'}}>Booking Information:</strong> Travel dates, accommodation details, cab bookings, and payment status.</p>
-                </div>
-              </div>
+            <div style={{display: 'flex', flexDirection: 'column', gap: '2rem'}}>
+              <nav style={{display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.5rem'}}>
+                {privacySections.map(s => (
+                  <a key={s.id} href={`#${s.id}`} style={{color: '#9ae6b4', textDecoration: 'none', fontSize: '0.9rem'}}>{s.title.replace(/^\d+\.\s*/, '')}</a>
+                ))}
+              </nav>
 
-              <div>
-                <h3 style={{color: '#2dd4bf', fontSize: '1.4rem', marginBottom: '1.5rem'}}>2. How We Use Your Information</h3>
-                <ul style={{color: '#d1d1d1', lineHeight: '2', paddingLeft: '1.5rem'}}>
-                  <li>Process and manage your bookings and payments efficiently.</li>
-                  <li>Facilitate communication between you and our service Partners.</li>
-                  <li>Prevent fraudulent transactions and protect against unauthorized activity.</li>
-                  <li>Comply with legal, regulatory, and tax requirements.</li>
-                </ul>
-              </div>
+              {privacySections.map(section => (
+                <div key={section.id} id={section.id} style={{padding: '1rem 0', borderTop: '1px solid #111'}}>
+                  <h3 style={{color: '#2dd4bf', fontSize: '1.25rem', margin: '0 0 0.75rem'}}>{section.title}</h3>
 
-              <div style={styles.grid}>
-                <div style={{background: '#1a1a1a', padding: '1.5rem', borderRadius: '0.75rem'}}>
-                  <h4 style={{color: '#fff', marginBottom: '1rem'}}>3. Data Sharing</h4>
-                  <p style={{fontSize: '0.95rem', lineHeight: 1.6, color: '#a7a7a7'}}>We share data with Partners to fulfill bookings and with third-party providers for payments and hosting.</p>
+                  {section.content && (
+                    <div style={{display: 'flex', flexDirection: 'column', gap: '0.75rem', color: '#d1d1d1'}}>
+                      {section.content.map((c, idx) => (
+                        <p key={idx} style={{lineHeight: 1.7, margin: 0}}>
+                          {c.label ? <strong style={{color: '#fff'}}>{c.label + ': '}</strong> : null}
+                          {c.text || c}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+
+                  {section.bullets && (
+                    <ul style={{color: '#d1d1d1', paddingLeft: '1.25rem', lineHeight: '1.9', marginTop: '0.5rem'}}>
+                      {section.bullets.map((b, i) => (<li key={i}>{b}</li>))}
+                    </ul>
+                  )}
                 </div>
-                <div style={{background: '#1a1a1a', padding: '1.5rem', borderRadius: '0.75rem'}}>
-                  <h4 style={{color: '#fff', marginBottom: '1rem'}}>4. Security</h4>
-                  <p style={{fontSize: '0.95rem', lineHeight: 1.6, color: '#a7a7a7'}}>We use administrative and technical measures to protect data, though no digital transmission is 100% secure.</p>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </section>

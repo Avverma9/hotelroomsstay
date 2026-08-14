@@ -7,6 +7,7 @@ const SKIP_PATH_PREFIXES = [
   '/auth/refresh',
   '/auth/refresh/dashboard',
   '/auth/user/forgot-password/',
+  '/account/self-delete',
   '/mail',
   '/login/dashboard/user',
   '/forgot-password/dashboard/user',

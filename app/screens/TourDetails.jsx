@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { useDispatch, useSelector } from "react-redux";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -68,6 +69,43 @@ const formatDateLabel = (value) => {
     month: "short",
     year: "numeric",
   });
+};
+
+const formatDobDisplay = (value) => {
+  if (!value) return "";
+  try {
+    // Accept either DD/MM/YYYY or ISO strings
+    const parts = String(value).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (parts) {
+      const dd = parts[1].padStart(2, "0");
+      const mm = parts[2].padStart(2, "0");
+      const yyyy = parts[3];
+      return `${dd}/${mm}/${yyyy}`;
+    }
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) {
+      const dd = String(d.getDate()).padStart(2, "0");
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const yyyy = d.getFullYear();
+      return `${dd}/${mm}/${yyyy}`;
+    }
+  } catch (e) {
+    // fallthrough
+  }
+  return String(value);
+};
+
+const parseDobString = (value) => {
+  if (!value) return null;
+  const parts = String(value).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (parts) {
+    const dd = parts[1].padStart(2, "0");
+    const mm = parts[2].padStart(2, "0");
+    const yyyy = parts[3];
+    return new Date(`${yyyy}-${mm}-${dd}T00:00:00.000Z`);
+  }
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d;
 };
 
 const formatLongText = (value, fallback = "") => {
@@ -367,6 +405,9 @@ export default function TourDetails({ navigation, route }) {
   const [mobileNumber, setMobileNumber] = useState("");
   const [activeSeatTab, setActiveSeatTab] = useState("");
   const [passengerForm, setPassengerForm] = useState({});
+  const [showDobPicker, setShowDobPicker] = useState(false);
+  const [dobPickerSeat, setDobPickerSeat] = useState(null);
+  const [dobPickerDate, setDobPickerDate] = useState(new Date());
   const [payType, setPayType] = useState("advance");
   const [showAllDays, setShowAllDays] = useState(false);
   const [activeInfoTab, setActiveInfoTab] = useState("overview");
@@ -1320,22 +1361,30 @@ export default function TourDetails({ navigation, route }) {
                                    <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
                                         {activePassenger.type === 'Child' ? 'Date of Birth' : 'Age'}
                                    </Text>
-                                   <TextInput 
-                                        placeholder={activePassenger.type === 'Child' ? 'DD/MM/YYYY' : 'Years'}
-                                        value={activePassenger.type === 'Child' ? activePassenger.dob : activePassenger.age}
-                                       onChangeText={(text) => {
-                                            const isChild = activePassenger.type === 'Child';
-                                           setPassengerForm(prev => ({
-                                               ...prev, 
-                                               [activeSeatTab]: {
-                                                   ...prev[activeSeatTab], 
-                                                   [isChild ? 'dob' : 'age']: text 
-                                               }
-                                           }))
+                                   {activePassenger.type === 'Child' ? (
+                                     <TouchableOpacity
+                                       onPress={() => {
+                                         const parsed = parseDobString(activePassenger.dob);
+                                         setDobPickerDate(parsed || new Date());
+                                         setDobPickerSeat(activeSeatTab);
+                                         setShowDobPicker(true);
                                        }}
+                                       activeOpacity={0.8}
+                                       className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5"
+                                     >
+                                        <Text className="text-gray-900 font-semibold text-base">
+                                          {activePassenger.dob ? formatDobDisplay(activePassenger.dob) : 'DD/MM/YYYY'}
+                                        </Text>
+                                     </TouchableOpacity>
+                                   ) : (
+                                     <TextInput 
+                                        placeholder="Years"
+                                        value={activePassenger.age}
+                                       onChangeText={(text) => setPassengerForm(prev => ({...prev, [activeSeatTab]: {...prev[activeSeatTab], age: text}}))}
                                         keyboardType="number-pad"
                                        className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 font-semibold text-base"
                                    />
+                                   )}
                                </View>
                                
                                {/* Gender */}
@@ -1471,7 +1520,29 @@ export default function TourDetails({ navigation, route }) {
                 </View>
               )}
           </View>
-        </SafeAreaView>
+                {/* DOB Picker Modal */}
+                <DateTimePickerModal
+                  isVisible={showDobPicker}
+                  mode="date"
+                  date={dobPickerDate}
+                  onCancel={() => { setShowDobPicker(false); setDobPickerSeat(null); }}
+                  onConfirm={(d) => {
+                    try {
+                      const seat = dobPickerSeat;
+                      const dd = String(d.getDate()).padStart(2, '0');
+                      const mm = String(d.getMonth() + 1).padStart(2, '0');
+                      const yyyy = d.getFullYear();
+                      const dobString = `${dd}/${mm}/${yyyy}`;
+                      setPassengerForm(prev => ({ ...prev, [seat]: { ...prev[seat], dob: dobString } }));
+                    } catch (e) {
+                      // no-op
+                    }
+                    setShowDobPicker(false);
+                    setDobPickerSeat(null);
+                  }}
+                />
+
+                </SafeAreaView>
       </Modal>
     </View>
   );

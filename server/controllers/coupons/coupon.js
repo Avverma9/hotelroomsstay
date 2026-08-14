@@ -302,6 +302,17 @@ const applyUserCoupon = async (req, res, coupon) => {
   try {
     let { hotelId, roomId, userId } = req.body;
 
+    // Accept either singular fields or arrays coming from frontend
+    if ((!hotelId || hotelId === "") && Array.isArray(req.body.hotelIds) && req.body.hotelIds.length) {
+      hotelId = req.body.hotelIds[0];
+    }
+    if ((!roomId || roomId === "") && Array.isArray(req.body.roomIds) && req.body.roomIds.length) {
+      roomId = req.body.roomIds[0];
+    }
+    if ((!userId || userId === "") && Array.isArray(req.body.userIds) && req.body.userIds.length) {
+      userId = req.body.userIds[0];
+    }
+
     hotelId = String(hotelId || "").trim();
     roomId = String(roomId || "").trim();
     userId = String(userId || "").trim();
@@ -328,9 +339,24 @@ const applyUserCoupon = async (req, res, coupon) => {
       return res.status(404).json({ message: "Hotel not found" });
     }
 
-    const selectedRoom = hotel.rooms.find(
-      (room) => String(room.roomId).trim() === roomId
-    );
+    const normalize = (v) => (v === undefined || v === null ? "" : String(v).trim());
+
+    const selectedRoom = (hotel.rooms || []).find((room) => {
+      const candidates = [
+        room.roomId,
+        room._id,
+        room.id,
+        room.roomID,
+        room.typeId,
+        room.roomTypeID,
+        room.room_type_id,
+        room.roomType?.id,
+        room.roomType?._id,
+        room.hotelRoomId,
+        room.roomIdString,
+      ];
+      return candidates.map(normalize).some((c) => c && c === roomId);
+    });
 
     if (!selectedRoom) {
       return res.status(404).json({ message: "Room not found" });
