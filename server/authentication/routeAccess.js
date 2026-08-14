@@ -33,6 +33,7 @@ const SKIP_PATH_PREFIXES = [
   "/monthly-set-room-price/get/by/",
   "/hotels/get-by-id/",
   "/gst/get-single-gst",
+  "/gst/create",
   "/get/all/users-filtered/booking/by",
   "/getReviews/hotelId",
   "/travel/get-all-car",

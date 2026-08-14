@@ -3,6 +3,7 @@ const { createGST, updateGST, getGST, getAllGST, deleteGST } = require('../../co
 const router = express.Router();
 
 router.post('/create-gst', createGST); // Create a new GST entry
+router.post('/create', createGST); // Public alias for GST creation
 router.patch('/update-gst', updateGST); // Update the latest GST entry
 router.get('/get-single-gst', getGST); // Get a single GST entry
 router.delete("/delete-gst/:id",deleteGST)

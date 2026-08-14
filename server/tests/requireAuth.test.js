@@ -44,3 +44,18 @@ test('requireAuth skips public tour-related routes without token', (t) => {
     assert.equal(res.statusCode, null, `${path} should not set status`);
   }
 });
+
+test('requireAuth skips the public GST create route, including /api prefix', () => {
+  for (const path of ['/gst/create', '/api/gst/create']) {
+    const req = makeReq(path);
+    const res = makeRes();
+    let nextCalled = false;
+
+    requireAuth(req, res, () => {
+      nextCalled = true;
+    });
+
+    assert.equal(nextCalled, true, `${path} should bypass auth`);
+    assert.equal(res.statusCode, null, `${path} should not set status`);
+  }
+});
