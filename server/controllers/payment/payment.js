@@ -149,7 +149,11 @@ async function markBookingPaid(type, booking, { transactionId } = {}) {
     case "hotel":
       booking.isPaid = true;
       booking.paymentConfirmedAt = now;
-      booking.bookingStatus = "Confirmed";
+      // Bulk/duplicate/long-stay bookings remain Pending until an admin or
+      // hotel partner explicitly approves them.
+      if (!booking.pendingReason) {
+        booking.bookingStatus = "Confirmed";
+      }
       break;
     case "travel":
       booking.isPaid = true;
@@ -186,7 +190,9 @@ async function markBookingOfflinePaid(type, booking, { collectedBy } = {}) {
       booking.isPaid = true;
       booking.paymentMode = "offline";
       booking.paymentConfirmedAt = now;
-      booking.bookingStatus = "Confirmed";
+      if (!booking.pendingReason) {
+        booking.bookingStatus = "Confirmed";
+      }
       break;
     case "travel":
       booking.isPaid = true;

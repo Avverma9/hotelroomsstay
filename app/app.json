@@ -47,7 +47,7 @@
       "expo-notifications"
     ],
     "extra": {
-      "apiUrl": "https://hotelroomsstay.com/api",
+      "apiUrl": "http://localhost:5000",
       "eas": {
         "projectId": "078ffea3-666e-427e-8ffd-0831ac5ff054"
       }

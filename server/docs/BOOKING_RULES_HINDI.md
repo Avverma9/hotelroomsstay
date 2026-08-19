@@ -22,15 +22,35 @@
 
 ---
 
-### 2. डुप्लिकेट बुकिंग डिटेक्शन
+### 2. डुप्लिकेट बुकिंग डिटेक्शन (Enhanced with Same-Day Logic)
 
 सिस्टम एक्टिव बुकिंग्स को चेक करता है - **मोबाइल नंबर** या **ईमेल** से।
 
 | कंडीशन | स्टेटस | कारण |
 |--------|--------|------|
-| Same mobile/email + **अलग शहर** | **Confirmed** | अलग डेस्टिनेशन, allowed |
-| Same mobile/email + **Same शहर** + अलग होटल | **Pending** | डुप्लिकेट हो सकता है |
-| Same mobile/email + Same शहर + **Same होटल** | **Confirmed** | रीबुकिंग |
+| **First Booking** | **Confirmed** | ✅ कोई existing booking नहीं |
+| **Second Booking: Same Day + Same City** (any hotel) | **Pending** | ⚠️ Manual review needed - same day same city suspicious |
+| **Same Day + Different City** | **Confirmed** | ✅ Travel itinerary - different destinations |
+| **Different Day + Same City + Different Hotel** | **Pending** | Standard duplicate rule |
+| **Different City** (any day) | **Confirmed** | ✅ Always allowed |
+
+**Same-Day Detection Examples:**
+
+```
+📅 User पहली booking करता है: 15 March, Goa में Hotel A → ✅ CONFIRMED
+
+फिर same day (15 March) को नई bookings करता है:
+
+├─ 15 March, Goa में Hotel B     → ⏳ PENDING (second booking same city)
+├─ 15 March, Goa में Hotel A     → ⏳ PENDING (second booking same city)  
+├─ 15 March, Mumbai में Hotel C  → ✅ CONFIRMED (different city)
+└─ 16 March, Goa में Hotel B     → ⏳ PENDING (standard rule)
+```
+
+**Business Logic:**
+- **पहली booking** हमेशा confirmed होती है (कोई duplicate नहीं)
+- **Second booking same day same city** = suspicious (manual review)
+- Different city bookings always allowed (travel itinerary)
 
 **एक्टिव बुकिंग्स** = `Confirmed`, `Pending`, `Checked-in` स्टेटस वाली बुकिंग्स
 
@@ -395,13 +415,17 @@ node server/scripts/test_booking_rules.js
 - ✗ सिंपल नाइट लिमिट चेक
 - ✗ No-Show ऑटोमेशन नहीं था
 - ✗ होटल पार्टनर कैंसिल कर सकते थे
+- ✗ सिंपल duplicate detection (सिर्फ city-based)
 
 ### अब (नए रूल्स):
 - ✓ **वेरिएबल पेमेंट टाइमआउट** (6/24/48 घंटे)
 - ✓ **पर-बुकिंग रूम लिमिट** (3 रूम्स प्रति बुकिंग)
-- ✓ **डुप्लिकेट बुकिंग डिटेक्शन** (same city + different hotel)
-- ✓ **ऑटोमेटिक No-Show** मार्किंग
+- ✓ **Same-day duplicate detection** (city + hotel + date based)
+- ✓ **25-घंटे No-Show ग्रेस पीरियड** 
+- ✓ **ऑटोमेटिक No-Show** मार्किंग (with grace period)
 - ✓ **स्ट्रिक्ट रोल-बेस्ड परमिशन** (होटल कैंसिल नहीं कर सकते)
+- ✓ **Same-day booking protection** (तुरंत no-show नहीं)
+- ✓ **Enhanced duplicate logic** (same-day + same-city = suspicious)
 
 ---
 

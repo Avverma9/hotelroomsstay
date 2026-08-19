@@ -4,6 +4,7 @@
  */
 
 const bookingModel = require("../models/booking/booking");
+const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Calculate payment timeout based on check-in date
@@ -35,40 +36,67 @@ function calculatePaymentTimeout(checkInDate) {
  * @param {string} userEmail - User email
  * @param {string} currentHotelCity - Current booking hotel city
  * @param {string} currentHotelId - Current booking hotel ID
+ * @param {Date} currentCheckInDate - Current booking check-in date
  * @returns {Promise<{isDuplicate: boolean, reason: string|null, shouldBePending: boolean}>}
  */
-async function checkDuplicateBooking(userId, userMobile, userEmail, currentHotelCity, currentHotelId) {
+const normalizeContact = (value) => String(value || "").trim().toLowerCase();
+const normalizeText = (value) => String(value || "").trim().toLowerCase();
+
+const dateKey = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+};
+
+async function checkDuplicateBooking(userId, userMobile, userEmail, currentHotelCity, currentHotelId, currentCheckInDate) {
   try {
-    // Find active bookings with same mobile or email
+    const mobile = normalizeContact(userMobile);
+    const email = normalizeContact(userEmail);
+    const contactFilters = [];
+    if (mobile) contactFilters.push({ "user.mobile": { $regex: `^${escapeRegex(mobile)}$`, $options: "i" } });
+    if (email) contactFilters.push({ "user.email": { $regex: `^${escapeRegex(email)}$`, $options: "i" } });
+
+    if (contactFilters.length === 0) {
+      return { isDuplicate: false, reason: null, shouldBePending: false };
+    }
+
+    // Only these statuses represent an existing booking for this rule.
     const activeBookings = await bookingModel.find({
-      $or: [
-        { "user.mobile": userMobile },
-        { "user.email": userEmail }
-      ],
-      bookingStatus: { $nin: ["Cancelled", "Failed", "Checked-out"] }
+      $and: [
+        { $or: contactFilters },
+        { bookingStatus: { $in: ["Pending", "Confirmed", "Checked-in"] } }
+      ]
     }).lean();
 
     if (!activeBookings || activeBookings.length === 0) {
       return { isDuplicate: false, reason: null, shouldBePending: false };
     }
 
-    // Check for same city different hotel
-    const sameCityDifferentHotel = activeBookings.some(
-      booking => 
-        String(booking.hotelDetails?.hotelCity || booking.hotelDetails?.destination || "").trim().toLowerCase() === 
-        String(currentHotelCity || "").trim().toLowerCase() &&
-        String(booking.hotelDetails?.hotelId || "") !== String(currentHotelId || "")
-    );
+    const currentCheckIn = dateKey(currentCheckInDate);
+    const currentCity = normalizeText(currentHotelCity);
+    const currentHotel = normalizeText(currentHotelId);
 
-    if (sameCityDifferentHotel) {
-      return {
-        isDuplicate: true,
-        reason: "Duplicate booking detected: Active booking exists in the same city at a different hotel",
-        shouldBePending: true
-      };
+    // Check for same-day bookings in same city
+    for (const booking of activeBookings) {
+      const bookingCheckIn = dateKey(booking.checkInDate);
+      const bookingCity = normalizeText(booking.hotelDetails?.hotelCity || booking.hotelDetails?.destination);
+      const bookingHotel = normalizeText(booking.hotelDetails?.hotelId || booking.hotelId);
+
+      const isSameBookingSlot = currentCheckIn && bookingCheckIn &&
+        currentCheckIn === bookingCheckIn &&
+        currentCity && currentCity === bookingCity &&
+        currentHotel && currentHotel === bookingHotel;
+
+      if (isSameBookingSlot) {
+        return {
+          isDuplicate: true,
+          reason: "Duplicate booking detected: An active booking already exists for the same customer, hotel, city, and check-in date.",
+          shouldBePending: true
+        };
+      }
     }
 
-    // Different city - allow booking (Confirmed)
+    // Different city bookings - always allowed
     return { isDuplicate: false, reason: null, shouldBePending: false };
   } catch (error) {
     console.error("Error checking duplicate booking:", error);
@@ -102,13 +130,13 @@ async function determineBookingStatus(bookingData) {
 
   const reasons = [];
 
-  // Rule 1: Max 3 rooms or nights - above that goes to Pending
-  if (numRooms > 3) {
-    reasons.push(`${numRooms} rooms booked (exceeds 3 rooms limit)`);
+  // Rule 1: 3+ rooms or more than 3 nights require approval.
+  if (Number(numRooms) >= 3) {
+    reasons.push(`${numRooms} rooms booked (3 or more rooms require approval)`);
   }
   
-  if (nights > 3) {
-    reasons.push(`${nights} nights stay (exceeds 3 nights limit)`);
+  if (Number(nights) > 3) {
+    reasons.push(`${nights} nights stay (more than 3 nights require approval)`);
   }
 
   // Rule 2: Check for duplicate bookings (same mobile/email)
@@ -117,7 +145,8 @@ async function determineBookingStatus(bookingData) {
     userMobile, 
     userEmail, 
     hotelCity, 
-    hotelId
+    hotelId,
+    checkInDate  // Pass check-in date for same-day detection
   );
 
   if (duplicateCheck.shouldBePending) {
@@ -133,41 +162,12 @@ async function determineBookingStatus(bookingData) {
     finalStatus = "Pending";
   }
 
-  // For offline bookings from panel, always Confirmed (unless rules force Pending)
-  const isOfflineBooking = 
-    String(paymentMode || "").trim().toLowerCase() === "offline" ||
-    String(bookingSource || "").trim().toLowerCase() === "panel";
+  // A normal booking is confirmed immediately. Pending is reserved for
+  // duplicate/bulk/long-stay review, regardless of payment mode. These
+  // bookings must remain available for admin/hotel approval, so they do not
+  // receive the payment auto-cancel timer.
 
-  if (isOfflineBooking && reasons.length === 0) {
-    finalStatus = "Confirmed";
-  }
-
-  // For online bookings, start as Pending with payment timer
-  if (!isOfflineBooking || reasons.length > 0) {
-    finalStatus = "Pending";
-    const timeoutMs = calculatePaymentTimeout(checkInDate);
-    autoCancelAt = new Date(Date.now() + timeoutMs);
-    
-    // Safety check: For same-day bookings, ensure minimum 2 hours payment window
-    const now = new Date();
-    const checkIn = new Date(checkInDate);
-    const isSameDayBooking = 
-      now.getFullYear() === checkIn.getFullYear() &&
-      now.getMonth() === checkIn.getMonth() &&
-      now.getDate() === checkIn.getDate();
-    
-    if (isSameDayBooking) {
-      const minimumTimeout = 2 * 60 * 60 * 1000; // 2 hours minimum
-      const calculatedTimeout = Math.max(timeoutMs, minimumTimeout);
-      autoCancelAt = new Date(Date.now() + calculatedTimeout);
-    }
-  }
-
-  const pendingReason = reasons.length > 0 
-    ? reasons.join("; ")
-    : finalStatus === "Pending" 
-      ? "Awaiting payment confirmation" 
-      : null;
+  const pendingReason = reasons.length > 0 ? reasons.join("; ") : null;
 
   return {
     status: finalStatus,
@@ -193,6 +193,10 @@ function validateStatusTransition(currentStatus, newStatus, userRole) {
 
   // Hotel partner restrictions
   if (role === "hotel_partner" || role === "partner") {
+    if (currentStatus === "Pending" && newStatus === "Confirmed") {
+      return { allowed: true, reason: null };
+    }
+
     // Hotel can only change Confirmed → Checked-in or No-Show
     if (currentStatus === "Confirmed") {
       if (["Checked-in", "No-Show"].includes(newStatus)) {
