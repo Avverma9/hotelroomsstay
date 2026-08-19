@@ -122,7 +122,10 @@ export default function AddCarForm({ isEditMode = false }) {
   const [seatCountInput, setSeatCountInput] = useState('');
 
   const existingCarImages = isEditMode ? selectedCar?.images || [] : [];
-  const existingDlImages = isEditMode ? selectedCar?.dlImage || [] : [];
+  const selectedOwnerProfile = selectedOwnerId
+    ? owners.find((owner) => owner._id === selectedOwnerId) || selectedOwner
+    : selectedOwner;
+  const existingDlImages = selectedOwnerProfile?.dlImage || [];
 
   // ── Step 1 validation ──────────────────────────────────────────────────────
   const validateStep1 = () => {
@@ -747,15 +750,21 @@ export default function AddCarForm({ isEditMode = false }) {
                       ))}
                     </div>
                   )}
-                  <div className="flex justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/50 px-6 py-6 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <UploadCloud className="h-6 w-6 text-slate-400" />
-                      <label htmlFor="dl-images" className="relative cursor-pointer rounded-md bg-white px-3 py-1.5 font-bold text-indigo-600 shadow-sm ring-1 ring-inset ring-slate-200 hover:text-indigo-500">
-                        <span>Select DL files</span>
-                        <input id="dl-images" type="file" multiple className="sr-only" onChange={(e) => handleFileChange(e, setDlImages)} accept="image/*,.pdf" />
-                      </label>
+                  {selectedOwnerId ? (
+                    <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-700">
+                      This owner is already registered. Existing DL documents stay linked to the owner and are not uploaded again with the vehicle.
+                    </p>
+                  ) : (
+                    <div className="flex justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/50 px-6 py-6 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <UploadCloud className="h-6 w-6 text-slate-400" />
+                        <label htmlFor="dl-images" className="relative cursor-pointer rounded-md bg-white px-3 py-1.5 font-bold text-indigo-600 shadow-sm ring-1 ring-inset ring-slate-200 hover:text-indigo-500">
+                          <span>Select DL files</span>
+                          <input id="dl-images" type="file" multiple className="sr-only" onChange={(e) => handleFileChange(e, setDlImages)} accept="image/*,.pdf" />
+                        </label>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   {dlImages.length > 0 && (
                     <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {dlImages.map((file, i) => (

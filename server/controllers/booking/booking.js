@@ -623,8 +623,8 @@ const updateBooking = async (req, res) => {
     );
 
     if (
-      ["Cancelled", "Failed"].includes(updatedData.bookingStatus)
-      && !["Cancelled", "Failed"].includes(previousStatus)
+      ["Cancelled", "Failed", "No-Show"].includes(updatedData.bookingStatus)
+      && !["Cancelled", "Failed", "No-Show"].includes(previousStatus)
     ) {
       await releaseBookedRooms(updatedData);
     }

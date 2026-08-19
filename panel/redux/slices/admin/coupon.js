@@ -54,6 +54,20 @@ export const createCoupon = createAsyncThunk(
   },
 )
 
+export const fetchRecentCoupons = createAsyncThunk(
+  'adminCoupon/fetchRecentCoupons',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/coupons/coupon', {
+        useRawAuthorization: true,
+      })
+      return Array.isArray(response.data) ? response.data : []
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error, 'Failed to load recent coupons.'))
+    }
+  },
+)
+
 export const applyCoupon = createAsyncThunk(
   'adminCoupon/applyCoupon',
   async ({ couponType, couponCode, hotelId, hotelIds = [], roomId, userId }, { rejectWithValue }) => {
@@ -131,6 +145,10 @@ const adminCouponSlice = createSlice({
       .addCase(createCoupon.rejected, (state, action) => {
         state.creating = false
         state.createError = action.payload || 'Failed to create coupon.'
+      })
+      .addCase(fetchRecentCoupons.fulfilled, (state, action) => {
+        state.createdCoupons = action.payload.slice(0, 10)
+        state.lastCreatedCoupon = action.payload[0] || null
       })
       .addCase(applyCoupon.pending, (state) => {
         state.applying = true

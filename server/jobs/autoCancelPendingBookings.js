@@ -116,8 +116,8 @@ const startAutoCancelJob = () => {
         for (const booking of confirmedBookings) {
           try {
             if (shouldMarkAsNoShow(booking)) {
-              const updated = await bookingModel.findByIdAndUpdate(
-                booking._id,
+              const updated = await bookingModel.findOneAndUpdate(
+                { _id: booking._id, bookingStatus: "Confirmed" },
                 {
                   $set: {
                     bookingStatus: "No-Show",
@@ -137,6 +137,8 @@ const startAutoCancelJob = () => {
               );
 
               if (!updated) continue;
+
+              await releaseBookedRooms(updated);
 
               // Send notification
               try {

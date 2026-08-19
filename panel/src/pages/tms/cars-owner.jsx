@@ -27,6 +27,7 @@ import {
 import {
   getAllOwners,
   clearSelectedOwner,
+  addOwner,
   deleteOwnerById,
   updateOwner,
 } from "../../../redux/slices/tms/travel/car";
@@ -319,6 +320,39 @@ const OwnerEditModal = ({ owner, onClose, onSave, saving, saveError }) => {
   );
 };
 
+const OwnerCreateModal = ({ onClose, onSave, saving, saveError }) => {
+  const [formData, setFormData] = useState({ name: '', email: '', mobile: '', dl: '', city: '', state: '', address: '', pinCode: '' });
+  const inputClass = "w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 shadow-sm outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 placeholder:text-slate-400 placeholder:font-normal";
+  const labelClass = "mb-1.5 block text-[13px] font-bold text-slate-700";
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    onSave(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+      <form onSubmit={handleSubmit} className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200">
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div><h2 className="text-lg font-bold text-slate-900">Add Car Owner</h2><p className="mt-0.5 text-xs text-slate-500">Create the owner profile before assigning cars.</p></div>
+          <button type="button" onClick={onClose} disabled={saving} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-900"><X size={20} /></button>
+        </div>
+        {saveError && <div className="border-b border-rose-100 bg-rose-50 px-6 py-3 text-sm font-bold text-rose-700">{saveError}</div>}
+        <div className="grid gap-4 p-6 sm:grid-cols-2">
+          {[['name', 'Full Name', 'text', true], ['mobile', 'Mobile Number', 'tel', true], ['email', 'Email Address', 'email'], ['dl', 'Driving Licence No.', 'text'], ['city', 'City', 'text'], ['state', 'State', 'text'], ['pinCode', 'Pin Code', 'text']].map(([name, label, type, required]) => (
+            <label key={name} className="block"><span className={labelClass}>{label}{required && <span className="text-rose-500"> *</span>}</span><input required={required} type={type} name={name} value={formData[name]} onChange={(event) => setFormData((current) => ({ ...current, [name]: event.target.value }))} className={inputClass} /></label>
+          ))}
+          <label className="block sm:col-span-2"><span className={labelClass}>Full Address</span><input type="text" name="address" value={formData.address} onChange={(event) => setFormData((current) => ({ ...current, address: event.target.value }))} className={inputClass} /></label>
+        </div>
+        <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button type="button" onClick={onClose} disabled={saving} className="rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-slate-700 ring-1 ring-inset ring-slate-300">Cancel</button>
+          <button type="submit" disabled={saving} className="flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-60">{saving ? <><Loader2 size={15} className="animate-spin" />Creating...</> : <><Plus size={15} />Add Owner</>}</button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
 
 // --- Main Component ---
 export default function CarsOwner() {
@@ -372,6 +406,24 @@ export default function CarsOwner() {
     }
   };
 
+  const handleCreateOwner = async (ownerData) => {
+    setSaving(true);
+    setSaveError('');
+    try {
+      const formData = new FormData();
+      Object.entries(ownerData).forEach(([key, value]) => {
+        if (value) formData.append(key, value);
+      });
+      await dispatch(addOwner(formData)).unwrap();
+      await dispatch(getAllOwners()).unwrap();
+      setModalMode(null);
+    } catch (err) {
+      setSaveError(typeof err === 'string' ? err : err?.message || 'Failed to add owner.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Derive unique states for the filter dropdown dynamically from data
   const availableStates = useMemo(() => {
     const states = owners.map(o => o.state).filter(state => state && state.trim() !== "");
@@ -414,7 +466,7 @@ export default function CarsOwner() {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+              <button onClick={() => { setSaveError(''); setModalMode('create'); }} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
                 <Plus size={18} /> Add Owner
               </button>
             </div>
@@ -487,7 +539,7 @@ export default function CarsOwner() {
             <p className="mt-2 text-sm font-medium text-slate-500 max-w-sm">
               Your directory is currently empty. Register a new car owner or driver to get started.
             </p>
-            <button className="mt-6 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-slate-800">
+            <button onClick={() => { setSaveError(''); setModalMode('create'); }} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-slate-800">
               <Plus size={18} /> Register First Owner
             </button>
           </div>
@@ -592,6 +644,15 @@ export default function CarsOwner() {
           owner={selectedOwner}
           onClose={() => { if (!saving) { setModalMode(null); setSelectedOwner(null); setSaveError(''); } }}
           onSave={handleEditSave}
+          saving={saving}
+          saveError={saveError}
+        />
+      )}
+
+      {modalMode === 'create' && (
+        <OwnerCreateModal
+          onClose={() => { if (!saving) { setModalMode(null); setSaveError(''); } }}
+          onSave={handleCreateOwner}
           saving={saving}
           saveError={saveError}
         />

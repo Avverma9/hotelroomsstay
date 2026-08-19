@@ -41,6 +41,18 @@ export const getCarByOwnerId = createAsyncThunk(
   }
 );
 
+export const getMyCars = createAsyncThunk(
+  "car/getMyCars",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get("/travel/get-my-cars");
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Failed to fetch your cars.");
+    }
+  }
+);
+
 export const getAllCars = createAsyncThunk(
   "car/getAllCars",
   async (_, { rejectWithValue }) => {
@@ -202,6 +214,20 @@ export const getAllOwners = createAsyncThunk(
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || "Failed to fetch car owners.");
+    }
+  }
+);
+
+export const addOwner = createAsyncThunk(
+  "car/addOwner",
+  async (ownerData, { rejectWithValue }) => {
+    try {
+      const response = await api.post("/travel/add-an-owner", ownerData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || error.response?.data?.error || "Failed to add owner.");
     }
   }
 );
@@ -397,6 +423,14 @@ const carSlice = createSlice({
       })
       .addCase(getCarByOwnerId.rejected, rejected)
 
+      // ── getMyCars ─────────────────────────────────────────────────────────
+      .addCase(getMyCars.pending, pending)
+      .addCase(getMyCars.fulfilled, (state, action) => {
+        state.loading = false;
+        state.ownerCars = action.payload?.data || action.payload || [];
+      })
+      .addCase(getMyCars.rejected, rejected)
+
       // ── getAllCars ─────────────────────────────────────────────────────────
       .addCase(getAllCars.pending, pending)
       .addCase(getAllCars.fulfilled, (state, action) => {
@@ -517,6 +551,14 @@ const carSlice = createSlice({
         state.owners = action.payload?.data || action.payload || [];
       })
       .addCase(getAllOwners.rejected, rejected)
+
+      // ── addOwner ─────────────────────────────────────────────────────────
+      .addCase(addOwner.pending, pending)
+      .addCase(addOwner.fulfilled, (state, action) => {
+        state.loading = false;
+        state.success = action.payload?.message || "Owner added successfully.";
+      })
+      .addCase(addOwner.rejected, rejected)
 
       // ── getOwnerById ───────────────────────────────────────────────────────
       .addCase(getOwnerById.pending, pending)

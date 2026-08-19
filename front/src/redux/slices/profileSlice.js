@@ -43,7 +43,7 @@ export const fetchDefaultCoupon = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await apiClient.post(
-        `/user-coupon/get-default-coupon/user`,
+        `/coupons/coupon/user-default`,
         { email: userEmail },
         {
           headers: {

@@ -11,6 +11,7 @@ const {
   getRemainingQuota,
   registerCouponUsage,
 } = require("./couponUtils");
+const { normalizeValidityToEndOfDayIST } = require("./couponUtils");
 
 const formatDate = (value) => {
   const date = new Date(value);
@@ -67,17 +68,29 @@ const createCoupon = async (req, res) => {
 
     const usageLimit = Number(maxUsage || quantity || 1);
 
+    const couponValidity = normalizeValidityToEndOfDayIST(validity) || validity;
+
     const createdCoupon = await Coupon.create({
       type,
       couponName,
       discountPrice,
-      validity,
+      validity: couponValidity,
       quantity: usageLimit,
       maxUsage: usageLimit,
       assignedTo,
       targetUserId: userId,
       userId,
     });
+
+    // Ensure `expired` flag is set consistently on creation using server time.
+    try {
+      const now = new Date();
+      const expiryDate = createdCoupon.validity ? new Date(createdCoupon.validity) : null;
+      createdCoupon.expired = expiryDate ? expiryDate < now : false;
+      await createdCoupon.save();
+    } catch (err) {
+      // non-fatal - continue
+    }
 
     if (type === "user") {
       const resolvedUserId = await resolveCouponUserId(createdCoupon);
@@ -424,9 +437,31 @@ const applyUserCoupon = async (req, res, coupon) => {
   }
 };
 
+const restoreIncorrectlyExpiredCoupons = async (filter = {}) => {
+  const now = new Date();
+
+  return Coupon.updateMany(
+    {
+      ...filter,
+      expired: true,
+      validity: { $gt: now },
+      $expr: {
+        $lt: [
+          { $ifNull: ["$usedCount", 0] },
+          { $ifNull: ["$maxUsage", { $ifNull: ["$quantity", 1] }] },
+        ],
+      },
+    },
+    { $set: { expired: false } },
+  );
+};
+
 const expireCouponsAutomatically = async () => {
   try {
     const now = new Date();
+
+    await restoreIncorrectlyExpiredCoupons();
+
     const coupons = await Coupon.find({
       expired: false,
       validity: { $lte: now, $ne: null },
@@ -462,6 +497,8 @@ const getCoupons = async (req, res) => {
   try {
     const { type } = req.query;
 
+    await restoreIncorrectlyExpiredCoupons(type ? { type } : {});
+
     const filter = {
       expired: false,
       validity: { $gte: new Date() },
@@ -480,6 +517,11 @@ const getCoupons = async (req, res) => {
 const getUserDefaultCoupon = async (req, res) => {
   try {
     const { email } = req.body;
+
+    await restoreIncorrectlyExpiredCoupons({
+      type: "user",
+      assignedTo: { $regex: `^${String(email || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+    });
 
     const coupons = await Coupon.find({
       type: "user",

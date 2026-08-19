@@ -18,7 +18,7 @@ import {
   MapPin,
   ChevronDown
 } from 'lucide-react';
-import { getCarByOwnerId, deleteCarById } from '../../../redux/slices/tms/travel/car';
+import { getMyCars, deleteCarById } from '../../../redux/slices/tms/travel/car';
 import Breadcrumb from '../../components/breadcrumb';
 
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?q=80&w=2070&auto=format&fit=crop";
@@ -164,7 +164,6 @@ const CarCard = ({ car, onDelete }) => {
 
 export default function YourCars() {
   const dispatch = useDispatch();
-  const { user } = useSelector((state) => state.auth);
   const { ownerCars, loading, error } = useSelector((state) => state.car);
 
   // Filter States
@@ -179,11 +178,8 @@ export default function YourCars() {
   };
 
   useEffect(() => {
-    const ownerId = user?._id || user?.id;
-    if (ownerId) {
-      dispatch(getCarByOwnerId(ownerId));
-    }
-  }, [dispatch, user]);
+    dispatch(getMyCars());
+  }, [dispatch]);
 
   // Filtering Logic
   const filteredCars = useMemo(() => {

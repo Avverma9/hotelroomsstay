@@ -43,7 +43,7 @@ export const updateGST = createAsyncThunk(
   'admin/updateGST',
   async (gstData, { rejectWithValue }) => {
     try {
-      const response = await api.patch('/gst/update', gstData)
+      const response = await api.patch('/gst/update-gst', gstData)
       return normalizeSingleEntry(response.data)
     } catch (error) {
       return rejectWithValue(

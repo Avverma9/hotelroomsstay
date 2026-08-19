@@ -59,8 +59,9 @@ const ensureWelcomeCouponForUser = async ({ email, userId }) => {
     return null;
   }
 
-  const validity = new Date();
-  validity.setDate(validity.getDate() + 7);
+  const rawValidity = new Date();
+  rawValidity.setDate(rawValidity.getDate() + 7);
+  const validity = require('./../coupons/couponUtils').normalizeValidityToEndOfDayIST(rawValidity) || rawValidity;
 
   const coupon = await Coupon.create({
     type: "user",

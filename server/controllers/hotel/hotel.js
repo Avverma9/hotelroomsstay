@@ -142,6 +142,11 @@ const createHotel = async (req, res) => {
       policies: typeof policies === 'string' ? JSON.parse(policies) : (policies || {}),
     };
 
+    // SECURITY: Do not allow client-supplied ratings or review counts on create.
+    // These must be derived from actual `reviews` collection to prevent fake data.
+    delete hotelData.rating;
+    delete hotelData.reviewCount;
+
     const [savedHotel] = await hotelModel.create([hotelData], { session });
     
     if (hotelData.amenities.length) {
@@ -455,17 +460,8 @@ const autoCancelPendingBookings = async () => {
   }
 };
 
-const autoMarkNoShow = async () => {
-  const today = DateTime.now().toFormat("yyyy-MM-dd");
-  await bookingsModel.updateMany(
-    { bookingStatus: "Confirmed", checkInDate: { $lt: today } },
-    { $set: { bookingStatus: "No-Show" } }
-  );
-};
-
 // Schedules
 cron.schedule("*/5 * * * *", autoCancelPendingBookings);
-cron.schedule("0 0 * * *", autoMarkNoShow);
 cron.schedule("0 0 1 * *", async () => {
   const updates = await monthModel.find();
   for (const u of updates) {

@@ -28,14 +28,19 @@ const uniqueMerge = (existing, incoming) => {
   return [...new Set([...toArray(existing), ...toArray(incoming)])];
 };
 
+// helper functions from couponUtils are already imported above
+
 const newCoupon = async (req, res) => {
   try {
     const { couponName, discountPrice, validity, quantity, maxUsage } = req.body;
+    // Normalize validity to end-of-day IST when user passes a date-only string
+    const couponValidity = require('../coupons/couponUtils').normalizeValidityToEndOfDayIST(validity) || validity;
+
     const createdCoupon = await couponModel.create({
       type: COUPON_TYPE,
       couponName,
       discountPrice,
-      validity,
+      validity: couponValidity,
       quantity,
       maxUsage: maxUsage || quantity,
     });
@@ -190,11 +195,31 @@ const ApplyCoupon = async (req, res) => {
 
 const expireCouponsAutomatically = async () => {
   try {
+    const now = new Date();
+
+    // Restore only unused coupons whose IST end-of-day validity is still in
+    // the future. This corrects legacy false expiry flags without reviving
+    // exhausted coupons.
+    await couponModel.updateMany(
+      {
+        type: COUPON_TYPE,
+        expired: true,
+        validity: { $gt: now },
+        $expr: {
+          $lt: [
+            { $ifNull: ["$usedCount", 0] },
+            { $ifNull: ["$maxUsage", { $ifNull: ["$quantity", 1] }] },
+          ],
+        },
+      },
+      { $set: { expired: false } },
+    );
+
     await couponModel.updateMany(
       {
         type: COUPON_TYPE,
         expired: false,
-        validity: { $lte: new Date() },
+        validity: { $lte: now },
       },
       {
         $set: { expired: true },

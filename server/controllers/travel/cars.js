@@ -150,7 +150,13 @@ exports.addCar = async (req, res) => {
       ownerPinCode,
       ...data
     } = req.body;
-    const images = req.files?.map((file) => file.location) || [];
+    const uploadedFiles = req.files || [];
+    const images = uploadedFiles
+      .filter((file) => file.fieldname === 'images')
+      .map((file) => file.location);
+    const dlImages = uploadedFiles
+      .filter((file) => file.fieldname === 'dlImage')
+      .map((file) => file.location);
 
     let parsedSeatConfig = [];
     if (seatConfig !== undefined) {
@@ -203,6 +209,7 @@ exports.addCar = async (req, res) => {
               city: ownerCity || '',
               state: ownerState || '',
               pinCode: ownerPinCode || undefined,
+              dlImage: dlImages,
             },
           ],
           { session }
@@ -218,6 +225,7 @@ exports.addCar = async (req, res) => {
         if (ownerCity) ownerUpdates.city = ownerCity;
         if (ownerState) ownerUpdates.state = ownerState;
         if (ownerPinCode) ownerUpdates.pinCode = ownerPinCode;
+        if (dlImages.length > 0) ownerUpdates.dlImage = dlImages;
         if (Object.keys(ownerUpdates).length) {
           owner = await CarOwner.findByIdAndUpdate(data.ownerId, ownerUpdates, {
             new: true,
@@ -243,6 +251,7 @@ exports.addCar = async (req, res) => {
             city: ownerCity || '',
             state: ownerState || '',
             pinCode: ownerPinCode || undefined,
+            dlImage: dlImages,
           },
         },
         { upsert: true, new: true, session }
@@ -470,7 +479,13 @@ exports.updateCar = async (req, res) => {
 
     const data = { ...req.body };
     const previousRoute = routeSnapshotFrom(existingCar);
-    const images = req.files?.map((file) => file.location) || [];
+    const uploadedFiles = req.files || [];
+    const images = uploadedFiles
+      .filter((file) => file.fieldname === 'images')
+      .map((file) => file.location);
+    const dlImages = uploadedFiles
+      .filter((file) => file.fieldname === 'dlImage')
+      .map((file) => file.location);
 
     data.images = images.length > 0 ? images : existingCar.images;
 
@@ -518,6 +533,7 @@ exports.updateCar = async (req, res) => {
     if (data.ownerCity) ownerUpdates.city = data.ownerCity;
     if (data.ownerState) ownerUpdates.state = data.ownerState;
     if (data.ownerPinCode) ownerUpdates.pinCode = data.ownerPinCode;
+    if (dlImages.length > 0) ownerUpdates.dlImage = dlImages;
 
     if (Object.keys(ownerUpdates).length) {
       await CarOwner.findByIdAndUpdate(existingCar.ownerId, ownerUpdates, {

@@ -1,7 +1,3 @@
-/**
- * BookNow Page - Refactored
- * Main booking page component with modularized sub-components
- */
 import React, {
   useCallback,
   useEffect,
@@ -16,24 +12,22 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  FileText,
   Info,
   Loader2,
   MapPin,
   Minus,
   Plus,
+  Receipt,
   ShieldCheck,
   Sparkles,
-  Star,
   Tag,
   Users,
   UtensilsCrossed,
   X,
 } from "lucide-react";
 
-// Redux
 import useBookingOperations from "./hooks/useBookingOperations";
-
-// Extracted Components
 import CalendarPicker from "./components/CalendarPicker";
 import RoomsGuestsPopup from "./components/RoomsGuestsPopup";
 import PoliciesModal from "./components/PoliciesModal";
@@ -45,8 +39,6 @@ import {
   InfoRows,
   Stars,
 } from "./components/SharedUI";
-
-// Helpers
 import {
   PLACEHOLDER_IMAGE,
   DEFAULT_AMENITIES,
@@ -71,9 +63,6 @@ import {
 } from "@/redux/slices/bookingSlice";
 import { ReviewSection } from "./sections/Review";
 
-// ============================================================
-// MAIN COMPONENT
-// ============================================================
 export default function BookNowPage() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -82,7 +71,6 @@ export default function BookNowPage() {
   const user = useSelector((store) => store.auth?.user) || null;
   const isLoggedIn = Boolean(user?.id);
 
-  // --- UI State ---
   const [showCalendar, setShowCalendar] = useState(false);
   const [showRoomsPopup, setShowRoomsPopup] = useState(false);
   const [showPolicies, setShowPolicies] = useState(false);
@@ -95,7 +83,6 @@ export default function BookNowPage() {
 
   const roomsPopupRef = useRef(null);
 
-  // Close popup on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (roomsPopupRef.current && !roomsPopupRef.current.contains(e.target)) {
@@ -106,25 +93,6 @@ export default function BookNowPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Inject compact styles
-  useEffect(() => {
-    if (document.getElementById("compact-booknow-styles")) return;
-    const css = `
-      .compact-booknow .p-6{padding:.75rem !important}
-      .compact-booknow .p-5{padding:.75rem !important}
-      .compact-booknow .p-4{padding:.5rem !important}
-      .compact-booknow .p-3{padding:.375rem !important}
-      .compact-booknow .space-y-6 > * + *{margin-top:.75rem !important}
-      .compact-booknow .space-y-4 > * + *{margin-top:.5rem !important}
-    `;
-    const el = document.createElement("style");
-    el.id = "compact-booknow-styles";
-    el.appendChild(document.createTextNode(css));
-    document.head.appendChild(el);
-    return () => el.remove();
-  }, []);
-
-  // --- Trip Meta ---
   const initialTripMeta = useMemo(() => {
     if (!state?.tripMeta) {
       return {
@@ -170,7 +138,6 @@ export default function BookNowPage() {
     if (guestsCount > maxGuests) setGuestsCount(maxGuests);
   }, [roomsCount, guestsCount]);
 
-  // --- Hotel Data ---
   const navigationHotel = state?.hotel || null;
   const navigationHotelId =
     normalizeHotelId(state?.hotelId) || deriveHotelId(navigationHotel);
@@ -188,19 +155,18 @@ export default function BookNowPage() {
     dispatch(fetchMonthlyData(hotelId));
   }, [dispatch, hotelId]);
 
-  // --- Hotel Info ---
-  const hotelName = hotel?.hotelName || hotel?.name || "Selected property";
+  const hotelName = hotel?.hotelName || hotel?.name || "Selected Property";
   const hotelAddress =
     hotel?.address ||
     [hotel?.landmark, hotel?.city, hotel?.state].filter(Boolean).join(", ") ||
-    "Address on confirmation";
+    "Address available after confirmation";
   const hotelRating = Number.isFinite(Number(hotel?.rating))
     ? Number(hotel.rating)
     : null;
   const hotelDescription =
     hotel?.description ||
     hotel?.about ||
-    "Experience a comfortable stay with us.";
+    "Experience pure comfort with refined hospitality and prime architectural amenities designed for your journey.";
   const allAmenities = useMemo(
     () => [...new Set(normalizeAmenities(hotel?.amenities, DEFAULT_AMENITIES))],
     [hotel?.amenities]
@@ -215,7 +181,6 @@ export default function BookNowPage() {
     return unique.length ? unique : [PLACEHOLDER_IMAGE];
   }, [hotel]);
 
-  // --- Rooms with Monthly Price Override ---
   const rooms = useMemo(() => {
     const sourceRooms =
       Array.isArray(hotel?.rooms) && hotel.rooms.length ? hotel.rooms : null;
@@ -228,8 +193,8 @@ export default function BookNowPage() {
         {
           id: "primary-room",
           roomId: "primary-room",
-          name: hotel?.defaultRoomName || "Premium room",
-          area: hotel?.defaultRoomArea || "Approx. 180 sq.ft",
+          name: hotel?.defaultRoomName || "Standard Deluxe Room",
+          area: hotel?.defaultRoomArea || "Approx. 200 sq.ft",
           finalPrice: fallbackPrice,
           originalPrice: fallbackPrice,
           taxes: Math.round(fallbackPrice * 0.12),
@@ -264,7 +229,6 @@ export default function BookNowPage() {
         extractPriceCandidate(room) ||
         1599;
 
-      // Check if this room has monthly price override for current dates
       const monthlyOverride = pickMonthlyOverride(
         bookingState.monthlyData,
         baseRoomId,
@@ -275,11 +239,11 @@ export default function BookNowPage() {
         ? parseNumber(monthlyOverride.monthPrice, originalPrice)
         : originalPrice;
 
-      const roomData = {
+      return {
         id: baseRoomId,
         roomId: baseRoomId,
         name: room.name || room.type || `Room ${index + 1}`,
-        area: room.size || room.area || "Approx. 180 sq.ft",
+        area: room.size || room.area || "Approx. 200 sq.ft",
         finalPrice: effectivePrice,
         originalPrice: originalPrice,
         taxes: Math.round(
@@ -308,7 +272,6 @@ export default function BookNowPage() {
         hasMonthlyPrice: Boolean(monthlyOverride),
         monthlyPriceMeta: monthlyOverride || null,
       };
-      return roomData;
     });
 
     return mappedRooms;
@@ -330,7 +293,6 @@ export default function BookNowPage() {
     [rooms, selectedRoomId]
   );
 
-  // Price is already calculated in rooms array with monthly override
   const effectiveRoomNightlyPrice = useMemo(() => {
     if (!selectedRoom) return 0;
     return parseNumber(selectedRoom.finalPrice, 0);
@@ -354,7 +316,6 @@ export default function BookNowPage() {
     ];
   }, [effectiveRoomNightlyPrice, selectedRoom]);
 
-  // --- Guest Details ---
   const [guestDetails, setGuestDetails] = useState({
     name: user?.name || user?.displayName || "",
     email: user?.email || "",
@@ -370,7 +331,6 @@ export default function BookNowPage() {
     });
   }, [isLoggedIn, user]);
 
-  // --- Pricing State ---
   const [couponCode, setCouponCode] = useState(
     () => state?.priceDetails?.coupon || ""
   );
@@ -388,7 +348,6 @@ export default function BookNowPage() {
     [checkInDate, checkOutDate]
   );
 
-  // --- Food Selection ---
   const availableFoods = useMemo(
     () => normalizeFoods(hotel?.foods, []),
     [hotel?.foods]
@@ -427,7 +386,6 @@ export default function BookNowPage() {
     });
   }, []);
 
-  // --- Price Calculations ---
   const foodTotal = useMemo(
     () => sumFoodSelections(selectedFood),
     [selectedFood]
@@ -455,7 +413,6 @@ export default function BookNowPage() {
     return nameValid && phoneDigits.length >= 6;
   }, [guestDetails, isLoggedIn]);
 
-  // --- Booking Operations ---
   const { handleApplyCoupon, handleOfflineBooking, recalculateGst } =
     useBookingOperations({
       hotelId,
@@ -495,20 +452,15 @@ export default function BookNowPage() {
     if (offlineBookingLoading) return;
     setOfflineBookingLoading(true);
     const result = await handleOfflineBooking?.();
-    undefined;
     if (result?.success) {
-      // Extract the actual booking data from nested response
       const actualData = result.data?.data || result.data;
-      undefined;
       setBookingResponseData(actualData);
       setShowBookingSheet(false);
-      // Show success modal
       setShowSuccessModal(true);
     }
     setOfflineBookingLoading(false);
   }, [handleOfflineBooking, offlineBookingLoading]);
 
-  // --- Policy Highlights ---
   const policy0 = hotel?.policies?.[0] || {};
   const policyHighlights = useMemo(() => {
     const base = [
@@ -526,7 +478,6 @@ export default function BookNowPage() {
       .slice(0, 5);
   }, [policy0]);
 
-  // --- Reviews ---
   const reviewsArray = useMemo(() => {
     const candidates = [
       hotel?.reviews,
@@ -546,9 +497,6 @@ export default function BookNowPage() {
     return direct > 0 ? direct : reviewsArray.length;
   }, [hotel, reviewsArray.length]);
 
-
-
-  // --- Helpers ---
   const formatDateShort = (isoDate) => {
     const date = new Date(isoDate);
     return `${date.getDate()} ${date.toLocaleDateString("en-US", {
@@ -567,23 +515,19 @@ export default function BookNowPage() {
   );
   const amenitiesToRender = showAllAmenities ? allAmenities : amenitiesPreview;
 
-  // --- Loading State ---
   if (!hotel) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="animate-spin text-blue-600" size={40} />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white text-neutral-800 font-['Roboto',sans-serif]">
+        <Loader2 className="animate-spin text-neutral-600 mb-3" size={28} />
+        <span className="text-xs uppercase tracking-widest text-neutral-500 font-semibold">
+          Loading Booking Details...
+        </span>
       </div>
     );
   }
 
-  // BookingPanel removed - inlined at render to prevent remounts and preserve input focus
-
-  // ============================================================
-  // RENDER
-  // ============================================================
   return (
-    <div className="bg-gray-50 min-h-screen pb-24 lg:pb-20 font-sans compact-booknow">
-      {/* Modals */}
+    <div className="min-h-screen bg-white text-neutral-900 font-['Roboto',sans-serif] antialiased selection:bg-neutral-200 selection:text-neutral-900 pb-28 lg:pb-16">
       {showCalendar && (
         <CalendarPicker
           checkIn={checkInDate}
@@ -608,126 +552,144 @@ export default function BookNowPage() {
         />
       )}
 
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600"
-          >
-            <ChevronLeft size={22} />
-          </button>
-          <div className="min-w-0">
-            <h1 className="text-base sm:text-lg font-bold text-gray-900 truncate">
-              {hotelName}
-            </h1>
-            <p className="text-xs text-gray-500 flex items-center gap-1 truncate">
-              <MapPin size={12} /> {hotel?.city}
-              {hotel?.state ? `, ${hotel.state}` : ""}
-            </p>
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-neutral-200">
+        <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => navigate(-1)}
+              className="p-1.5 -ml-1.5 rounded-lg text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition"
+            >
+              <ChevronLeft size={22} />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-neutral-900 truncate">
+                {hotelName}
+              </h1>
+              <p className="text-xs text-neutral-500 flex items-center gap-1 truncate">
+                <MapPin size={12} className="shrink-0" />
+                {hotelAddress}
+              </p>
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center gap-2">
+            <span className="text-xs bg-neutral-100 text-neutral-700 font-medium px-3 py-1 rounded-md border border-neutral-200">
+              {nights} Night{nights > 1 ? "s" : ""}
+            </span>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-2 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Gallery */}
-            <SectionCard>
-              <div className="rounded-3xl overflow-hidden border border-gray-100 bg-gray-100">
+      <main className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="lg:col-span-7 space-y-6">
+            <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-sm">
+              <div className="relative rounded-lg overflow-hidden bg-neutral-100 aspect-[16/10] border border-neutral-200">
                 <button
                   onClick={() => {
                     setGalleryIndex(0);
                     setShowGallery(true);
                   }}
-                  className="block w-full"
+                  className="w-full h-full block cursor-pointer group"
                 >
                   <img
                     src={galleryImages[0]}
                     alt={hotelName}
-                    className="w-full h-57.5 sm:h-80 object-cover"
+                    className="w-full h-full object-cover group-hover:scale-102 transition duration-300"
                   />
+                  <div className="absolute bottom-3 right-3 bg-neutral-900/80 text-white text-xs font-semibold px-2.5 py-1 rounded">
+                    View Photos ({galleryImages.length})
+                  </div>
                 </button>
               </div>
-              <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
-                {galleryImages.slice(0, 8).map((img, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setGalleryIndex(i);
-                      setShowGallery(true);
-                    }}
-                    className="shrink-0 w-16 h-16 rounded-xl overflow-hidden border border-gray-200 bg-gray-100"
-                  >
-                    <img
-                      src={img}
-                      alt="thumb"
-                      className="w-full h-full object-cover"
-                    />
-                  </button>
-                ))}
-                {galleryImages.length > 8 && (
-                  <button
-                    onClick={() => setShowGallery(true)}
-                    className="shrink-0 w-16 h-16 rounded-xl border border-gray-200 bg-white text-xs font-bold text-gray-700 flex items-center justify-center"
-                  >
-                    +{galleryImages.length - 8}
-                  </button>
-                )}
-              </div>
-            </SectionCard>
 
-            {/* About */}
-            <SectionCard
-              title="About property"
-              icon={<ShieldCheck size={20} className="text-blue-600" />}
-            >
-              <p className="text-gray-700 text-sm leading-relaxed">
+              {galleryImages.length > 1 && (
+                <div className="mt-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                  {galleryImages.slice(0, 6).map((img, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setGalleryIndex(i);
+                        setShowGallery(true);
+                      }}
+                      className="shrink-0 w-16 h-16 rounded-md overflow-hidden border border-neutral-200 bg-neutral-100 hover:opacity-80 transition"
+                    >
+                      <img
+                        src={img}
+                        alt="Thumbnail"
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                  ))}
+                  {galleryImages.length > 6 && (
+                    <button
+                      onClick={() => setShowGallery(true)}
+                      className="shrink-0 w-16 h-16 rounded-md border border-dashed border-neutral-300 bg-neutral-50 hover:bg-neutral-100 text-neutral-600 text-xs font-bold flex items-center justify-center transition"
+                    >
+                      +{galleryImages.length - 6}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white border border-neutral-200 rounded-xl p-5 sm:p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-2 text-neutral-500 text-xs font-bold tracking-wider uppercase">
+                <FileText size={15} />
+                <span>Overview</span>
+              </div>
+              <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-2">
+                About the Property
+              </h2>
+              <p className="text-neutral-600 text-sm leading-relaxed">
                 {hotelDescription}
               </p>
-            </SectionCard>
+            </div>
 
-            {/* Amenities */}
-            <SectionCard
-              title="Amenities"
-              icon={<Sparkles size={20} className="text-yellow-500" />}
-              right={
-                amenitiesRemaining > 0 && (
+            <div className="bg-white border border-neutral-200 rounded-xl p-5 sm:p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-neutral-500 text-xs font-bold tracking-wider uppercase">
+                  <Sparkles size={15} />
+                  <span>Highlights</span>
+                </div>
+                {amenitiesRemaining > 0 && (
                   <button
                     onClick={() => setShowAllAmenities(!showAllAmenities)}
-                    className="text-blue-600 text-xs font-semibold hover:underline"
+                    className="text-neutral-900 text-xs font-bold underline hover:text-neutral-600"
                   >
                     {showAllAmenities
                       ? "Show less"
                       : `+${amenitiesRemaining} more`}
                   </button>
-                )
-              }
-            >
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                )}
+              </div>
+              <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-4">
+                Amenities & Services
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 {amenitiesToRender.map((amenity, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center gap-3 text-sm text-gray-700 border border-gray-100 bg-gray-50 rounded-2xl px-3 py-2"
+                    className="flex items-center gap-2.5 p-2.5 rounded-lg border border-neutral-100 bg-neutral-50 text-neutral-700"
                   >
-                    <div className="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center shrink-0">
+                    <div className="w-7 h-7 rounded-md bg-white border border-neutral-200 flex items-center justify-center shrink-0 text-neutral-600">
                       {getAmenityIcon(amenity)}
                     </div>
-                    <span className="text-xs sm:text-sm leading-tight">
+                    <span className="text-xs font-medium truncate">
                       {amenity}
                     </span>
                   </div>
                 ))}
               </div>
-            </SectionCard>
+            </div>
 
-            {/* Rooms */}
-            <SectionCard
-              title="Rooms"
-              icon={<Users size={20} className="text-indigo-600" />}
-            >
+            <div className="bg-white border border-neutral-200 rounded-xl p-5 sm:p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-2 text-neutral-500 text-xs font-bold tracking-wider uppercase">
+                <Users size={15} />
+                <span>Available Units</span>
+              </div>
+              <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-4">
+                Select Room Type
+              </h2>
               <div className="space-y-3">
                 {rooms.map((room) => {
                   const isSelected = room.id === selectedRoomId;
@@ -737,14 +699,14 @@ export default function BookNowPage() {
                       key={room.id}
                       onClick={() => canSelect && setSelectedRoomId(room.id)}
                       disabled={!canSelect}
-                      className={`w-full text-left rounded-2xl border p-4 transition ${
+                      className={`w-full text-left rounded-lg border transition p-4 relative ${
                         isSelected
-                          ? "border-blue-600 bg-blue-50/40"
-                          : "border-gray-100 bg-white"
-                      } ${!canSelect ? "opacity-60" : "hover:bg-gray-50"}`}
+                          ? "border-neutral-900 bg-neutral-50"
+                          : "border-neutral-200 bg-white hover:border-neutral-300"
+                      } ${!canSelect ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
-                      <div className="flex gap-3">
-                        <div className="w-16 h-16 rounded-xl overflow-hidden border border-gray-200 bg-gray-100 shrink-0">
+                      <div className="flex gap-4 items-center">
+                        <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-md overflow-hidden border border-neutral-200 shrink-0 bg-neutral-100">
                           <img
                             src={room.image}
                             alt={room.name}
@@ -752,36 +714,36 @@ export default function BookNowPage() {
                           />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <div className="font-bold text-gray-900 truncate">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-sm sm:text-base font-bold text-neutral-900 truncate">
                               {room.name}
-                            </div>
+                            </h3>
                             {isSelected && (
-                              <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-blue-600 text-white">
+                              <span className="text-[11px] font-bold bg-neutral-900 text-white px-2 py-0.5 rounded">
                                 Selected
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-gray-500">
+                          <p className="text-xs text-neutral-500 mt-0.5">
                             {room.area} • Max 3 Guests
-                          </div>
-                          <div className="mt-2 flex items-center justify-between">
+                          </p>
+                          <div className="mt-2 flex items-baseline justify-between">
                             <div>
-                              <div className="font-bold text-gray-900">
+                              <span className="text-base font-bold text-neutral-900">
                                 ₹{formatCurrency(room.finalPrice)}
-                              </div>
-                              <div className="text-[11px] text-gray-500">
-                                + ₹{formatCurrency(room.taxes)} taxes
-                              </div>
+                              </span>
+                              <span className="text-xs text-neutral-500 ml-1">
+                                + ₹{formatCurrency(room.taxes)} tax/night
+                              </span>
                             </div>
                             <span
-                              className={`text-xs font-bold px-2 py-1 rounded-lg ${
+                              className={`text-[11px] font-bold px-2 py-0.5 rounded border ${
                                 room.isAvailable
-                                  ? "bg-emerald-50 border-emerald-100 text-emerald-700"
-                                  : "bg-gray-50 border-gray-200 text-gray-700"
-                              } border`}
+                                  ? "border-neutral-200 text-neutral-700 bg-white"
+                                  : "border-neutral-200 text-neutral-400 bg-neutral-100"
+                              }`}
                             >
-                              {room.isAvailable ? "Available" : "Sold out"}
+                              {room.isAvailable ? "Available" : "Sold Out"}
                             </span>
                           </div>
                         </div>
@@ -790,15 +752,18 @@ export default function BookNowPage() {
                   );
                 })}
               </div>
-            </SectionCard>
+            </div>
 
-            {/* Foods */}
             {availableFoods.length > 0 && (
-              <SectionCard
-                title="Foods"
-                icon={<UtensilsCrossed size={20} className="text-red-500" />}
-              >
-                <div className="space-y-3">
+              <div className="bg-white border border-neutral-200 rounded-xl p-5 sm:p-6 shadow-sm">
+                <div className="flex items-center gap-2 mb-2 text-neutral-500 text-xs font-bold tracking-wider uppercase">
+                  <UtensilsCrossed size={15} />
+                  <span>Dining</span>
+                </div>
+                <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-4">
+                  Add Meals
+                </h2>
+                <div className="space-y-2.5">
                   {availableFoods.map((food, idx) => {
                     const foodId =
                       food?.foodId || food?._id || food?.id || food?.name;
@@ -811,66 +776,56 @@ export default function BookNowPage() {
                     return (
                       <div
                         key={idx}
-                        className="rounded-2xl border border-gray-100 p-4 bg-white"
+                        className="flex items-center justify-between p-3 rounded-lg border border-neutral-100 bg-neutral-50"
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="font-bold text-gray-900 text-sm">
-                              {food?.name || "Meal"}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              ₹{formatCurrency(food?.price)} per item
-                            </div>
+                        <div>
+                          <div className="text-sm font-bold text-neutral-900">
+                            {food?.name || "Meal Option"}
                           </div>
-                          <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-2 py-1">
-                            <button
-                              onClick={() => upsertFood(food, qty - 1)}
-                              className="w-8 h-8 rounded-lg hover:bg-gray-50 flex items-center justify-center text-gray-600"
-                            >
-                              <Minus size={14} />
-                            </button>
-                            <span className="w-6 text-center font-bold text-gray-900">
-                              {qty}
-                            </span>
-                            <button
-                              onClick={() => upsertFood(food, qty + 1)}
-                              className="w-8 h-8 rounded-lg hover:bg-gray-50 flex items-center justify-center text-gray-600"
-                            >
-                              <Plus size={14} />
-                            </button>
+                          <div className="text-xs text-neutral-500 mt-0.5">
+                            ₹{formatCurrency(food?.price)} each
                           </div>
                         </div>
-                        {qty > 0 && (
-                          <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
-                            <span>Subtotal</span>
-                            <span className="font-bold text-gray-900">
-                              ₹
-                              {formatCurrency(
-                                parseNumber(food?.price, 0) * qty
-                              )}
-                            </span>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2 bg-white border border-neutral-200 rounded-md p-1">
+                          <button
+                            onClick={() => upsertFood(food, qty - 1)}
+                            className="w-7 h-7 flex items-center justify-center rounded text-neutral-600 hover:bg-neutral-100 transition"
+                          >
+                            <Minus size={13} />
+                          </button>
+                          <span className="w-5 text-center text-xs font-bold text-neutral-900">
+                            {qty}
+                          </span>
+                          <button
+                            onClick={() => upsertFood(food, qty + 1)}
+                            className="w-7 h-7 flex items-center justify-center rounded text-neutral-600 hover:bg-neutral-100 transition"
+                          >
+                            <Plus size={13} />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
-              </SectionCard>
+              </div>
             )}
 
-            {/* Policies */}
-            <SectionCard
-              title="Policies"
-              icon={<Info size={18} className="text-blue-500" />}
-              right={
+            <div className="bg-white border border-neutral-200 rounded-xl p-5 sm:p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-neutral-500 text-xs font-bold tracking-wider uppercase">
+                  <Info size={15} />
+                  <span>Important Rules</span>
+                </div>
                 <button
                   onClick={() => setShowPolicies(true)}
-                  className="text-blue-600 text-xs font-semibold hover:underline"
+                  className="text-neutral-900 text-xs font-bold underline hover:text-neutral-600"
                 >
-                  View all
+                  View All
                 </button>
-              }
-            >
+              </div>
+              <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3">
+                Property Policies
+              </h2>
               {policyHighlights.length ? (
                 <div className="flex flex-wrap gap-2">
                   {policyHighlights.map((p, idx) => {
@@ -878,14 +833,12 @@ export default function BookNowPage() {
                     return (
                       <div
                         key={idx}
-                        className="flex items-center gap-2 px-2.5 py-1 rounded-lg border border-gray-100 bg-gray-50"
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-neutral-100 bg-neutral-50"
                       >
-                        <span className="text-[11px] text-gray-600">
-                          {p.label}
+                        <span className="text-xs text-neutral-500">
+                          {p.label}:
                         </span>
-                        <span
-                          className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${badge.cls}`}
-                        >
+                        <span className="text-xs font-bold text-neutral-800">
                           {badge.text}
                         </span>
                       </div>
@@ -893,396 +846,139 @@ export default function BookNowPage() {
                   })}
                 </div>
               ) : (
-                <div className="text-xs text-gray-600">
-                  Policies not available.
-                </div>
+                <p className="text-xs text-neutral-500">
+                  Standard hotel policies apply during check-in.
+                </p>
               )}
-            </SectionCard>
+            </div>
 
-            {/* Reviews */}
-           <ReviewSection
-             reviewsArray={reviewsArray}
-             reviewCount={reviewCount}
-             hotelRating={hotelRating}
-           />
+            <div className="bg-white border border-neutral-200 rounded-xl p-5 sm:p-6 shadow-sm">
+              <ReviewSection
+                reviewsArray={reviewsArray}
+                reviewCount={reviewCount}
+                hotelRating={hotelRating}
+              />
+            </div>
           </div>
 
-          {/* Right Column - Desktop Booking Panel */}
-          <div className="lg:col-span-1">
-            <div className="lg:sticky lg:top-24 space-y-4">
-              <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-visible relative z-40">
-                <div className="bg-linear-to-r from-blue-600 to-blue-700 p-4 text-white rounded-t-3xl">
-                  <h3 className="font-bold text-lg">Your Stay</h3>
-                  <p className="text-xs text-blue-100">
-                    {nights} Night{nights > 1 ? "s" : ""} at {hotelName}
+          <aside className="hidden lg:block lg:col-span-5 sticky top-20">
+            <div className="bg-white border border-neutral-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-neutral-200 bg-neutral-50 flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-neutral-900">
+                    Booking Summary
+                  </h3>
+                  <p className="text-xs text-neutral-500 mt-0.5">
+                    {nights} Night{nights > 1 ? "s" : ""} Stay
                   </p>
                 </div>
-                <div className="p-5 space-y-4">
-                  {/* Date & Room Selection */}
-                  <div className="flex gap-3 relative z-50">
+                <Receipt size={20} className="text-neutral-400" />
+              </div>
+
+              <div className="p-5 space-y-5">
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setShowCalendar(true)}
+                    className="text-left p-3 rounded-lg border border-neutral-200 bg-white hover:border-neutral-300 transition"
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">
+                      Dates
+                    </span>
+                    <span className="text-xs font-bold text-neutral-900 mt-1 block">
+                      {formatDateShort(checkInDate)} –{" "}
+                      {formatDateShort(checkOutDate)}
+                    </span>
+                  </button>
+
+                  <div className="relative" ref={roomsPopupRef}>
                     <button
-                      onClick={() => setShowCalendar(true)}
-                      className="flex-1 flex flex-col items-start p-3 bg-gray-50 rounded-2xl hover:bg-gray-100 transition border border-transparent hover:border-blue-200"
+                      onClick={() => setShowRoomsPopup(!showRoomsPopup)}
+                      className="w-full text-left p-3 rounded-lg border border-neutral-200 bg-white hover:border-neutral-300 transition"
                     >
-                      <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
-                        Dates
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">
+                        Rooms & Guests
                       </span>
-                      <div className="flex items-center gap-2 text-sm font-bold text-gray-800 mt-1">
-                        <CalendarDays size={16} className="text-blue-500" />
-                        <span>
-                          {formatDateShort(checkInDate)} -{" "}
-                          {formatDateShort(checkOutDate)}
-                        </span>
-                      </div>
+                      <span className="text-xs font-bold text-neutral-900 mt-1 block">
+                        {roomsCount} Room{roomsCount > 1 ? "s" : ""},{" "}
+                        {guestsCount} Guest{guestsCount > 1 ? "s" : ""}
+                      </span>
                     </button>
-                    <div className="relative" ref={roomsPopupRef}>
-                      <button
-                        onClick={() => setShowRoomsPopup(!showRoomsPopup)}
-                        className="h-full flex flex-col items-start p-3 bg-gray-50 rounded-2xl hover:bg-gray-100 transition border border-transparent hover:border-blue-200 min-w-30"
-                      >
-                        <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
-                          Rooms
-                        </span>
-                        <div className="flex items-center gap-2 text-sm font-bold text-gray-800 mt-1">
-                          <Users size={16} className="text-blue-500" />
-                          <span>
-                            {roomsCount}R, {guestsCount}G
-                          </span>
-                        </div>
-                      </button>
-                      {showRoomsPopup && (
-                        <RoomsGuestsPopup
-                          rooms={roomsCount}
-                          guests={guestsCount}
-                          onRoomsChange={setRoomsCount}
-                          onGuestsChange={setGuestsCount}
-                          onClose={() => setShowRoomsPopup(false)}
-                        />
-                      )}
-                    </div>
+                    {showRoomsPopup && (
+                      <RoomsGuestsPopup
+                        rooms={roomsCount}
+                        guests={guestsCount}
+                        onRoomsChange={setRoomsCount}
+                        onGuestsChange={setGuestsCount}
+                        onClose={() => setShowRoomsPopup(false)}
+                      />
+                    )}
                   </div>
+                </div>
 
-                  {/* Price Breakdown */}
-                  <InfoRows
-                    rows={[
-                      {
-                        label: `Room Price (${nights} night${
-                          nights > 1 ? "s" : ""
-                        })`,
-                        value: `₹${formatCurrency(priceSummary.roomSubtotal)}`,
-                      },
-                      ...(priceSummary.addonsTotal > 0
-                        ? [
-                            {
-                              label: "Meals & Addons",
-                              value: `₹${formatCurrency(
-                                priceSummary.addonsTotal
-                              )}`,
-                            },
-                          ]
-                        : []),
-                      {
-                        label: "Taxes & Fees",
-                        value: `₹${formatCurrency(priceSummary.taxes)}`,
-                      },
-                      ...(priceSummary.discount > 0
-                        ? [
-                            {
-                              label: "Total Savings",
-                              value: `- ₹${formatCurrency(
-                                priceSummary.discount
-                              )}`,
-                              valueClass: "text-emerald-700",
-                            },
-                          ]
-                        : []),
-                    ]}
-                  />
-
-                  {/* Total */}
-                  <div className="bg-gray-50 p-4 rounded-2xl flex justify-between items-center border border-gray-100">
-                    <span className="font-bold text-gray-900">
+                <div className="border border-neutral-200 rounded-lg p-4 bg-neutral-50/50 space-y-2.5">
+                  <div className="flex justify-between text-xs text-neutral-600">
+                    <span>
+                      Room Price ({nights}N × {roomsCount}R)
+                    </span>
+                    <span className="text-neutral-900 font-bold">
+                      ₹{formatCurrency(priceSummary.roomSubtotal)}
+                    </span>
+                  </div>
+                  {priceSummary.addonsTotal > 0 && (
+                    <div className="flex justify-between text-xs text-neutral-600">
+                      <span>Meals & Add-ons</span>
+                      <span className="text-neutral-900 font-bold">
+                        ₹{formatCurrency(priceSummary.addonsTotal)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xs text-neutral-600">
+                    <span>Taxes & Fees</span>
+                    <span className="text-neutral-900 font-bold">
+                      ₹{formatCurrency(priceSummary.taxes)}
+                    </span>
+                  </div>
+                  {priceSummary.discount > 0 && (
+                    <div className="flex justify-between text-xs text-emerald-700">
+                      <span>Discount</span>
+                      <span className="font-bold">
+                        - ₹{formatCurrency(priceSummary.discount)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="pt-3 border-t border-neutral-200 flex justify-between items-baseline">
+                    <span className="text-sm font-bold text-neutral-900">
                       Total Payable
                     </span>
-                    <span className="font-bold text-xl text-blue-600">
+                    <span className="text-xl font-black text-neutral-900">
                       ₹{formatCurrency(priceSummary.netPay)}
                     </span>
                   </div>
-
-                  {/* Coupon */}
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Tag
-                        size={14}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Have a coupon?"
-                        value={couponCode}
-                        onChange={(e) =>
-                          setCouponCode(e.target.value.toUpperCase())
-                        }
-                        className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 transition"
-                      />
-                    </div>
-                    <button
-                      onClick={() => handleApplyCoupon?.(couponCode)}
-                      disabled={!couponCode}
-                      className="px-4 py-2 bg-gray-900 text-white text-xs font-bold rounded-xl hover:bg-black disabled:opacity-50 transition"
-                    >
-                      APPLY
-                    </button>
-                  </div>
-
-                  {/* Guest Details & Book Button (only in full panel) */}
-                  <>
-                    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
-                      <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                        <Users size={18} className="text-gray-500" /> Guest
-                        Details
-                      </h4>
-                      <div className="space-y-3">
-                        <input
-                          type="text"
-                          placeholder="Full Name"
-                          value={guestDetails.name}
-                          onChange={(e) =>
-                            setGuestDetails({
-                              ...guestDetails,
-                              name: e.target.value,
-                            })
-                          }
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                        />
-                        <div className="grid grid-cols-2 gap-3">
-                          <input
-                            type="tel"
-                            placeholder="Mobile Number"
-                            value={guestDetails.phone}
-                            onChange={(e) =>
-                              setGuestDetails({
-                                ...guestDetails,
-                                phone: e.target.value,
-                              })
-                            }
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                          />
-                          <input
-                            type="email"
-                            placeholder="Email (Optional)"
-                            value={guestDetails.email}
-                            onChange={(e) =>
-                              setGuestDetails({
-                                ...guestDetails,
-                                email: e.target.value,
-                              })
-                            }
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                          />
-                        </div>
-                        {!guestFormValid && (
-                          <p className="text-xs text-rose-600">
-                            Please enter valid name and mobile number.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      disabled={
-                        !guestFormValid ||
-                        offlineBookingLoading ||
-                        priceSummary.netPay <= 0
-                      }
-                      onClick={triggerOfflineBooking}
-                      className={`w-full py-4 bg-linear-to-r ${
-                        roomsCount > 3
-                          ? "from-orange-500 to-orange-600"
-                          : "from-blue-600 to-blue-700"
-                      } text-white font-bold text-lg rounded-2xl shadow-lg disabled:opacity-70 flex items-center justify-center gap-3`}
-                    >
-                      {offlineBookingLoading ? (
-                        <Loader2 className="animate-spin" size={24} />
-                      ) : (
-                        <>
-                          <span>
-                            {roomsCount > 3
-                              ? "Request Group Booking"
-                              : "Book Now & Pay at Hotel"}
-                          </span>
-                          <ChevronRight size={20} />
-                        </>
-                      )}
-                    </button>
-                    {bookingStatus?.type === "offline" && (
-                      <div
-                        className={`${
-                          bookingStatus.status === "Pending"
-                            ? "bg-orange-50 border-orange-200"
-                            : "bg-emerald-50 border-emerald-200"
-                        } border rounded-2xl p-4 flex items-start gap-3`}
-                      >
-                        <CheckCircle2
-                          size={24}
-                          className={
-                            bookingStatus.status === "Pending"
-                              ? "text-orange-600"
-                              : "text-emerald-600"
-                          }
-                        />
-                        <div>
-                          <h4 className="font-bold">
-                            {bookingStatus.status === "Pending"
-                              ? "Request Received"
-                              : "Booking Confirmed!"}
-                          </h4>
-                          <p className="text-sm mt-1">
-                            Reference: {bookingStatus.reference}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Mobile Bottom Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button
-            onClick={() => setShowBookingSheet(true)}
-            className="flex-1 text-left rounded-2xl border border-gray-200 bg-white px-4 py-2"
-          >
-            <div className="text-[11px] uppercase font-bold text-gray-400">
-              Total
-            </div>
-            <div className="text-base font-extrabold text-gray-900">
-              ₹{formatCurrency(priceSummary.netPay)}
-            </div>
-          </button>
-          <button
-            disabled={!guestFormValid || offlineBookingLoading}
-            onClick={() => setShowBookingSheet(true)}
-            className="px-5 py-3 rounded-2xl bg-blue-600 text-white font-bold disabled:opacity-60"
-          >
-            Book
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Booking Sheet */}
-      {showBookingSheet && (
-  <div className="fixed inset-0 z-140 bg-black/40 backdrop-blur-[2px]">
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            {/* Close Button - Top Right */}
-            <button
-              onClick={() => setShowBookingSheet(false)}
-              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/90 hover:bg-white shadow-md transition"
-            >
-              <X size={20} className="text-gray-700" />
-            </button>
-
-            {/* Blue Header with Your Stay Info */}
-            <div className="bg-linear-to-r from-blue-600 to-blue-700 px-5 pt-6 pb-4 text-white rounded-t-3xl">
-              <h3 className="font-bold text-xl">Your Stay</h3>
-              <p className="text-sm text-blue-100 mt-1">
-                {nights} Night{nights > 1 ? "s" : ""} at {hotelName}
-              </p>
-            </div>
-
-            <div className="px-5 py-4 space-y-4">
-              {/* Dates and Rooms Info */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-xs uppercase font-bold text-gray-500 mb-2 flex items-center gap-1">
-                    <CalendarDays size={14} /> Dates
-                  </div>
-                  <button
-                    onClick={() => setShowCalendar(true)}
-                    className="w-full text-left p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition border border-gray-200"
-                  >
-                    <div className="text-sm font-bold text-gray-900">
-                      {formatDateShort(checkInDate)} -{" "}
-                      {formatDateShort(checkOutDate)}
-                    </div>
-                  </button>
-                </div>
-                <div>
-                  <div className="text-xs uppercase font-bold text-gray-500 mb-2 flex items-center gap-1">
-                    <Users size={14} /> Rooms
-                  </div>
-                  <button
-                    onClick={() => setShowRoomsPopup(!showRoomsPopup)}
-                    className="w-full text-left p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition border border-gray-200"
-                  >
-                    <div className="text-sm font-bold text-gray-900">
-                      {roomsCount}R, {guestsCount}G
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Price Breakdown */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">
-                    Room Price ({nights} night{nights > 1 ? "s" : ""})
-                  </span>
-                  <span className="font-bold text-gray-900">
-                    ₹{formatCurrency(priceSummary.roomTotal)}
-                  </span>
-                </div>
-                {priceSummary.gst > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Taxes & Fees</span>
-                    <span className="font-bold text-gray-900">
-                      ₹{formatCurrency(priceSummary.gst)}
-                    </span>
-                  </div>
-                )}
-                <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between items-center">
-                  <span className="font-bold text-gray-900">Total Payable</span>
-                  <span className="text-xl font-extrabold text-blue-600">
-                    ₹{formatCurrency(priceSummary.netPay)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Coupon Code */}
-              <div className="flex items-center gap-2">
-                <div className="flex-1 relative">
-                  <Tag
-                    size={16}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                  />
+                <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="Enter coupon code"
+                    placeholder="Coupon Code"
                     value={couponCode}
-                    onChange={(e) => setCouponCode(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                    onChange={(e) =>
+                      setCouponCode(e.target.value.toUpperCase())
+                    }
+                    className="flex-1 px-3 py-2 bg-white border border-neutral-200 rounded-lg text-xs font-medium uppercase tracking-wider text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-400"
                   />
+                  <button
+                    onClick={() => handleApplyCoupon?.(couponCode)}
+                    disabled={!couponCode}
+                    className="px-4 py-2 bg-neutral-900 text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-40 transition"
+                  >
+                    Apply
+                  </button>
                 </div>
-                <button
-                  onClick={handleApplyCoupon}
-                  disabled={!couponCode.trim()}
-                  className="px-5 py-3 bg-blue-600 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition"
-                >
-                  Apply
-                </button>
-              </div>
-              {/* Coupon Code */}
 
-              {/* Guest Details */}
-              <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
-                <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                  <Users size={18} className="text-gray-600" /> Guest Details
-                </h4>
-                <div className="space-y-3">
+                <div className="space-y-2.5 pt-1">
+                  <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider block">
+                    Guest Details
+                  </span>
                   <input
                     type="text"
                     placeholder="Full Name"
@@ -1290,9 +986,9 @@ export default function BookNowPage() {
                     onChange={(e) =>
                       setGuestDetails({ ...guestDetails, name: e.target.value })
                     }
-                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:border-blue-500 focus:outline-none"
+                    className="w-full px-3.5 py-2.5 bg-white border border-neutral-200 rounded-lg text-xs font-medium text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-400"
                   />
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2">
                     <input
                       type="tel"
                       placeholder="Mobile Number"
@@ -1303,11 +999,11 @@ export default function BookNowPage() {
                           phone: e.target.value,
                         })
                       }
-                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:border-blue-500 focus:outline-none"
+                      className="w-full px-3.5 py-2.5 bg-white border border-neutral-200 rounded-lg text-xs font-medium text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-400"
                     />
                     <input
                       type="email"
-                      placeholder="Email"
+                      placeholder="Email (Optional)"
                       value={guestDetails.email}
                       onChange={(e) =>
                         setGuestDetails({
@@ -1315,76 +1011,139 @@ export default function BookNowPage() {
                           email: e.target.value,
                         })
                       }
-                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:border-blue-500 focus:outline-none"
+                      className="w-full px-3.5 py-2.5 bg-white border border-neutral-200 rounded-lg text-xs font-medium text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-400"
                     />
                   </div>
                   {!guestFormValid && (
-                    <p className="text-xs text-rose-600">
-                      Please enter valid name and mobile number.
+                    <p className="text-[11px] text-red-600 font-medium">
+                      * Please provide valid name and mobile number.
                     </p>
                   )}
                 </div>
-              </div>
 
-              {/* Book Now Button */}
-              <button
-                disabled={!guestFormValid || offlineBookingLoading}
-                onClick={triggerOfflineBooking}
-                className={`w-full py-4 bg-linear-to-r ${
-                  roomsCount > 3
-                    ? "from-orange-500 to-orange-600"
-                    : "from-blue-600 to-blue-700"
-                } text-white font-bold text-lg rounded-xl shadow-lg disabled:opacity-70 flex items-center justify-center gap-3`}
-              >
-                {offlineBookingLoading ? (
-                  <Loader2 className="animate-spin" size={24} />
-                ) : (
-                  <>
+                <button
+                  disabled={
+                    !guestFormValid ||
+                    offlineBookingLoading ||
+                    priceSummary.netPay <= 0
+                  }
+                  onClick={triggerOfflineBooking}
+                  className="w-full py-3 bg-neutral-900 hover:bg-black text-white text-sm font-bold rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {offlineBookingLoading ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
                     <span>
                       {roomsCount > 3
                         ? "Request Group Booking"
-                        : "Book Now & Pay at Hotel"}
+                        : "Book & Pay at Hotel"}
                     </span>
-                    <ChevronRight size={20} />
-                  </>
-                )}
-              </button>
-
-              {/* Booking Status */}
-              {bookingStatus?.type === "offline" && (
-                <div
-                  className={`${
-                    bookingStatus.status === "Pending"
-                      ? "bg-orange-50 border-orange-200"
-                      : "bg-emerald-50 border-emerald-200"
-                  } border rounded-xl p-4 flex items-start gap-3`}
-                >
-                  <CheckCircle2
-                    size={24}
-                    className={
-                      bookingStatus.status === "Pending"
-                        ? "text-orange-600"
-                        : "text-emerald-600"
-                    }
-                  />
-                  <div>
-                    <h4 className="font-bold">
-                      {bookingStatus.status === "Pending"
-                        ? "Request Received"
-                        : "Booking Confirmed!"}
-                    </h4>
-                    <p className="text-sm mt-1">
-                      Reference: {bookingStatus.reference}
-                    </p>
-                  </div>
-                </div>
-              )}
+                  )}
+                </button>
+              </div>
             </div>
+          </aside>
+        </div>
+      </main>
+
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-neutral-200 p-3 shadow-lg">
+        <div className="flex items-center justify-between gap-4 max-w-md mx-auto">
+          <div>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block">
+              Total Amount
+            </span>
+            <span className="text-lg font-bold text-neutral-900">
+              ₹{formatCurrency(priceSummary.netPay)}
+            </span>
+          </div>
+          <button
+            onClick={() => setShowBookingSheet(true)}
+            className="px-6 py-2.5 bg-neutral-900 text-white text-xs font-bold rounded-lg hover:bg-black transition"
+          >
+            Review & Pay
+          </button>
+        </div>
+      </div>
+
+      {showBookingSheet && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex justify-end flex-col lg:hidden">
+          <div className="bg-white border-t border-neutral-200 rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto space-y-4">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-neutral-900">
+                  Complete Booking
+                </h3>
+                <span className="text-xs text-neutral-500">
+                  {nights} Night{nights > 1 ? "s" : ""} at {hotelName}
+                </span>
+              </div>
+              <button
+                onClick={() => setShowBookingSheet(false)}
+                className="p-1 rounded-md text-neutral-500 hover:bg-neutral-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="border border-neutral-200 rounded-lg p-3 bg-neutral-50 space-y-2">
+              <div className="flex justify-between text-xs text-neutral-600">
+                <span>Room Charges</span>
+                <span className="font-bold text-neutral-900">
+                  ₹{formatCurrency(priceSummary.roomSubtotal)}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-neutral-600">
+                <span>Taxes & Fees</span>
+                <span className="font-bold text-neutral-900">
+                  ₹{formatCurrency(priceSummary.taxes)}
+                </span>
+              </div>
+              <div className="border-t border-neutral-200 pt-2 flex justify-between items-center">
+                <span className="text-xs font-bold text-neutral-900">
+                  Total Payable
+                </span>
+                <span className="text-base font-bold text-neutral-900">
+                  ₹{formatCurrency(priceSummary.netPay)}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={guestDetails.name}
+                onChange={(e) =>
+                  setGuestDetails({ ...guestDetails, name: e.target.value })
+                }
+                className="w-full px-3 py-2 bg-white border border-neutral-200 rounded-lg text-xs font-medium"
+              />
+              <input
+                type="tel"
+                placeholder="Mobile Number"
+                value={guestDetails.phone}
+                onChange={(e) =>
+                  setGuestDetails({ ...guestDetails, phone: e.target.value })
+                }
+                className="w-full px-3 py-2 bg-white border border-neutral-200 rounded-lg text-xs font-medium"
+              />
+            </div>
+
+            <button
+              disabled={!guestFormValid || offlineBookingLoading}
+              onClick={triggerOfflineBooking}
+              className="w-full py-3 bg-neutral-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2"
+            >
+              {offlineBookingLoading ? (
+                <Loader2 className="animate-spin" size={16} />
+              ) : (
+                "Confirm & Reserve"
+              )}
+            </button>
           </div>
         </div>
       )}
 
-      {/* Booking Success Modal */}
       <BookingSuccessModal
         isOpen={showSuccessModal}
         onClose={() => {

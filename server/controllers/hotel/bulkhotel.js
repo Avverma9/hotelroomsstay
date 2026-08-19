@@ -75,8 +75,9 @@ const normalizeOneHotel = (h, idx) => {
     numRooms: toNum(h.numRooms, 0),
     latitude: toStr(h.latitude) || "",
     longitude: toStr(h.longitude) || "",
-    reviews: toNum(h.reviews, 0),
-    rating: toNum(h.rating, 4.2),
+    // Do not accept seeded rating/reviewCount as authoritative. Keep zeroed and create real reviews instead.
+    reviews: 0,
+    rating: 0,
     starRating: toStr(h.starRating) || "2",
     propertyType: Array.isArray(propertyType) ? propertyType : [propertyType],
     contact: toNum(h.contact, 9999999999),
@@ -91,7 +92,7 @@ const normalizeOneHotel = (h, idx) => {
     foods: foods,
     amenities: amenities,
     policies: policies,
-    reviewCount: toNum(h.reviewCount, 0),
+    reviewCount: 0,
   };
 
   // Handle hotelId if provided from Excel (for updates/imports)

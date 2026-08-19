@@ -27,11 +27,12 @@ const GST_SECTION_CONFIG = [
   { type: 'Travel', icon: CarFront, accent: 'text-amber-600 bg-amber-50 border-amber-100' },
 ]
 
-const createEmptyForm = (type) => ({
+const createEmptyForm = (type, isCreatingNew = false) => ({
   type,
   gstPrice: '',
   gstMinThreshold: '',
   gstMaxThreshold: '',
+  isCreatingNew,
 })
 
 const getEntryId = (entry) => entry?._id || entry?.id || entry?.gstId || ''
@@ -289,10 +290,11 @@ function GSTManagement() {
     const latestEntry = entriesByType[type]?.[0]
     if (!payload.gstPrice && payload.gstPrice !== 0) return
 
-    if (latestEntry && getEntryId(latestEntry)) {
-      await dispatch(updateGST({ ...payload, id: getEntryId(latestEntry), _id: getEntryId(latestEntry) }))
+    const isCreatingNew = drafts[type]?.isCreatingNew || !latestEntry
+    if (!isCreatingNew && getEntryId(latestEntry)) {
+      await dispatch(updateGST({ ...payload, id: getEntryId(latestEntry), _id: getEntryId(latestEntry) })).unwrap()
     } else {
-      await dispatch(createGST(payload))
+      await dispatch(createGST(payload)).unwrap()
     }
 
     setDrafts((currentDrafts) => {
@@ -321,7 +323,7 @@ function GSTManagement() {
   const handleCreateNew = (type) => {
     setDrafts((currentDrafts) => ({
       ...currentDrafts,
-      [type]: createEmptyForm(type),
+      [type]: createEmptyForm(type, true),
     }))
   }
 

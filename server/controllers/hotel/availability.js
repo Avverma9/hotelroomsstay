@@ -2,7 +2,7 @@ const hotelModel = require("../../models/hotel/basicDetails");
 const bookingsModel = require("../../models/booking/booking");
 
 // Statuses that occupy a room and block availability
-const BLOCKING_STATUSES = ["Confirmed", "Checked-in", "Pending", "No-Show"];
+const BLOCKING_STATUSES = ["Confirmed", "Checked-in", "Pending"];
 
 // Parse date string or Date object into a plain JS timestamp (ms)
 const toMs = (d) => new Date(d).getTime();

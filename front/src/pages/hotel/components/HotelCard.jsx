@@ -637,7 +637,7 @@ console.log("insidehotel card", hotel)
       {/* Desktop View - List Layout */}
       <div
         onClick={handleCardClick}
-        className="hidden md:flex bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 mb-4 overflow-hidden group cursor-pointer relative"
+        className="hidden md:flex bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300 mb-4 overflow-hidden group cursor-pointer relative h-72 items-stretch"
       >
         {isLowInventory && (
           <div className="absolute top-3 right-4 z-20">
@@ -646,7 +646,7 @@ console.log("insidehotel card", hotel)
             </span>
           </div>
         )}
-        <div className="relative w-72 shrink-0 bg-gray-100">
+        <div className="relative w-72 shrink-0 bg-gray-100 h-full">
           <img
             src={galleryImages[currentImgIndex] || FALLBACK_HOTEL_IMAGE}
             alt={hotel.hotelName}
