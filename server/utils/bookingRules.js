@@ -147,6 +147,20 @@ async function determineBookingStatus(bookingData) {
     finalStatus = "Pending";
     const timeoutMs = calculatePaymentTimeout(checkInDate);
     autoCancelAt = new Date(Date.now() + timeoutMs);
+    
+    // Safety check: For same-day bookings, ensure minimum 2 hours payment window
+    const now = new Date();
+    const checkIn = new Date(checkInDate);
+    const isSameDayBooking = 
+      now.getFullYear() === checkIn.getFullYear() &&
+      now.getMonth() === checkIn.getMonth() &&
+      now.getDate() === checkIn.getDate();
+    
+    if (isSameDayBooking) {
+      const minimumTimeout = 2 * 60 * 60 * 1000; // 2 hours minimum
+      const calculatedTimeout = Math.max(timeoutMs, minimumTimeout);
+      autoCancelAt = new Date(Date.now() + calculatedTimeout);
+    }
   }
 
   const pendingReason = reasons.length > 0 
@@ -244,8 +258,13 @@ function shouldMarkAsNoShow(booking) {
   const now = new Date();
   const checkInDate = new Date(booking.checkInDate);
   
-  // If check-in date has passed and customer hasn't checked in
-  return now > checkInDate;
+  // Add grace period: Only mark as no-show after check-in date + 25 hours
+  // This provides buffer and prevents same-day bookings from being immediately marked as no-show
+  const gracePeriodHours = 25; // 25 hours grace period after check-in date
+  const noShowThreshold = new Date(checkInDate.getTime() + (gracePeriodHours * 60 * 60 * 1000));
+  
+  // If check-in date + grace period has passed and customer hasn't checked in
+  return now > noShowThreshold;
 }
 
 /**

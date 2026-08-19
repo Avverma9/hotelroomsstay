@@ -107,7 +107,8 @@ const startAutoCancelJob = () => {
       // ═══════════════════════════════════════════════════════════
       const confirmedBookings = await bookingModel.find({
         bookingStatus: "Confirmed",
-        checkInDate: { $lt: now }, // Check-in date has passed
+        // Only check bookings where check-in date was at least 25 hours ago
+        checkInDate: { $lt: new Date(now.getTime() - 25 * 60 * 60 * 1000) }
       }).lean();
 
       if (confirmedBookings.length > 0) {
@@ -115,6 +116,19 @@ const startAutoCancelJob = () => {
 
         for (const booking of confirmedBookings) {
           try {
+            // Additional safety check: Don't mark bookings created today as no-show
+            const createdAt = new Date(booking.createdAt);
+            const isSameDayBooking = 
+              createdAt.getFullYear() === now.getFullYear() &&
+              createdAt.getMonth() === now.getMonth() &&
+              createdAt.getDate() === now.getDate();
+            
+            // Skip same-day bookings from no-show marking
+            if (isSameDayBooking) {
+              console.log(`[NoShow] Skipping same-day booking ${booking.bookingId} from no-show marking`);
+              continue;
+            }
+
             if (shouldMarkAsNoShow(booking)) {
               const updated = await bookingModel.findOneAndUpdate(
                 { _id: booking._id, bookingStatus: "Confirmed" },
