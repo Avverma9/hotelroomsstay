@@ -23,6 +23,7 @@ const {
 } = require("../../utils/bookingRules");
 
 const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const toMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
 const releaseBookedRooms = async (booking) => {
   const roomDetails = Array.isArray(booking?.roomDetails) ? booking.roomDetails : [];
@@ -266,6 +267,11 @@ const createBooking = async (req, res) => {
     hotelOwnerName = hotelOwnerName || payloadHotelDetails.hotelOwnerName;
     destination = destination || payloadHotelDetails.destination || payloadHotelDetails.hotelCity;
 
+    hotelCity = String(hotelCity || destination || "").trim();
+    if (!hotelCity) {
+      return res.status(400).json({ success: false, message: "Hotel city is required" });
+    }
+
     const isObjId = mongoose.Types.ObjectId.isValid(userId) && String(userId).length === 24;
     const user = await userModel.findOne(isObjId ? { $or: [{ userId }, { _id: userId }] } : { userId });
     if (!user) {
@@ -310,35 +316,46 @@ const createBooking = async (req, res) => {
       })
       .join('');
 
-    const nights = Math.max(
-      1,
-      Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24))
-    );
+    const checkIn = new Date(checkInDate);
+    const checkOut = new Date(checkOutDate);
+    const roomCount = Number(numRooms);
+    const requestedRoom = roomDetails?.[0];
+    const hotelForPricing = await hotelModel.findOne({ hotelId }).select("city destination rooms").lean();
+    const requestedRoomId = String(requestedRoom?.roomId || "").trim();
+    const persistedRoom = hotelForPricing?.rooms?.find((room) => [
+      room?.roomId,
+      room?._id,
+      room?.id,
+    ].some((candidate) => String(candidate || "").trim() === requestedRoomId));
+    const perRoomPrice = Number(persistedRoom?.price);
+    if (!Number.isFinite(roomCount) || roomCount <= 0 || !Number.isFinite(perRoomPrice) || perRoomPrice <= 0) {
+      return res.status(400).json({ success: false, message: "A valid room price and room count are required" });
+    }
+    if (Number.isNaN(checkIn.getTime()) || Number.isNaN(checkOut.getTime()) || checkOut <= checkIn) {
+      return res.status(400).json({ success: false, message: "Valid check-in and check-out dates are required" });
+    }
+    const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+    const roomBaseTotal = toMoney(perRoomPrice * roomCount * nights);
+    const discountAmount = Math.min(roomBaseTotal, Math.max(0, toMoney(discountPrice)));
+    const discountedRoomTotal = toMoney(roomBaseTotal - discountAmount);
 
-    // Calculate base room price
-    let perRoomPrice = roomDetails?.[0]?.price || 0;
-    const roomBaseTotal = perRoomPrice * numRooms * nights;
-    
-    // Apply discount first
-    const discountAmount = discountPrice || 0;
-    const discountedRoomTotal = Math.max(0, roomBaseTotal - discountAmount);
-    
-    // Calculate GST on discounted amount
+    // GST slabs historically use the discounted per-room, per-night amount.
+    // GST applies only to the eligible room charge.
     const gstData = await getGSTData({
       type: "Hotel",
-      gstThreshold: [discountedRoomTotal / numRooms / nights], // Pass discounted per room price
+      gstThreshold: discountedRoomTotal / roomCount / nights,
     });
 
-    const gstRate = gstData?.gstPrice || 0;
-    const gstAmount = (discountedRoomTotal * gstRate) / 100;
+    const gstRate = toMoney(gstData?.gstPrice);
+    const gstAmount = toMoney((discountedRoomTotal * gstRate) / 100);
 
     // Calculate food price
     const foodPrice = (foodDetails || []).reduce((sum, food) => {
-      return sum + (food.price || 0) * (food.quantity || 1);
+      return sum + (Number(food.price) || 0) * (Number(food.quantity) || 1);
     }, 0);
+    const roundedFoodPrice = toMoney(foodPrice);
 
-    // Calculate final price
-    const finalPrice = discountedRoomTotal + gstAmount + foodPrice;
+    const finalPrice = toMoney(discountedRoomTotal + gstAmount + roundedFoodPrice);
 
     // Determine payment mode: offline = panel booking or pm/paymentMode says offline
     const resolvedPaymentMode =
@@ -349,7 +366,7 @@ const createBooking = async (req, res) => {
 
     // Use new business rules engine to determine booking status
     const statusDecision = await determineBookingStatus({
-      numRooms: numRooms || 1,
+      numRooms: roomCount,
       nights,
       userId: user.userId,
       userMobile: user.mobile,
@@ -357,6 +374,7 @@ const createBooking = async (req, res) => {
       hotelCity: hotelCity || destination,
       hotelId,
       checkInDate,
+      checkOutDate,
       paymentMode: resolvedPaymentMode,
       bookingSource
     });
@@ -389,12 +407,16 @@ const createBooking = async (req, res) => {
         destination,
       },
       foodDetails,
-      numRooms,
+      numRooms: roomCount,
       gstPrice: gstRate,
       gstAmount,
-      foodPrice,
+      foodPrice: roundedFoodPrice,
       baseRoomPrice: roomBaseTotal,
       discountedRoomPrice: discountedRoomTotal,
+      roomSubtotal: roomBaseTotal,
+      roomDiscount: discountAmount,
+      taxableRoomAmount: discountedRoomTotal,
+      finalAmount: finalPrice,
       checkInDate,
       checkOutDate,
       guests,

@@ -42,17 +42,12 @@ function calculatePaymentTimeout(checkInDate) {
 const normalizeContact = (value) => String(value || "").trim().toLowerCase();
 const normalizeText = (value) => String(value || "").trim().toLowerCase();
 
-const dateKey = (value) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
-};
-
-async function checkDuplicateBooking(userId, userMobile, userEmail, currentHotelCity, currentHotelId, currentCheckInDate) {
+async function checkDuplicateBooking(userId, userMobile, userEmail, currentHotelCity, currentHotelId, currentCheckInDate, currentCheckOutDate) {
   try {
     const mobile = normalizeContact(userMobile);
     const email = normalizeContact(userEmail);
     const contactFilters = [];
+    if (userId) contactFilters.push({ "user.userId": String(userId) });
     if (mobile) contactFilters.push({ "user.mobile": { $regex: `^${escapeRegex(mobile)}$`, $options: "i" } });
     if (email) contactFilters.push({ "user.email": { $regex: `^${escapeRegex(email)}$`, $options: "i" } });
 
@@ -64,7 +59,7 @@ async function checkDuplicateBooking(userId, userMobile, userEmail, currentHotel
     const activeBookings = await bookingModel.find({
       $and: [
         { $or: contactFilters },
-        { bookingStatus: { $in: ["Pending", "Confirmed", "Checked-in"] } }
+        { bookingStatus: { $in: ["Confirmed", "Checked-in"] } }
       ]
     }).lean();
 
@@ -72,25 +67,29 @@ async function checkDuplicateBooking(userId, userMobile, userEmail, currentHotel
       return { isDuplicate: false, reason: null, shouldBePending: false };
     }
 
-    const currentCheckIn = dateKey(currentCheckInDate);
+    const currentCheckIn = new Date(currentCheckInDate);
+    const currentCheckOut = new Date(currentCheckOutDate);
     const currentCity = normalizeText(currentHotelCity);
-    const currentHotel = normalizeText(currentHotelId);
+    if (Number.isNaN(currentCheckIn.getTime()) || Number.isNaN(currentCheckOut.getTime()) || !currentCity) {
+      return { isDuplicate: false, reason: null, shouldBePending: false };
+    }
 
-    // Check for same-day bookings in same city
+    // Check for overlapping stays in the same city.
     for (const booking of activeBookings) {
-      const bookingCheckIn = dateKey(booking.checkInDate);
+      const bookingCheckIn = new Date(booking.checkInDate);
+      const bookingCheckOut = new Date(booking.checkOutDate);
       const bookingCity = normalizeText(booking.hotelDetails?.hotelCity || booking.hotelDetails?.destination);
-      const bookingHotel = normalizeText(booking.hotelDetails?.hotelId || booking.hotelId);
 
-      const isSameBookingSlot = currentCheckIn && bookingCheckIn &&
-        currentCheckIn === bookingCheckIn &&
-        currentCity && currentCity === bookingCity &&
-        currentHotel && currentHotel === bookingHotel;
+      const isSameBookingSlot = currentCity === bookingCity &&
+        !Number.isNaN(bookingCheckIn.getTime()) &&
+        !Number.isNaN(bookingCheckOut.getTime()) &&
+        bookingCheckIn < currentCheckOut &&
+        bookingCheckOut > currentCheckIn;
 
       if (isSameBookingSlot) {
         return {
           isDuplicate: true,
-          reason: "Duplicate booking detected: An active booking already exists for the same customer, hotel, city, and check-in date.",
+          reason: "An active booking already exists for this customer in the same city during overlapping dates.",
           shouldBePending: true
         };
       }
@@ -130,23 +129,24 @@ async function determineBookingStatus(bookingData) {
 
   const reasons = [];
 
-  // Rule 1: 3+ rooms or more than 3 nights require approval.
-  if (Number(numRooms) >= 3) {
-    reasons.push(`${numRooms} rooms booked (3 or more rooms require approval)`);
+  // Large bookings require review even when this is the user's first booking.
+  // Exactly 3 rooms / 3 nights remain eligible for normal confirmation.
+  if (Number(numRooms) > 3) {
+    reasons.push(`${numRooms} rooms booked (more than 3 rooms require approval)`);
   }
-  
   if (Number(nights) > 3) {
     reasons.push(`${nights} nights stay (more than 3 nights require approval)`);
   }
 
-  // Rule 2: Check for duplicate bookings (same mobile/email)
+  // Also check for a same-user, same-city, overlapping confirmed stay.
   const duplicateCheck = await checkDuplicateBooking(
     userId, 
     userMobile, 
     userEmail, 
     hotelCity, 
     hotelId,
-    checkInDate  // Pass check-in date for same-day detection
+    checkInDate,
+    bookingData.checkOutDate
   );
 
   if (duplicateCheck.shouldBePending) {

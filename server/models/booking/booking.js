@@ -88,6 +88,14 @@ const bookingSchema = new mongoose.Schema(
     },
     couponCode: String,
     discountPrice: Number,
+    baseRoomPrice: Number,
+    discountedRoomPrice: Number,
+    roomSubtotal: Number,
+    roomDiscount: Number,
+    taxableRoomAmount: Number,
+    gstAmount: Number,
+    foodPrice: Number,
+    finalAmount: Number,
     price: {
       type: Number,
       required: false,
@@ -192,5 +200,6 @@ bookingSchema.index({ bookingStatus: 1, createdAt: 1 }); // For auto-cancel quer
 bookingSchema.index({ hotelId: 1, checkInDate: 1, checkOutDate: 1 }); // For availability check
 bookingSchema.index({ userId: 1 }); // For user bookings
 bookingSchema.index({ bookingStatus: 1 }); // For status filtering
+bookingSchema.index({ "user.userId": 1, bookingStatus: 1, "hotelDetails.hotelCity": 1, checkInDate: 1, checkOutDate: 1 });
 
 module.exports = mongoose.model("Booking", bookingSchema);

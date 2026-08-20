@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,14 +15,29 @@ import {
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import axios from "axios";
 import { LinearGradient } from "expo-linear-gradient";
 import Toast from "react-native-toast-message";
 import { baseURL } from "../utils/baseUrl";
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
+
+const THEME = {
+  bg: "#FFFFFF",
+  cardBg: "#FFFFFF",
+  primary: "#0D9488",
+  primaryLight: "#14B8A6",
+  accentSoft: "#F0FDFA",
+  textMain: "#0F172A",
+  textMuted: "#64748B",
+  textSubtle: "#94A3B8",
+  inputBg: "#F8FAFC",
+  borderColor: "#E2E8F0",
+  borderActive: "#0D9488",
+  doodleColor: "#CBD5E1",
+};
 
 const getFileNameFromUri = (uri) => {
   if (!uri) return "profile.jpg";
@@ -37,44 +53,41 @@ const getMimeType = (uri) => {
   return "image/jpeg";
 };
 
-// Floating soft bubbles on background
-function BgBubbles() {
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <View style={[styles.bubble, { width: 260, height: 260, borderRadius: 130, top: -55, right: -65, backgroundColor: "rgba(255,255,255,0.18)" }]} />
-      <View style={[styles.bubble, { width: 190, height: 190, borderRadius: 95, bottom: 100, left: -55, backgroundColor: "rgba(255,255,255,0.12)" }]} />
-      <View style={[styles.bubble, { width: 90, height: 90, borderRadius: 45, top: 140, left: 22, backgroundColor: "rgba(255,255,255,0.10)" }]} />
-      <View style={[styles.bubble, { width: 110, height: 110, borderRadius: 55, bottom: 250, right: 12, backgroundColor: "rgba(255,255,255,0.10)" }]} />
-      <View style={[styles.bubble, { width: 36, height: 36, borderRadius: 18, top: 320, right: 40, backgroundColor: "rgba(255,255,255,0.15)" }]} />
-      <View style={[styles.bubble, { width: 22, height: 22, borderRadius: 11, top: 220, left: 170, backgroundColor: "rgba(255,255,255,0.20)" }]} />
-    </View>
-  );
-}
-
-// Floating travel icons
-function BgIcons() {
-  const icons = [
-    { name: "airplane-outline", top: 55, left: 22, size: 18, opacity: 0.16, rotate: "-25deg" },
-    { name: "bed-outline", top: 100, right: 28, size: 16, opacity: 0.14, rotate: "10deg" },
-    { name: "compass-outline", top: 240, left: 16, size: 15, opacity: 0.16, rotate: "0deg" },
-    { name: "map-outline", top: 290, right: 20, size: 16, opacity: 0.13, rotate: "-15deg" },
-    { name: "restaurant-outline", bottom: 260, left: 24, size: 15, opacity: 0.14, rotate: "8deg" },
-    { name: "camera-outline", bottom: 220, right: 26, size: 16, opacity: 0.13, rotate: "-10deg" },
-    { name: "umbrella-outline", bottom: 150, left: 55, size: 13, opacity: 0.15, rotate: "5deg" },
-    { name: "wine-outline", top: 175, right: 55, size: 13, opacity: 0.15, rotate: "-5deg" },
-    { name: "key-outline", bottom: 340, right: 55, size: 14, opacity: 0.13, rotate: "20deg" },
+function HotelFoodDoodles() {
+  const doodles = [
+    { type: "material", name: "silverware-fork-knife", top: 40, left: 24, size: 22, rotate: "-15deg" },
+    { type: "ion", name: "bed-outline", top: 90, right: 30, size: 24, rotate: "12deg" },
+    { type: "material", name: "coffee-outline", top: 180, left: 35, size: 20, rotate: "-8deg" },
+    { type: "material", name: "room-service-outline", top: 240, right: 28, size: 24, rotate: "15deg" },
+    { type: "ion", name: "wine-outline", top: 340, left: 20, size: 22, rotate: "-12deg" },
+    { type: "material", name: "croissant", top: 410, right: 35, size: 22, rotate: "18deg" },
+    { type: "ion", name: "key-outline", bottom: 220, left: 32, size: 20, rotate: "25deg" },
+    { type: "material", name: "cupcake", bottom: 160, right: 40, size: 22, rotate: "-14deg" },
+    { type: "ion", name: "restaurant-outline", bottom: 90, left: 28, size: 22, rotate: "10deg" },
+    { type: "material", name: "glass-cocktail", bottom: 50, right: 30, size: 22, rotate: "-15deg" },
+    { type: "ion", name: "compass-outline", top: 130, left: 160, size: 18, rotate: "5deg" },
+    { type: "material", name: "pizza", bottom: 300, right: 18, size: 20, rotate: "-20deg" },
   ];
+
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {icons.map((ic, i) => {
-        const pos = {};
-        if (ic.top !== undefined) pos.top = ic.top;
-        if (ic.bottom !== undefined) pos.bottom = ic.bottom;
-        if (ic.left !== undefined) pos.left = ic.left;
-        if (ic.right !== undefined) pos.right = ic.right;
+      {doodles.map((d, index) => {
+        const stylePos = {
+          position: "absolute",
+          top: d.top,
+          bottom: d.bottom,
+          left: d.left,
+          right: d.right,
+          transform: [{ rotate: d.rotate }],
+          opacity: 0.35,
+        };
         return (
-          <View key={i} style={[{ position: "absolute", opacity: ic.opacity, transform: [{ rotate: ic.rotate }] }, pos]}>
-            <Ionicons name={ic.name} size={ic.size} color="#ffffff" />
+          <View key={index} style={stylePos}>
+            {d.type === "ion" ? (
+              <Ionicons name={d.name} size={d.size} color={THEME.doodleColor} />
+            ) : (
+              <MaterialCommunityIcons name={d.name} size={d.size} color={THEME.doodleColor} />
+            )}
           </View>
         );
       })}
@@ -82,10 +95,9 @@ function BgIcons() {
   );
 }
 
-// Reusable labeled field wrapper
 function Field({ label, children, half }) {
   return (
-    <View style={[styles.fieldGroup, half && styles.fieldHalf]}>
+    <View style={[styles.fieldBlock, half && styles.fieldHalf]}>
       <Text style={styles.label}>{label}</Text>
       {children}
     </View>
@@ -103,14 +115,12 @@ export default function RegisterPage({ navigation }) {
   const [loading, setLoading] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const logoY = useRef(new Animated.Value(-30)).current;
-  const cardY = useRef(new Animated.Value(60)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.spring(logoY, { toValue: 0, tension: 50, friction: 8, useNativeDriver: true }),
-      Animated.spring(cardY, { toValue: 0, tension: 45, friction: 9, delay: 150, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -121,7 +131,8 @@ export default function RegisterPage({ navigation }) {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        allowsEditing: false,
+        allowsEditing: true,
+        aspect: [1, 1],
         quality: 0.8,
       });
       if (result.canceled) return;
@@ -185,238 +196,204 @@ export default function RegisterPage({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Full vivid teal-green gradient — same as LoginPage */}
-      <LinearGradient
-        colors={["#0f9b8a", "#13b89e", "#0ea882", "#0d9b75"]}
-        locations={[0, 0.3, 0.65, 1]}
-        start={{ x: 0.1, y: 0 }}
-        end={{ x: 0.9, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-
-      <BgBubbles />
-      <BgIcons />
+      {/* Light Clean Background with Hotel Doodles */}
+      <View style={StyleSheet.absoluteFillObject} />
+      <HotelFoodDoodles />
 
       <SafeAreaView style={styles.flex}>
         <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <ScrollView
-            contentContainerStyle={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* ── BRAND HEADER ── */}
-            <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ translateY: logoY }] }]}>
-              <View style={styles.logoBadge}>
-                <LinearGradient colors={["#ffffff", "#edfaf6"]} style={styles.logoBadgeInner}>
-                  <Ionicons name="business" size={28} color="#0ea882" />
+            {/* BRAND HEADER */}
+            <Animated.View style={[styles.brandHeader, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+              <View style={styles.logoBadgeContainer}>
+                <LinearGradient colors={["#0D9488", "#14B8A6"]} style={styles.logoBadge}>
+                  <MaterialCommunityIcons name="office-building" size={26} color="#FFFFFF" />
                 </LinearGradient>
               </View>
-              <Text style={styles.brandName}>HotelRoomsStay</Text>
-              <View style={styles.taglineRow}>
-                <View style={styles.taglineDot} />
-                <Text style={styles.tagline}>Luxury  ·  Comfort  ·  Travel</Text>
-                <View style={styles.taglineDot} />
-              </View>
-              <View style={styles.starsRow}>
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <Ionicons key={s} name="star" size={12} color="rgba(255,255,255,0.65)" style={{ marginHorizontal: 2 }} />
-                ))}
-              </View>
+              <Text style={styles.brandTitle}>HotelRoomsStay</Text>
+              <Text style={styles.brandSubtitle}>STAY & DINE EXPERIENCES</Text>
             </Animated.View>
 
-            {/* ── REGISTER CARD ── */}
-            <Animated.View style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: cardY }] }]}>
-              {/* Teal top accent bar */}
-              <LinearGradient
-                colors={["#0ea882", "#13b89e"]}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={styles.cardAccentBar}
-              >
-                <Text style={styles.cardAccentText}>CREATE ACCOUNT</Text>
-                <View style={styles.cardAccentDot} />
-              </LinearGradient>
+            {/* REGISTER CARD */}
+            <Animated.View style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.greetingTitle}>Create an Account</Text>
+                <Text style={styles.greetingSub}>Join our premier membership program</Text>
+              </View>
 
-              <View style={styles.cardBody}>
-                <Text style={styles.cardTitle}>Join Us</Text>
-                <Text style={styles.cardSub}>Create your free account today</Text>
-
-                {/* Row 1: Name + Email */}
-                <View style={styles.row}>
-                  <Field label="FULL NAME" half>
-                    <View style={styles.inputBox}>
-                      <View style={styles.inputIconWrap}>
-                        <Ionicons name="person-outline" size={16} color="#0ea882" />
-                      </View>
-                      <TextInput
-                        value={username}
-                        onChangeText={setUsername}
-                        placeholder="Your name"
-                        placeholderTextColor="#b0d8d0"
-                        autoCapitalize="words"
-                        style={styles.input}
-                        selectionColor="#0ea882"
-                      />
-                    </View>
-                  </Field>
-
-                  <Field label="EMAIL" half>
-                    <View style={styles.inputBox}>
-                      <View style={styles.inputIconWrap}>
-                        <Ionicons name="mail-outline" size={16} color="#0ea882" />
-                      </View>
-                      <TextInput
-                        value={email}
-                        onChangeText={setEmail}
-                        placeholder="Your email"
-                        placeholderTextColor="#b0d8d0"
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        style={styles.input}
-                        selectionColor="#0ea882"
-                      />
-                    </View>
-                  </Field>
-                </View>
-
-                {/* Row 2: Mobile + Password */}
-                <View style={styles.row}>
-                  <Field label="MOBILE" half>
-                    <View style={styles.inputBox}>
-                      <View style={styles.inputIconWrap}>
-                        <Ionicons name="call-outline" size={16} color="#0ea882" />
-                      </View>
-                      <TextInput
-                        value={mobile}
-                        onChangeText={(val) => setMobile(val.replace(/[^\d]/g, ""))}
-                        placeholder="Mobile no."
-                        placeholderTextColor="#b0d8d0"
-                        keyboardType="phone-pad"
-                        style={styles.input}
-                        selectionColor="#0ea882"
-                      />
-                    </View>
-                  </Field>
-
-                  <Field label="PASSWORD" half>
-                    <View style={styles.inputBox}>
-                      <View style={styles.inputIconWrap}>
-                        <Ionicons name="lock-closed-outline" size={16} color="#0ea882" />
-                      </View>
-                      <TextInput
-                        value={password}
-                        onChangeText={setPassword}
-                        placeholder="Min 6 chars"
-                        placeholderTextColor="#b0d8d0"
-                        secureTextEntry={!showPassword}
-                        style={[styles.input, { flex: 1 }]}
-                        selectionColor="#0ea882"
-                      />
-                      <TouchableOpacity onPress={() => setShowPassword((p) => !p)} style={styles.eyeBtn}>
-                        <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={17} color="#7ab5ad" />
-                      </TouchableOpacity>
-                    </View>
-                  </Field>
-                </View>
-
-                {/* Address — full width */}
-                <Field label="ADDRESS (OPTIONAL)">
-                  <View style={styles.inputBox}>
-                    <View style={styles.inputIconWrap}>
-                      <Ionicons name="location-outline" size={16} color="#0ea882" />
-                    </View>
+              {/* ROW 1: Name & Mobile */}
+              <View style={styles.row}>
+                <Field label="FULL NAME" half>
+                  <View style={styles.inputWrap}>
+                    <Ionicons name="person-outline" size={16} color={THEME.textSubtle} style={styles.inputIcon} />
                     <TextInput
-                      value={address}
-                      onChangeText={setAddress}
-                      placeholder="Your address"
-                      placeholderTextColor="#b0d8d0"
+                      value={username}
+                      onChangeText={setUsername}
+                      placeholder="John Doe"
+                      placeholderTextColor={THEME.textSubtle}
+                      autoCapitalize="words"
                       style={styles.input}
-                      selectionColor="#0ea882"
+                      selectionColor={THEME.primary}
                     />
                   </View>
                 </Field>
 
-                {/* Profile picture */}
-                <Field label="PROFILE PICTURE (OPTIONAL)">
-                  <TouchableOpacity
-                    style={styles.filePickerBox}
-                    onPress={handlePickFile}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={selectedImage ? ["#e6f8f3", "#f0fdf9"] : ["#f5fdfb", "#f0fdf9"]}
-                      style={styles.filePickerInner}
-                    >
-                      <View style={styles.fileIconCircle}>
-                        <Ionicons
-                          name={selectedImage ? "checkmark-circle" : "image-outline"}
-                          size={20}
-                          color={selectedImage ? "#0ea882" : "#7ab5ad"}
-                        />
-                      </View>
-                      <View style={styles.fileTextWrap}>
-                        <Text style={[styles.fileLabel, selectedImage && styles.fileLabelActive]}>
-                          {selectedImage ? "Photo Selected" : "Choose Photo"}
-                        </Text>
-                        <Text numberOfLines={1} style={styles.fileName}>
-                          {selectedImage?.name || "Tap to browse gallery"}
-                        </Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={16} color="#7ab5ad" />
-                    </LinearGradient>
-                  </TouchableOpacity>
+                <Field label="MOBILE" half>
+                  <View style={styles.inputWrap}>
+                    <Ionicons name="call-outline" size={16} color={THEME.textSubtle} style={styles.inputIcon} />
+                    <TextInput
+                      value={mobile}
+                      onChangeText={(val) => setMobile(val.replace(/[^\d]/g, ""))}
+                      placeholder="Phone no."
+                      placeholderTextColor={THEME.textSubtle}
+                      keyboardType="phone-pad"
+                      style={styles.input}
+                      selectionColor={THEME.primary}
+                    />
+                  </View>
+                </Field>
+              </View>
+
+              {/* ROW 2: Email & Password */}
+              <View style={styles.row}>
+                <Field label="EMAIL" half>
+                  <View style={styles.inputWrap}>
+                    <Ionicons name="mail-outline" size={16} color={THEME.textSubtle} style={styles.inputIcon} />
+                    <TextInput
+                      value={email}
+                      onChangeText={setEmail}
+                      placeholder="name@domain.com"
+                      placeholderTextColor={THEME.textSubtle}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      style={styles.input}
+                      selectionColor={THEME.primary}
+                    />
+                  </View>
                 </Field>
 
-                {/* Submit */}
-                <TouchableOpacity
-                  onPress={handleRegister}
-                  disabled={loading}
-                  activeOpacity={0.85}
-                  style={{ opacity: loading ? 0.55 : 1, marginTop: 4 }}
-                >
-                  <LinearGradient
-                    colors={["#0d9e85", "#13b89e", "#10c99a"]}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                    style={styles.submitBtn}
-                  >
-                    {loading ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <>
-                        <Text style={styles.submitText}>Create Account</Text>
-                        <View style={styles.submitArrow}>
-                          <Ionicons name="arrow-forward" size={15} color="#0ea882" />
-                        </View>
-                      </>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
+                <Field label="PASSWORD" half>
+                  <View style={styles.inputWrap}>
+                    <Ionicons name="lock-closed-outline" size={16} color={THEME.textSubtle} style={styles.inputIcon} />
+                    <TextInput
+                      value={password}
+                      onChangeText={setPassword}
+                      placeholder="Min 6 chars"
+                      placeholderTextColor={THEME.textSubtle}
+                      secureTextEntry={!showPassword}
+                      style={[styles.input, { flex: 1 }]}
+                      selectionColor={THEME.primary}
+                    />
+                    <TouchableOpacity onPress={() => setShowPassword((p) => !p)} style={styles.eyeToggle}>
+                      <Ionicons
+                        name={showPassword ? "eye-off-outline" : "eye-outline"}
+                        size={15}
+                        color={THEME.textSubtle}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </Field>
+              </View>
 
-                {/* Divider */}
-                <View style={styles.divRow}>
-                  <View style={styles.divLine} />
-                  <Text style={styles.divText}>or</Text>
-                  <View style={styles.divLine} />
+              {/* ADDRESS FIELD */}
+              <Field label="ADDRESS (OPTIONAL)">
+                <View style={styles.inputWrap}>
+                  <Ionicons name="location-outline" size={16} color={THEME.textSubtle} style={styles.inputIcon} />
+                  <TextInput
+                    value={address}
+                    onChangeText={setAddress}
+                    placeholder="Enter city or full address"
+                    placeholderTextColor={THEME.textSubtle}
+                    style={styles.input}
+                    selectionColor={THEME.primary}
+                  />
                 </View>
+              </Field>
 
-                {/* Login link */}
+              {/* PROFILE PHOTO PICKER */}
+              <Field label="PROFILE PHOTO (OPTIONAL)">
                 <TouchableOpacity
-                  onPress={() => navigation.navigate("Login")}
-                  style={styles.loginBtn}
+                  style={[styles.filePickerBox, selectedImage && styles.filePickerBoxActive]}
+                  onPress={handlePickFile}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.loginText}>
-                    Already have an account?{" "}
-                    <Text style={styles.loginLink}>Sign In</Text>
-                  </Text>
+                  <View style={styles.filePickerInner}>
+                    {selectedImage?.uri ? (
+                      <Image source={{ uri: selectedImage.uri }} style={styles.avatarPreview} />
+                    ) : (
+                      <View style={styles.fileIconCircle}>
+                        <Ionicons name="image-outline" size={18} color={THEME.primary} />
+                      </View>
+                    )}
+                    <View style={styles.fileTextWrap}>
+                      <Text style={[styles.fileLabel, selectedImage && styles.fileLabelActive]}>
+                        {selectedImage ? "Photo Selected" : "Upload Avatar"}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.fileName}>
+                        {selectedImage?.name || "Tap to browse image"}
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name={selectedImage ? "checkmark-circle" : "chevron-forward"}
+                      size={18}
+                      color={selectedImage ? THEME.primary : THEME.textSubtle}
+                    />
+                  </View>
                 </TouchableOpacity>
+              </Field>
+
+              {/* SUBMIT BUTTON */}
+              <TouchableOpacity
+                onPress={handleRegister}
+                disabled={loading}
+                activeOpacity={0.85}
+                style={[styles.actionBtn, loading && styles.actionBtnDisabled]}
+              >
+                <LinearGradient
+                  colors={["#0D9488", "#14B8A6"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.actionBtnGradient}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <>
+                      <Text style={styles.actionBtnText}>Complete Registration</Text>
+                      <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* DIVIDER */}
+              <View style={styles.dividerBlock}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
               </View>
+
+              {/* LOGIN REDIRECT */}
+              <TouchableOpacity
+                onPress={() => navigation.navigate("Login")}
+                style={styles.loginButton}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.loginText}>
+                  Already have an account? <Text style={styles.loginHighlight}>Sign In</Text>
+                </Text>
+              </TouchableOpacity>
             </Animated.View>
 
-            {/* Footer */}
-            <Animated.Text style={[styles.footer, { opacity: fadeAnim }]}>
-              By continuing, you agree to our Terms & Privacy Policy
+            {/* BRAND FOOTER */}
+            <Animated.Text style={[styles.pageFooter, { opacity: fadeAnim }]}>
+              By signing up, you agree to our Terms & Privacy Policy
             </Animated.Text>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -426,171 +403,236 @@ export default function RegisterPage({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
+  screen: { flex: 1, backgroundColor: "#FFFFFF" },
   flex: { flex: 1 },
-  bubble: { position: "absolute" },
 
-  scroll: {
+  scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
     paddingVertical: 20,
     justifyContent: "center",
   },
 
-  // Header
-  header: { alignItems: "center", marginBottom: 22 },
+  // Brand Header
+  brandHeader: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  logoBadgeContainer: {
+    marginBottom: 10,
+    shadowColor: "#0D9488",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
+  },
   logoBadge: {
-    width: 68, height: 68, borderRadius: 20,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 10,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  logoBadgeInner: {
-    width: 68, height: 68, borderRadius: 20,
-    alignItems: "center", justifyContent: "center",
-  },
-  brandName: {
-    color: "#ffffff",
-    fontSize: 26,
+  brandTitle: {
+    fontSize: 22,
     fontWeight: "800",
-    letterSpacing: 0.5,
-    fontFamily: Platform.select({ ios: "Georgia", android: "serif", default: "serif" }),
-    marginBottom: 7,
-    textShadowColor: "rgba(0,0,0,0.12)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
+    color: THEME.textMain,
+    letterSpacing: -0.5,
   },
-  taglineRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 9 },
-  taglineDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.5)" },
-  tagline: { color: "rgba(255,255,255,0.75)", fontSize: 11, letterSpacing: 1.5, fontWeight: "500" },
-  starsRow: { flexDirection: "row", alignItems: "center" },
+  brandSubtitle: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 2,
+    color: THEME.textMuted,
+    marginTop: 2,
+  },
 
   // Card
   card: {
+    backgroundColor: THEME.cardBg,
     borderRadius: 24,
-    backgroundColor: "#ffffff",
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 16,
-  },
-  cardAccentBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 11,
+    paddingVertical: 24,
+    borderWidth: 1,
+    borderColor: THEME.borderColor,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 20,
+    elevation: 3,
   },
-  cardAccentText: { color: "#fff", fontSize: 10, letterSpacing: 3, fontWeight: "700" },
-  cardAccentDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.5)" },
-  cardBody: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 20 },
-  cardTitle: {
-    color: "#0a4035",
-    fontSize: 22,
-    fontWeight: "800",
-    fontFamily: Platform.select({ ios: "Georgia", android: "serif", default: "serif" }),
-    marginBottom: 2,
+  cardHeader: {
+    marginBottom: 16,
   },
-  cardSub: { color: "#7ab5ad", fontSize: 12, marginBottom: 18 },
+  greetingTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: THEME.textMain,
+  },
+  greetingSub: {
+    fontSize: 13,
+    color: THEME.textMuted,
+    marginTop: 3,
+  },
 
-  // Row layout
-  row: { flexDirection: "row", gap: 10, marginBottom: 0 },
-  fieldHalf: { flex: 1 },
-
-  // Fields
-  fieldGroup: { marginBottom: 12 },
-  label: { color: "#7ab5ad", fontSize: 9, letterSpacing: 2, fontWeight: "700", marginBottom: 6 },
-  inputBox: {
+  // Field & Row layout
+  row: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  fieldHalf: {
+    flex: 1,
+  },
+  fieldBlock: {
+    marginBottom: 14,
+  },
+  label: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    color: THEME.textMuted,
+    marginBottom: 6,
+  },
+  inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f5fdfb",
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: "#c8ece6",
+    backgroundColor: THEME.inputBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: THEME.borderColor,
     height: 48,
-    overflow: "hidden",
+    paddingHorizontal: 12,
   },
-  inputIconWrap: {
-    width: 40, height: "100%",
-    alignItems: "center", justifyContent: "center",
-    borderRightWidth: 1, borderRightColor: "#ddf2ee",
+  inputIcon: {
+    marginRight: 8,
   },
   input: {
     flex: 1,
-    color: "#0a4035",
     fontSize: 13,
-    fontWeight: "600",
-    paddingHorizontal: 10,
+    color: THEME.textMain,
+    fontWeight: "500",
   },
-  eyeBtn: { paddingHorizontal: 10 },
+  eyeToggle: {
+    padding: 6,
+  },
 
-  // File picker
+  // File Picker
   filePickerBox: {
     borderRadius: 12,
-    overflow: "hidden",
-    borderWidth: 1.5,
-    borderColor: "#c8ece6",
+    backgroundColor: THEME.inputBg,
+    borderWidth: 1.2,
+    borderColor: THEME.borderColor,
     borderStyle: "dashed",
+    overflow: "hidden",
+  },
+  filePickerBoxActive: {
+    borderColor: THEME.primary,
+    borderStyle: "solid",
+    backgroundColor: THEME.accentSoft,
   },
   filePickerInner: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
   },
   fileIconCircle: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: "rgba(14,168,130,0.10)",
-    alignItems: "center", justifyContent: "center",
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#E6FFFA",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  fileTextWrap: { flex: 1 },
-  fileLabel: { color: "#7ab5ad", fontSize: 12, fontWeight: "700" },
-  fileLabelActive: { color: "#0ea882" },
-  fileName: { color: "#a0c8c0", fontSize: 11, marginTop: 1 },
+  avatarPreview: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+  },
+  fileTextWrap: {
+    flex: 1,
+  },
+  fileLabel: {
+    color: THEME.textMain,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  fileLabelActive: {
+    color: THEME.primary,
+  },
+  fileName: {
+    color: THEME.textSubtle,
+    fontSize: 11,
+    marginTop: 1,
+  },
 
-  // Submit
-  submitBtn: {
-    height: 50,
-    borderRadius: 14,
+  // Action Button
+  actionBtn: {
+    borderRadius: 12,
+    overflow: "hidden",
+    marginTop: 4,
+    shadowColor: THEME.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  actionBtnGradient: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    shadowColor: "#0ea882",
-    shadowOpacity: 0.32,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 6,
+    gap: 8,
+    height: 48,
   },
-  submitText: { color: "#ffffff", fontSize: 15, fontWeight: "800", letterSpacing: 0.5 },
-  submitArrow: {
-    width: 26, height: 26, borderRadius: 13,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    alignItems: "center", justifyContent: "center",
+  actionBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  actionBtnDisabled: {
+    opacity: 0.6,
+    shadowOpacity: 0,
   },
 
   // Divider
-  divRow: { flexDirection: "row", alignItems: "center", marginVertical: 14, gap: 10 },
-  divLine: { flex: 1, height: 1, backgroundColor: "#daf0ea" },
-  divText: { color: "#96b8b4", fontSize: 12, fontWeight: "600" },
+  dividerBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 16,
+    gap: 10,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: THEME.borderColor,
+  },
+  dividerText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: THEME.textSubtle,
+  },
 
   // Login link
-  loginBtn: { alignItems: "center", paddingVertical: 2 },
-  loginText: { color: "#7ab5ad", fontSize: 13 },
-  loginLink: { color: "#0ea882", fontWeight: "800" },
+  loginButton: {
+    alignItems: "center",
+  },
+  loginText: {
+    fontSize: 13,
+    color: THEME.textMuted,
+  },
+  loginHighlight: {
+    color: THEME.primary,
+    fontWeight: "700",
+  },
 
   // Footer
-  footer: {
+  pageFooter: {
     textAlign: "center",
-    color: "rgba(255,255,255,0.5)",
+    color: THEME.textSubtle,
     fontSize: 10,
     letterSpacing: 0.8,
+    fontWeight: "500",
     marginTop: 16,
   },
 });

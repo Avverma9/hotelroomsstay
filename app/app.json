@@ -47,7 +47,7 @@
       "expo-notifications"
     ],
     "extra": {
-      "apiUrl": "http://localhost:5000",
+      "apiUrl": "http://192.168.29.81:5000",
       "eas": {
         "projectId": "078ffea3-666e-427e-8ffd-0831ac5ff054"
       }
