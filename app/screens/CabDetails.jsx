@@ -26,6 +26,7 @@ import {
 import { useAppModal } from "../contexts/AppModalContext";
 import { getUserId } from "../utils/credentials";
 import Header from "../components/Header";
+import api from "../utils/api";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -209,6 +210,7 @@ export default function CabDetails({ navigation, route }) {
 
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
   const [selectedSeatIds, setSelectedSeatIds] = useState([]);
+  const [travelGst, setTravelGst] = useState(null);
   // passengers[0] is always the primary passenger (pre-filled from logged-in user)
   // length always mirrors selectedSeatIds.length for shared, or stays [1] for private
   const makePassenger = (user = null) => ({
@@ -282,6 +284,19 @@ export default function CabDetails({ navigation, route }) {
   }, [effectiveSeats, cab?.seater]);
 
   const totalFare = resolveCabFare(cab);
+  const cabTaxableAmount = isShared ? totalFare * Math.max(selectedSeatIds.length, 1) : totalFare;
+  const travelGstRate = safeNumber(travelGst?.gstPrice, 0);
+  const travelGstAmount = Number(((cabTaxableAmount * travelGstRate) / 100).toFixed(2));
+  const cabFinalAmount = Number((cabTaxableAmount + travelGstAmount).toFixed(2));
+
+  useEffect(() => {
+    if (!cabTaxableAmount) { setTravelGst(null); return undefined; }
+    let cancelled = false;
+    api.get("/gst/get-single-gst", { params: { type: "Travel", gstThreshold: cabTaxableAmount } })
+      .then((response) => { if (!cancelled) setTravelGst(response?.data || null); })
+      .catch(() => { if (!cancelled) setTravelGst(null); });
+    return () => { cancelled = true; };
+  }, [cabTaxableAmount]);
   const bookingState = useMemo(() => resolveCabBookingState(cab, seatStats), [cab, seatStats]);
   const isAvailable = bookingState.canBook;
   const isBookingSubmitting = cabBookingStatus === "loading";
@@ -565,6 +580,12 @@ export default function CabDetails({ navigation, route }) {
               </Text>
               <Text style={{ fontSize: 28, fontWeight: "700", color: "#1D4ED8", lineHeight: 32, marginTop: 2 }}>
                 {`\u20B9${totalFare.toLocaleString("en-IN")}`}
+              </Text>
+              <Text style={{ fontSize: 11, color: "#64748B", marginTop: 3 }}>
+                + ₹{travelGstAmount.toLocaleString("en-IN")} GST{travelGstRate ? ` (${travelGstRate}%)` : ""}
+              </Text>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#0F766E", marginTop: 2 }}>
+                Total ₹{cabFinalAmount.toLocaleString("en-IN")}
               </Text>
             </View>
             <View style={{ alignItems: "flex-end" }}>
@@ -882,6 +903,21 @@ export default function CabDetails({ navigation, route }) {
                 </View>
               )}
             </ScrollView>
+
+            <View style={{ marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: "#F8FAFC", borderWidth: 0.5, borderColor: "#E2E8F0" }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                <Text style={{ fontSize: 12, color: "#64748B" }}>Base fare</Text>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: "#334155" }}>₹{cabTaxableAmount.toLocaleString("en-IN")}</Text>
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                <Text style={{ fontSize: 12, color: "#64748B" }}>GST {travelGstRate ? `(${travelGstRate}%)` : ""}</Text>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: "#B45309" }}>₹{travelGstAmount.toLocaleString("en-IN")}</Text>
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", borderTopWidth: 0.5, borderTopColor: "#E2E8F0", paddingTop: 6 }}>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: "#0F172A" }}>Payable total</Text>
+                <Text style={{ fontSize: 14, fontWeight: "800", color: "#0F766E" }}>₹{cabFinalAmount.toLocaleString("en-IN")}</Text>
+              </View>
+            </View>
 
             {/* Modal action buttons */}
             <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>

@@ -29,9 +29,16 @@ const stripHtmlField = (payload) => {
 
 export const fetchMonthlyData = createAsyncThunk(
   "booking/fetchMonthlyData",
-  async (hotelId, { rejectWithValue }) => {
+  async (params, { rejectWithValue }) => {
     try {
-      const res = await api.get(`/monthly-set-room-price/get/by/${hotelId}`);
+      const hotelId = typeof params === "object" ? params?.hotelId : params;
+      const query = new URLSearchParams();
+      if (typeof params === "object") {
+        if (params.checkInDate) query.append("checkInDate", params.checkInDate);
+        if (params.checkOutDate) query.append("checkOutDate", params.checkOutDate);
+      }
+      const qs = query.toString();
+      const res = await api.get(`/monthly-set-room-price/get/by/${hotelId}${qs ? `?${qs}` : ""}`);
       return res.data;
     } catch (err) {
       return rejectWithValue(err?.response?.data?.message || err?.message || "Failed");

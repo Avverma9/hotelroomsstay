@@ -179,7 +179,7 @@ function TabBar({ state, descriptors, navigation }) {
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           let label = options.tabBarLabel ?? options.title ?? route.name;
-          if (route.name === "Search") label = "Home";
+          if (route.name === "Search") label = "Explore";
           const isFocused = state.index === index;
 
           const onPress = () => {
@@ -202,8 +202,8 @@ function TabBar({ state, descriptors, navigation }) {
           let iconName = "alert-circle";
           switch (route.name) {
             case "Search":
-              iconName = isFocused ? "home" : "home-outline";
-              break; // home icon
+              iconName = isFocused ? "compass" : "compass-outline";
+              break; // explore icon
             case "HotelsTab":
               iconName = isFocused ? "bed" : "bed-outline";
               break;
@@ -286,8 +286,8 @@ function TabNavigator() {
         options={({ route }) => {
           const routeName = getFocusedRouteNameFromRoute(route) ?? "Home";
           return {
-            title: "Home",
-            tabBarLabel: "Home",
+            title: "Explore",
+            tabBarLabel: "Explore",
             tabBarStyle: ["HotelDetails", "PolicyScreen"].includes(routeName)
               ? { display: "none" }
               : undefined,

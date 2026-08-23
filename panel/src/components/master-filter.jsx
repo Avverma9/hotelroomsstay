@@ -141,7 +141,7 @@ function MasterFilter({
   }
 
   return (
-    <div className="relative inline-flex items-center gap-1.5" ref={dropdownRef}>
+    <div className="relative inline-flex self-start items-center gap-1.5" ref={dropdownRef}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -172,7 +172,7 @@ function MasterFilter({
       )}
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+        <div className="absolute left-0 right-auto top-full z-50 mt-2 w-80 origin-top-left rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-slate-800">Active Filters</span>

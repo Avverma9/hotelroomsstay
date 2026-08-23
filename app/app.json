@@ -2,7 +2,7 @@
   "expo": {
     "name": "HRS",
     "slug": "restra",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -21,7 +21,7 @@
       }
     },
     "android": {
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -47,7 +47,7 @@
       "expo-notifications"
     ],
     "extra": {
-      "apiUrl": "http://192.168.29.81:5000",
+      "apiUrl": "https://hotelroomsstay.com/api",
       "eas": {
         "projectId": "078ffea3-666e-427e-8ffd-0831ac5ff054"
       }

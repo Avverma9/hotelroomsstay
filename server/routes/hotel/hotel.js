@@ -21,6 +21,7 @@ router.delete('/delete/hotels/by/:hotelId', hotelController.deleteHotelById); //
 router.get('/get/main/get/hotels', hotelController.getHotels);
 router.get('/get/offers/main/hotels', hotelController.setOnFront); // on site
 router.get('/hotels/front', hotelController.setOnFront); // clearer alias
+router.get('/hotels/suggestions', hotelController.getHotelSuggestions);
 router.get('/hotels/get-by-id/:hotelId', hotelController.getHotelsById);
 router.get('/hotels/:hotelId/rooms/:roomId/offer-status', hotelController.getRoomOfferStatus);
 router.get('/hotelsLocalId', hotelController.getHotelsByLocalID);

@@ -43,12 +43,24 @@ const newMonth = async (req, res) => {
 ========================================================= */
 const getPriceByHotelId = async function (req, res) {
   const { hotelId } = req.params;
+  const { checkInDate, checkOutDate } = req.query;
 
   try {
-    const monthlyPrices = await month.find({ hotelId }).exec();
+    const query = { hotelId };
+    // Return entries that overlap the selected stay when the mobile app
+    // supplies dates. The app sends local calendar dates through ISO/UTC,
+    // which can arrive one day earlier in India; overlap keeps the matching
+    // entry available and the client performs the final local-date check.
+    if (checkInDate && checkOutDate) {
+      query.startDate = { $lte: checkOutDate };
+      query.endDate = { $gte: checkInDate };
+    }
+    const monthlyPrices = await month.find(query).exec();
 
+    // A newly selected hotel has no entries yet; return an empty list so the
+    // admin can immediately add its first monthly price.
     if (!monthlyPrices || monthlyPrices.length === 0) {
-      return res.status(404).json({ error: "No monthly prices found for the specified hotelId" });
+      return res.status(200).json({ success: true, data: [] });
     }
 
     const roomIds = monthlyPrices.map(price => price.roomId);

@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { useDispatch, useSelector } from "react-redux";
 import { LinearGradient } from "expo-linear-gradient";
+import api from "../utils/api";
 import {
   fetchTourById,
   fetchVehicleSeats,
@@ -409,6 +410,7 @@ export default function TourDetails({ navigation, route }) {
   const [dobPickerSeat, setDobPickerSeat] = useState(null);
   const [dobPickerDate, setDobPickerDate] = useState(new Date());
   const [payType, setPayType] = useState("advance");
+  const [tourGst, setTourGst] = useState(null);
   const [showAllDays, setShowAllDays] = useState(false);
   const [activeInfoTab, setActiveInfoTab] = useState("overview");
   const [showFullOverview, setShowFullOverview] = useState(false);
@@ -543,9 +545,21 @@ export default function TourDetails({ navigation, route }) {
 
   const seatTotal = selectedSeats.length * defaultSeatPrice;
   const packagePrice = baseTourPrice || defaultSeatPrice;
-  const totalAmount = Math.max(packagePrice + seatTotal, defaultSeatPrice);
+  const tourSubtotal = Math.max(packagePrice + seatTotal, defaultSeatPrice);
+  const tourGstRate = toNumber(tourGst?.gstPrice);
+  const tourTax = Number(((tourSubtotal * tourGstRate) / 100).toFixed(2));
+  const totalAmount = Number((tourSubtotal + tourTax).toFixed(2));
   const advanceAmount = Math.round(totalAmount * 0.2);
   const payableAmount = payType === "full" ? totalAmount : advanceAmount;
+
+  useEffect(() => {
+    if (!tourSubtotal) { setTourGst(null); return undefined; }
+    let cancelled = false;
+    api.get("/gst/get-single-gst", { params: { type: "Tour", gstThreshold: tourSubtotal } })
+      .then((response) => { if (!cancelled) setTourGst(response?.data || null); })
+      .catch(() => { if (!cancelled) setTourGst(null); });
+    return () => { cancelled = true; };
+  }, [tourSubtotal]);
   const activePassenger = passengerForm?.[activeSeatTab] || {
     type: "Adult",
     name: "",
@@ -723,7 +737,7 @@ export default function TourDetails({ navigation, route }) {
       to: toDate,
       tourStartDate: fromDate || tour?.tourStartDate,
       bookingSource: "app",
-      tax: 0,
+      tax: tourTax,
       discount: 0,
       payment: {
         mode: "online",
@@ -1456,7 +1470,7 @@ export default function TourDetails({ navigation, route }) {
                            </View>
                            <View className="flex-row justify-between mb-3">
                                <Text className="text-gray-500 font-medium">Taxes & Fees</Text>
-                               <Text className="text-green-600 font-bold">Free</Text>
+                               <Text className="text-amber-600 font-bold">{formatINR(tourTax)}{tourGstRate ? ` (${tourGstRate}% GST)` : ""}</Text>
                            </View>
                            
                            <View className="h-[1px] bg-gray-100 my-4" />

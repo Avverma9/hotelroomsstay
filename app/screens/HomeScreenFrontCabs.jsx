@@ -140,6 +140,9 @@ function TinyFireIcon() {
 
 const CabCard = ({ cab, onPress }) => {
   const fare = getFare(cab);
+  const baseFare = toNumber(cab?.basePrice ?? fare ?? 0);
+  const gstAmount = toNumber(cab?.gstAmount ?? 0);
+  const finalFare = toNumber(cab?.finalPrice ?? (baseFare + gstAmount));
   const seats = getSeatCount(cab);
   const bookedSeats = getBookedSeats(cab);
   const availableSeats = seats > 0 ? Math.max(seats - bookedSeats, 0) : 0;
@@ -200,12 +203,17 @@ const CabCard = ({ cab, onPress }) => {
 
           <View className="flex-row items-baseline mt-3">
             <Text className="text-[#0d3b8f] font-extrabold text-[18px]">
-              {fare !== null ? formatINR(fare) : "On request"}
+              {fare !== null ? formatINR(finalFare) : "On request"}
             </Text>
             <Text className="text-slate-500 text-[11px] font-semibold ml-1">
               {isShared ? "/ seat" : "/ trip"}
             </Text>
           </View>
+          {gstAmount > 0 && (
+            <Text className="text-emerald-600 text-[10px] font-bold mt-0.5">
+              Includes GST
+            </Text>
+          )}
         </View>
       </View>
     </TouchableOpacity>

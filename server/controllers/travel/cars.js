@@ -4,6 +4,38 @@ const CarOwner = require('../../models/travel/carOwner');
 const User = require('../../models/user');
 const DashboardUser = require('../../models/dashboardUser');
 const { logRouteChangedEvent, routeSnapshotFrom } = require('../../utils/rideHistory');
+const { getGSTData } = require('../GST/gst');
+
+const getCabBaseFare = (car) => {
+  const isShared = String(car?.sharingType || '').toLowerCase() === 'shared';
+  const seatPrices = (Array.isArray(car?.seatConfig) ? car.seatConfig : [])
+    .map((seat) => Number(seat?.seatPrice))
+    .filter((price) => Number.isFinite(price) && price >= 0);
+  const seatDerivedFare = seatPrices.length ? Math.min(...seatPrices) : null;
+  const candidates = isShared
+    ? [car?.perPersonCost, car?.price, seatDerivedFare]
+    : [car?.price, car?.perPersonCost, seatDerivedFare];
+
+  for (const value of candidates) {
+    const fare = Number(value);
+    if (Number.isFinite(fare) && fare >= 0) return fare;
+  }
+  return 0;
+};
+
+const withCabPricing = async (cars) => Promise.all(cars.map(async (car) => {
+  const basePrice = getCabBaseFare(car);
+  const gstData = await getGSTData({ type: 'Travel', gstThreshold: basePrice });
+  const gstRate = Number(gstData?.gstPrice || 0);
+  const gstAmount = Number(((basePrice * gstRate) / 100).toFixed(2));
+  return {
+    ...car,
+    basePrice,
+    gstRate,
+    gstAmount,
+    finalPrice: Number((basePrice + gstAmount).toFixed(2)),
+  };
+}));
 
 const toDate = (value) => {
   if (!value) {
@@ -328,7 +360,7 @@ exports.getAllCars = async (req, res) => {
       Car.find().skip(skip).limit(limit).lean(),
     ]);
 
-    return res.status(200).json({ data, total, page, limit });
+    return res.status(200).json({ data: await withCabPricing(data), total, page, limit });
   } catch (error) {
     console.error('getAllCars error:', error);
     return res.status(500).json({ message: error.message });
@@ -342,11 +374,11 @@ exports.getCarById = async (req, res) => {
       return res.status(400).json({ message: 'Invalid car id' });
     }
 
-    const findCar = await Car.findById(id);
+    const findCar = await Car.findById(id).lean();
     if (!findCar) {
       return res.status(404).json({ message: 'Car not found' });
     }
-    return res.status(200).json(findCar);
+    return res.status(200).json(await withCabPricing([findCar]).then(([car]) => car));
   } catch (error) {
     console.error('getCarById error:', error);
     return res.status(500).json({ message: error.message });
@@ -426,12 +458,12 @@ exports.filterCar = async (req, res) => {
       return res.status(400).json({ message: 'No filter parameters provided' });
     }
 
-    const cars = await Car.find(query);
+    const cars = await Car.find(query).lean();
     if (!cars.length) {
       return res.status(404).json({ message: 'No cars found matching the filters' });
     }
 
-    return res.status(200).json(cars);
+    return res.status(200).json(await withCabPricing(cars));
   } catch (error) {
     console.error('filterCar error:', error);
     return res.status(500).json({

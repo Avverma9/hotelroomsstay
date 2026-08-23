@@ -5,6 +5,7 @@ const {
   createUserNotificationSafe,
 } = require("../notification/helpers");
 const { resolveToUserId } = require("../../utils/resolveUserId");
+const { getGSTData } = require("../GST/gst");
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
 
@@ -127,8 +128,11 @@ exports.createBooking = async (req, res) => {
     const seatUnitPrice = Number(vehicle.pricePerSeat || 0);
     const seatPrice = seatUnitPrice * seats.length;
 
-    const totalAmount =
-      basePrice + seatPrice + Number(tax) - Number(discount);
+    const taxableAmount = Math.max(0, basePrice + seatPrice - Number(discount));
+    const gstData = await getGSTData({ type: "Tour", gstThreshold: taxableAmount });
+    const gstRate = Number(gstData?.gstPrice || 0);
+    const calculatedTax = Number(((taxableAmount * gstRate) / 100).toFixed(2));
+    const totalAmount = Number((taxableAmount + calculatedTax).toFixed(2));
 
     /* ================= PAYMENT MODE RESOLUTION ================= */
 
@@ -206,7 +210,7 @@ exports.createBooking = async (req, res) => {
 
           basePrice,
           seatPrice,
-          tax,
+          tax: calculatedTax,
           discount,
           totalAmount,
 

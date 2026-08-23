@@ -1,8 +1,16 @@
 import React, { useState, useRef, useEffect } from "react";
-import { View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import * as Location from "expo-location";
-
-// NOTE: LinearGradient import hata diya hai kyunki ab uski zaroorat nahi hai.
+// Icons के लिए @expo/vector-icons (Ionicons) का उपयोग किया गया है
+import { Ionicons } from "@expo/vector-icons";
 
 const PopularDestinations = ({ locations = [], onSelectLocation }) => {
   const [loading, setLoading] = useState(false);
@@ -22,11 +30,13 @@ const PopularDestinations = ({ locations = [], onSelectLocation }) => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (!isMounted.current) return;
       if (status !== "granted") {
-        Alert.alert("Permission required", "Location needed.");
+        Alert.alert("Permission required", "Location permission is needed.");
         setLoading(false);
         return;
       }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
       if (!isMounted.current) return;
       const rev = await Location.reverseGeocodeAsync({
         latitude: pos.coords.latitude,
@@ -39,50 +49,76 @@ const PopularDestinations = ({ locations = [], onSelectLocation }) => {
     } catch (e) {
       if (isMounted.current) {
         setLoading(false);
-        Alert.alert("Error", "Unable to get location");
+        Alert.alert("Error", "Unable to get current location");
       }
     }
   };
 
   return (
-    <View className="mt-8 pl-6">
-      <View className="flex-row justify-between items-end pr-6 mb-4">
-        <Text className="text-lg font-bold text-slate-900">Popular Destinations</Text>
+    <View className="mt-6 pl-4">
+      {/* Header */}
+      <View className="flex-row justify-between items-center pr-4 mb-3.5">
+        <Text className="text-[17px] font-bold text-slate-900 tracking-tight">
+          Popular Destinations
+        </Text>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 24 }}>
-        {/* Near Me Button (Already Circular) */}
-        <TouchableOpacity className="mr-4 items-center" activeOpacity={0.8} onPress={handleNearMe}>
-          <View className="w-16 h-16 rounded-full bg-blue-50 items-center justify-center border border-blue-100 mb-2 shadow-sm">
+      {/* Destinations Horizontal Carousel */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingRight: 20 }}
+      >
+        {/* Near Me Special Card */}
+        <TouchableOpacity
+          className="mr-3.5 items-center"
+          activeOpacity={0.75}
+          onPress={handleNearMe}
+          disabled={loading}
+        >
+          <View className="w-[76px] h-[76px] rounded-[22px] bg-blue-50/80 border border-blue-100/60 items-center justify-center shadow-sm mb-2">
             {loading ? (
-              <ActivityIndicator color="#0d3b8f" />
+              <ActivityIndicator size="small" color="#2563EB" />
             ) : (
-              <Text className="text-2xl">{"\u{1F4CD}"}</Text>
+              <View className="w-10 h-10 rounded-full bg-blue-500/10 items-center justify-center">
+                <Ionicons name="navigate" size={20} color="#2563EB" />
+              </View>
             )}
           </View>
-          <Text className="text-xs font-bold text-slate-600">Near Me</Text>
+          <Text
+            className="text-[12px] font-medium text-blue-600 text-center w-[76px]"
+            numberOfLines={1}
+          >
+            Near Me
+          </Text>
         </TouchableOpacity>
 
-        {/* Location Items (Now Circular) */}
+        {/* Location Cards */}
         {locations?.map((d) => (
           <TouchableOpacity
             key={d._id}
-            // Container aligns image and text centrally
-            className="mr-4 items-center"
+            className="mr-3.5 items-center"
             activeOpacity={0.8}
             onPress={() => (onSelectLocation ? onSelectLocation(d?.location) : null)}
           >
-            {/* Image Container: Circular shape with shadow & border matching Near Me */}
-            <View className="w-16 h-16 rounded-full overflow-hidden shadow-sm bg-slate-200 border border-slate-100 mb-2">
+            {/* Image Container with Smooth Rounded Corners & Soft Shadow */}
+            <View className="w-[76px] h-[76px] rounded-[22px] overflow-hidden bg-slate-100 border border-black/5 shadow-sm mb-2">
               <Image
-                source={{ uri: d?.images[0] }}
-                // Image fills the circular container
+                source={{
+                  uri:
+                    d?.images?.[0] ||
+                    "https://images.unsplash.com/photo-1548013146-72479768bbaa?w=400",
+                }}
                 className="w-full h-full"
                 resizeMode="cover"
               />
             </View>
-            {/* Text is now below the image container */}
-            <Text className="text-xs font-bold text-slate-600 text-center w-20" numberOfLines={1}>
+
+            {/* City / Location Label */}
+            <Text
+              className="text-[12px] font-medium text-slate-800 text-center w-[76px]"
+              numberOfLines={1}
+            >
               {d.location}
             </Text>
           </TouchableOpacity>

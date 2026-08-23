@@ -105,6 +105,18 @@ const normalizeBool = (value) => {
 };
 const toList = (value) => { if (Array.isArray(value)) return value; if (!value) return []; return [value]; };
 const toDateOnly = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+// Keep pricing dates in India Standard Time. toISOString() can shift an
+// India-local midnight to the previous UTC date.
+const formatDateIST = (value) => {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const get = (type) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+};
 const formatCurrencyINR = (value) => `₹${Math.round(parseNumber(value)).toLocaleString("en-IN")}`;
 const formatFullDate = (d) => {
   try { return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); } catch { return ""; }
@@ -372,18 +384,29 @@ const HotelDetails = ({ navigation, route }) => {
   useEffect(() => {
     if (!hotelId) return;
     const cin = paramCheckIn
-      ? new Date(paramCheckIn).toISOString().split("T")[0]
-      : new Date().toISOString().split("T")[0];
+      ? formatDateIST(paramCheckIn)
+      : formatDateIST(new Date());
     const cout = paramCheckOut
-      ? new Date(paramCheckOut).toISOString().split("T")[0]
-      : new Date(Date.now() + 86400000).toISOString().split("T")[0];
+      ? formatDateIST(paramCheckOut)
+      : formatDateIST(new Date(Date.now() + 86400000));
     const rooms = Number(paramRooms) || 1;
     dispatch(getHotelById({ id: hotelId, checkInDate: cin, checkOutDate: cout, countRooms: rooms }));
-    dispatch(fetchMonthlyData(hotelId));
     dispatch(resetCoupon());
     setCouponCodeInput("");
     couponRoomKeyRef.current = null;
   }, [dispatch, hotelId]);
+
+  // Refresh date-scoped monthly pricing immediately whenever either date is
+  // changed. This keeps the displayed price aligned with the selected stay.
+  useEffect(() => {
+    if (!hotelId || !checkInDate || !checkOutDate) return;
+    const toIsoDate = (date) => formatDateIST(date);
+    dispatch(fetchMonthlyData({
+      hotelId,
+      checkInDate: toIsoDate(checkInDate),
+      checkOutDate: toIsoDate(checkOutDate),
+    }));
+  }, [dispatch, hotelId, checkInDate, checkOutDate]);
 
   // Auto-fill guest details when user data loads
   useEffect(() => {
@@ -432,7 +455,12 @@ const HotelDetails = ({ navigation, route }) => {
     const relevant = data.filter((e) => { const id = e?.roomId ?? e?._id ?? e?.id; return id && String(id) === String(roomId); });
     if (!relevant.length) return null;
     const bS = toDateOnly(new Date(inDate)), bE = toDateOnly(new Date(outDate));
-    return relevant.find((e) => { if (!e?.startDate || !e?.endDate) return true; return dateRangesOverlap(bS, bE, e.startDate, e.endDate); }) || null;
+    return relevant.find((e) => {
+      if (!e?.startDate || !e?.endDate) return true;
+      const pS = toDateOnly(new Date(e.startDate)).getTime();
+      const pE = toDateOnly(new Date(e.endDate)).getTime();
+      return bS.getTime() >= pS && bE.getTime() <= pE;
+    }) || null;
   }, []);
 
   const getRoomBasePrice = useCallback((room) => {
@@ -746,8 +774,8 @@ const HotelDetails = ({ navigation, route }) => {
     dispatch(createBooking({
       userId: String(userId),
       hotelId: String(hotelId),
-      checkInDate: toDateOnly(checkInDate).toISOString(),
-      checkOutDate: toDateOnly(checkOutDate).toISOString(),
+      checkInDate: `${formatDateIST(checkInDate)}T00:00:00+05:30`,
+      checkOutDate: `${formatDateIST(checkOutDate)}T00:00:00+05:30`,
       guests: guestsCount,
       numRooms: roomsCount,
       guestDetails: [{ fullName: name, mobile: phone, email }],
@@ -1404,7 +1432,6 @@ const HotelDetails = ({ navigation, route }) => {
                       <Text style={{ fontWeight: "800", color: C.white, fontSize: 14, marginBottom: 2 }}>{basicInfo?.name}</Text>
                       <Text style={{ color: "rgba(255,255,255,0.65)", fontSize: 12, marginBottom: 4 }}>{selectedRoomData?.name} · {roomsCount} room · {guestsCount} guest</Text>
                       <Text style={{ color: C.gold, fontWeight: "700", fontSize: 12 }}>{formatFullDate(checkInDate)} → {formatFullDate(checkOutDate)}</Text>
-                      {!!selectedRoomData?.__pricing?.isOverrideApplied && <Text style={{ color: "#86EFAC", fontSize: 10, fontWeight: "700", marginTop: 3 }}>Monthly rate applied</Text>}
                     </View>
                   </View>
                 </View>

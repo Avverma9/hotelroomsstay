@@ -295,9 +295,48 @@ const UpdateHotelMaster = async (req, res) => {
   }
 };
 
+const applyMonthlyPricing = async (hotels, checkInDate, checkOutDate) => {
+  if (!hotels.length) return hotels;
+
+  // If a client does not send dates, use the current IST day and next day so
+  // list APIs still show an active monthly rate when one is configured.
+  const istToday = DateTime.now().setZone("Asia/Kolkata").startOf("day");
+  const stayStart = checkInDate || istToday.toISODate();
+  const stayEnd = checkOutDate || istToday.plus({ days: 1 }).toISODate();
+  const monthlyEntries = await monthModel.find({
+    hotelId: { $in: hotels.map((hotel) => hotel.hotelId) },
+    startDate: { $lte: stayStart },
+    endDate: { $gte: stayEnd },
+  }).lean();
+
+  const monthlyByHotel = new Map();
+  monthlyEntries.forEach((entry) => {
+    const current = monthlyByHotel.get(entry.hotelId) || new Map();
+    if (!current.has(String(entry.roomId))) current.set(String(entry.roomId), entry);
+    monthlyByHotel.set(entry.hotelId, current);
+  });
+
+  return hotels.map((hotel) => {
+    const monthlyRooms = monthlyByHotel.get(hotel.hotelId);
+    const actualPrices = (hotel.rooms || []).map((room) => Number(room.price || 0)).filter((price) => price > 0);
+    const monthlyPrices = (hotel.rooms || [])
+      .map((room) => monthlyRooms?.get(String(room.roomId))?.monthPrice)
+      .map(Number)
+      .filter((price) => price > 0);
+    const startingPrice = actualPrices.length ? Math.min(...actualPrices) : 0;
+    const monthlyStartingPrice = monthlyPrices.length ? Math.min(...monthlyPrices) : 0;
+    return {
+      ...hotel,
+      startingPrice: monthlyStartingPrice || startingPrice,
+      monthlyStartingPrice,
+      monthlyPriceApplied: monthlyStartingPrice > 0,
+    };
+  });
+};
+
 const getHotelsByFilters = async (req, res) => {
   try {
-    const { search, hotelName, city, state, isAccepted, minPrice, maxPrice, page = 1, limit = 10, sortBy = "price", sortOrder = "asc" } = req.query;
+    const { search, hotelName, city, state, isAccepted, minPrice, maxPrice, checkInDate, checkOutDate, page = 1, limit = 10, sortBy = "price", sortOrder = "asc" } = req.query;
 
     let query = {};
     let andConditions = [];
@@ -325,14 +364,74 @@ const getHotelsByFilters = async (req, res) => {
     ]);
 
     const total = await hotelModel.countDocuments(query);
-
-    const processed = allHotels.map(h => {
-      const prices = (h.rooms || []).map(r => r.price || 0);
-      return { ...h, startingPrice: prices.length ? Math.min(...prices) : 0 };
-    });
+    const processed = await applyMonthlyPricing(allHotels, checkInDate, checkOutDate);
 
     res.json({ success: true, total, data: processed, gstInfo: gstData });
   } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+const getHotelSuggestions = async (req, res) => {
+  try {
+    const query = String(req.query.q || req.query.search || "").trim();
+    const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20);
+    if (query.length < 2) return res.json({ success: true, data: [] });
+
+    const regex = { $regex: escapeRegex(query), $options: "i" };
+    const hotels = await hotelModel.find({
+      isAccepted: true,
+      $or: [{ hotelName: regex }, { city: regex }, { destination: regex }, { state: regex }],
+    }).select("hotelId hotelName city destination state").limit(50).lean();
+
+    const suggestions = [];
+    const seen = new Set();
+    const add = (value, type, hotel) => {
+      const label = String(value || "").trim();
+      const key = label.toLowerCase();
+      if (!label || seen.has(`${type}:${key}`)) return;
+      seen.add(`${type}:${key}`);
+      suggestions.push({
+        type,
+        label,
+        value: label,
+        hotelId: hotel?.hotelId || null,
+        hotelName: hotel?.hotelName || null,
+        city: hotel?.city || null,
+      });
+    };
+
+    hotels.forEach((hotel) => {
+      add(hotel.city, "city", hotel);
+      add(hotel.destination, "destination", hotel);
+      add(hotel.hotelName, "hotel", hotel);
+      add(hotel.state, "state", hotel);
+    });
+
+    const lowerQuery = query.toLowerCase();
+    suggestions.sort((a, b) => {
+      const aStarts = a.label.toLowerCase().startsWith(lowerQuery) ? 0 : 1;
+      const bStarts = b.label.toLowerCase().startsWith(lowerQuery) ? 0 : 1;
+      return aStarts - bStarts || a.label.localeCompare(b.label);
+    });
+
+    res.json({ success: true, data: suggestions.slice(0, limit) });
+  } catch (error) {
+    console.error("getHotelSuggestions error:", error);
+    res.status(500).json({ success: false, error: "Unable to load location suggestions." });
+  }
+};
+
+// The admin hotel directory should include every hotel. The public/filter
+// endpoint intentionally defaults to accepted hotels and a page size of 10.
+const getAllHotels = async (req, res) => {
+  try {
+    const { checkInDate, checkOutDate } = req.query;
+    const hotels = await hotelModel.find({}).sort({ createdAt: -1 }).lean();
+    const processed = await applyMonthlyPricing(hotels, checkInDate, checkOutDate);
+    res.json({ success: true, data: processed, total: processed.length });
+  } catch (error) {
+    console.error('getAllHotels error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -341,7 +440,12 @@ const getHotelsById = async (req, res) => {
   try {
     const hotel = await hotelModel.findOne({ hotelId: String(req.params.hotelId) }).lean();
     if (!hotel) return res.status(404).json({ message: "Hotel not found" });
-    res.json({ success: true, data: hotel });
+    const [processed] = await applyMonthlyPricing(
+      [hotel],
+      req.query.checkInDate,
+      req.query.checkOutDate,
+    );
+    res.json({ success: true, data: processed });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -422,7 +526,7 @@ const deleteHotelImages = async (req, res) => {
 
 const getHotelsByLocalID = async (req, res) => {
   const hotels = await hotelModel.find({ localId: req.query.localId }).lean();
-  res.json(hotels);
+  res.json(await applyMonthlyPricing(hotels, req.query.checkInDate, req.query.checkOutDate));
 };
 
 const getRoomOfferStatus = async (req, res) => {
@@ -435,7 +539,17 @@ const getRoomOfferStatus = async (req, res) => {
 
 const getCouponsAppliedHotels = async (req, res) => {
   const hotels = await hotelModel.find({ "rooms.isOffer": true }).lean();
-  res.json(hotels);
+  res.json(await applyMonthlyPricing(hotels, req.query.checkInDate, req.query.checkOutDate));
+};
+
+const getMainHotels = async (req, res) => {
+  const hotels = await hotelModel.find({ onFront: false }).lean();
+  res.json(await applyMonthlyPricing(hotels, req.query.checkInDate, req.query.checkOutDate));
+};
+
+const getFrontHotels = async (req, res) => {
+  const hotels = await hotelModel.find({ onFront: true }).lean();
+  res.json(await applyMonthlyPricing(hotels, req.query.checkInDate, req.query.checkOutDate));
 };
 
 // --- AUTOMATION & CRONS ---
@@ -471,15 +585,16 @@ cron.schedule("0 0 1 * *", async () => {
 
 module.exports = {
   createHotel,
-  getAllHotels: getHotelsByFilters,
+  getAllHotels,
+  getHotelSuggestions,
   getHotelsById,
   getHotelsByLocalID,
   getHotelsByFilters,
   getCity: (req, res) => res.json([]), // Placeholder for legacy compatibility
   getByQuery: getHotelsByFilters,
   UpdateHotelMaster,
-  getHotels: async (req, res) => res.json(await hotelModel.find({ onFront: false })),
-  setOnFront: async (req, res) => res.json(await hotelModel.find({ onFront: true })),
+  getHotels: getMainHotels,
+  setOnFront: getFrontHotels,
   deleteHotelById: async (req, res) => {
     await hotelModel.findOneAndDelete({ hotelId: req.params.hotelId });
     res.json({ success: true });

@@ -189,7 +189,14 @@ const Hotels = ({ navigation, route }) => {
     }
 
     if (showAll || !hasQuery) {
-      dispatch(searchHotel({ page: 1, limit: 50 }));
+      dispatch(searchHotel({
+        page: 1,
+        limit: 50,
+        checkInDate: localCheckIn,
+        checkOutDate: localCheckOut,
+        guests: localGuests,
+        countRooms: localRooms,
+      }));
     }
   }, [
     dispatch,
@@ -247,7 +254,14 @@ const Hotels = ({ navigation, route }) => {
       return;
     }
 
-    await dispatch(searchHotel({ page: 1, limit: 50 }));
+    await dispatch(searchHotel({
+      page: 1,
+      limit: 50,
+      checkInDate: localCheckIn,
+      checkOutDate: localCheckOut,
+      guests: localGuests ? Number(localGuests) : 1,
+      countRooms: localRooms ? Number(localRooms) : 1,
+    }));
   };
 
   const applyFilters = () => {
@@ -362,8 +376,13 @@ const Hotels = ({ navigation, route }) => {
     ].slice(0, 3);
 
     const offerSummary = getHotelOfferSummary(hotel);
-    const hasOffer = offerSummary.hasOffer;
-    const startingPrice = getHotelStartingPrice(hotel);
+    const monthlyPriceApplied = Boolean(hotel?.monthlyPriceApplied);
+    // Monthly pricing is the date-specific price and takes precedence over a
+    // generic room offer in the hotel list.
+    const hasOffer = offerSummary.hasOffer && !monthlyPriceApplied;
+    const startingPrice = monthlyPriceApplied
+      ? Number(hotel.monthlyStartingPrice || hotel.startingPrice || 0)
+      : getHotelStartingPrice(hotel);
     const displayFinalPrice =
       (hasOffer ? offerSummary.finalPrice : startingPrice) ||
       startingPrice ||

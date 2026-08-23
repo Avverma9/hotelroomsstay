@@ -261,10 +261,10 @@ const Home = ({ navigation }) => {
         <SearchCard
           searchCity={searchCity}
           setSearchCity={setSearchCity}
-          checkInDateDisplay={checkInDateDisplay}
-          checkOutDateDisplay={checkOutDateDisplay}
-          onOpenCheckIn={openCheckIn}
-          onOpenCheckOut={openCheckOut}
+          checkInDate={checkInDate}
+          setCheckInDate={(date) => setCheckInDate(iso(date))}
+          checkOutDate={checkOutDate}
+          setCheckOutDate={(date) => setCheckOutDate(iso(date))}
           guests={guests}
           setGuests={setGuests}
           rooms={countRooms}

@@ -763,6 +763,9 @@ export default function Cabs({ navigation }) {
           ) : (
             filteredCabs.map((cab, idx) => {
               const fare = resolveCabFare(cab);
+              const baseFare = Number(cab?.basePrice ?? fare ?? 0);
+              const gstAmount = Number(cab?.gstAmount ?? 0);
+              const finalFare = Number(cab?.finalPrice ?? (baseFare + gstAmount));
               const seats = getTotalSeats(cab);
               const bookedSeats = getBookedSeats(cab);
               const availableSeats = seats - bookedSeats;
@@ -858,11 +861,16 @@ export default function Cabs({ navigation }) {
                         {/* Price */}
                         <View style={{ alignItems: "flex-end" }}>
                           <Text style={{ fontSize: 18, fontWeight: "900", color: "#0f172a", letterSpacing: -0.5 }}>
-                            {fare !== null ? `₹${fare.toLocaleString("en-IN")}` : "—"}
+                            {fare !== null ? `₹${finalFare.toLocaleString("en-IN")}` : "—"}
                           </Text>
                           <Text style={{ fontSize: 9.5, fontWeight: "600", color: "#94a3b8" }}>
                             {isShared ? "per seat" : "per trip"}
                           </Text>
+                          {gstAmount > 0 && (
+                            <Text style={{ fontSize: 8.5, fontWeight: "700", color: "#16a34a" }}>
+                              incl. GST
+                            </Text>
+                          )}
                         </View>
                       </View>
 
