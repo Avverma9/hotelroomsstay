@@ -10,6 +10,7 @@ const {
   isCouponExpired,
   getRemainingQuota,
   registerCouponUsage,
+  hasCouponBeenRedeemedByUser,
 } = require("./couponUtils");
 const { normalizeValidityToEndOfDayIST } = require("./couponUtils");
 
@@ -34,6 +35,87 @@ const uniqueMerge = (existing, incoming) => {
 };
 
 const toSafeNumber = (val) => Number(val) || 0;
+
+const normalizeUserId = (value) => String(value || "").trim();
+
+const couponAllowsBooking = (coupon, { userId, hotelId, roomId }) => {
+  const normalizedUserId = normalizeUserId(userId);
+  const normalizedHotelId = normalizeUserId(hotelId);
+  const normalizedRoomId = normalizeUserId(roomId);
+
+  if (!normalizedUserId) return { ok: false, message: "Authenticated user required" };
+  if (hasCouponBeenRedeemedByUser(coupon, normalizedUserId)) {
+    return { ok: false, message: "You have already used this coupon" };
+  }
+
+  const targetUserId = normalizeUserId(coupon.targetUserId || coupon.userId);
+  if (coupon.type === "user" && targetUserId && targetUserId !== normalizedUserId) {
+    return { ok: false, message: "Coupon assigned to another user" };
+  }
+
+  const hotelIds = normalizeIdList(coupon.hotelId);
+  const roomIds = normalizeIdList(coupon.roomId);
+  if (coupon.type === "partner" && hotelIds.length && !hotelIds.includes(normalizedHotelId)) {
+    return { ok: false, message: "Coupon is not valid for this hotel" };
+  }
+  if (coupon.type === "partner" && roomIds.length && !roomIds.includes(normalizedRoomId)) {
+    return { ok: false, message: "Coupon is not valid for this room" };
+  }
+
+  return { ok: true };
+};
+
+// Reserve quota only after the booking payload has been validated. The query
+// makes the quota and one-user-one-use check atomic under concurrent requests.
+const redeemCouponForBooking = async ({ couponCode, userId, bookingId, hotelId, roomId, discountPrice }) => {
+  const normalizedCode = String(couponCode || "").trim();
+  const normalizedUserId = normalizeUserId(userId);
+  if (!normalizedCode || !normalizedUserId || !bookingId) {
+    return { ok: false, status: 400, message: "couponCode, userId and bookingId required" };
+  }
+
+  const now = new Date();
+  const coupon = await Coupon.findOneAndUpdate(
+    {
+      couponCode: normalizedCode,
+      expired: false,
+      validity: { $gte: now },
+      $expr: { $lt: [{ $ifNull: ["$usedCount", 0] }, { $ifNull: ["$maxUsage", { $ifNull: ["$quantity", 1] }] }] },
+      $nor: [
+        { "redemptions.userId": normalizedUserId },
+        { "usageHistory.userId": normalizedUserId },
+      ],
+    },
+    {
+      $inc: { usedCount: 1 },
+      $push: {
+        redemptions: {
+          userId: normalizedUserId,
+          bookingId: String(bookingId),
+          hotelId: String(hotelId || ""),
+          roomId: String(roomId || ""),
+          discountPrice: Number(discountPrice || 0),
+          redeemedAt: now,
+        },
+      },
+    },
+    { new: true },
+  );
+
+  if (!coupon) {
+    const existing = await Coupon.findOne({ couponCode: normalizedCode }).lean();
+    if (!existing) return { ok: false, status: 404, message: "Coupon code not found" };
+    if (isCouponExpired(existing)) return { ok: false, status: 400, message: "Coupon usage limit reached or coupon expired" };
+    if (hasCouponBeenRedeemedByUser(existing, normalizedUserId)) return { ok: false, status: 409, message: "You have already used this coupon" };
+    return { ok: false, status: 400, message: "Coupon is not valid for this booking" };
+  }
+
+  const usageLimit = getRemainingQuota(coupon) === 0 ? Number(coupon.usedCount || 0) : null;
+  if (usageLimit !== null) {
+    await Coupon.updateOne({ _id: coupon._id }, { $set: { expired: true } });
+  }
+  return { ok: true, coupon };
+};
 
 const resolveCouponUserId = async (coupon) => {
   if (coupon.targetUserId) return String(coupon.targetUserId);
@@ -163,7 +245,7 @@ const applyPartnerCoupon = async (req, res, coupon) => {
       req.body.hotelIds || req.body.hotelId
     );
     const roomIds = normalizeIdList(req.body.roomIds || req.body.roomId || []).map(String);
-    const userIds = normalizeIdList(req.body.userIds || []).map(String);
+    const userIds = normalizeIdList(req.body.userIds || req.body.userId || []).map(String);
 
     undefined;
 
@@ -171,7 +253,20 @@ const applyPartnerCoupon = async (req, res, coupon) => {
       return res.status(400).json({ message: "hotelIds required" });
     }
 
-    let remainingQuota = getRemainingQuota(coupon);
+    // App/web user flow: partner coupon is already a promotion configured by
+    // the panel. Do not try to configure the room again. In particular, an
+    // already-promoted room has isOffer=true and must still be redeemable.
+    if (userIds.length) {
+      return applyPartnerCouponForUser({
+        res,
+        coupon,
+        hotelId: hotelIds[0],
+        roomId: roomIds[0],
+        userId: userIds[0],
+      });
+    }
+
+    const remainingQuota = getRemainingQuota(coupon);
     if (remainingQuota <= 0) {
       return res.status(400).json({ message: "Coupon limit reached" });
     }
@@ -200,8 +295,6 @@ const applyPartnerCoupon = async (req, res, coupon) => {
       }
       
       for (const room of hotel.rooms || []) {
-        if (remainingQuota <= 0) break;
-
         const roomId = String(room.roomId || "").trim();
         undefined;
 
@@ -270,7 +363,6 @@ const applyPartnerCoupon = async (req, res, coupon) => {
           finalPrice,
         });
 
-        remainingQuota--;
       }
     }
 
@@ -287,6 +379,11 @@ const applyPartnerCoupon = async (req, res, coupon) => {
     // ✅ Store eligible rooms for future booking validation
     coupon.eligibleRooms = discountDetails;
 
+    const requestedUserId = String(userIds[0] || "").trim();
+    if (requestedUserId && hasCouponBeenRedeemedByUser(coupon, requestedUserId)) {
+      return res.status(409).json({ message: "You have already used this coupon" });
+    }
+
     // ❌ DON'T register usage or increment used count here
     // Usage will be registered only when actual booking is made
     // remainingQuota = registerCouponUsage({...});
@@ -297,6 +394,10 @@ const applyPartnerCoupon = async (req, res, coupon) => {
       message: "Partner coupon applied successfully - ready for booking",
       data: discountDetails,
       couponCode: coupon.couponCode,
+      // Keep a simple shape for older web clients while retaining the
+      // detailed room-wise response used by the panel/app.
+      discountPrice: discount,
+      discountAmount: discount,
       eligibleRooms: discountDetails.length,
       usage: {
         usedCount: coupon.usedCount || 0,
@@ -344,6 +445,10 @@ const applyUserCoupon = async (req, res, coupon) => {
 
     if (targetUserId && targetUserId !== userId) {
       return res.status(403).json({ message: "Coupon assigned to another user" });
+    }
+
+    if (hasCouponBeenRedeemedByUser(coupon, userId)) {
+      return res.status(409).json({ message: "You have already used this coupon" });
     }
 
     const hotel = await hotelModel.findOne({ hotelId });
@@ -554,66 +659,34 @@ const registerCouponUsageOnBooking = async (req, res) => {
       });
     }
 
-    const coupon = await Coupon.findOne({ 
-      couponCode: String(couponCode).trim() 
-    });
+    const coupon = await Coupon.findOne({ couponCode: String(couponCode).trim() });
+    if (!coupon) return res.status(404).json({ message: "Coupon not found" });
 
-    if (!coupon) {
-      return res.status(404).json({ message: "Coupon not found" });
-    }
+    const eligibility = couponAllowsBooking(coupon, { userId, hotelId, roomId });
+    if (!eligibility.ok) return res.status(eligibility.status || 400).json({ message: eligibility.message });
 
-    if (isCouponExpired(coupon)) {
-      return res.status(400).json({ message: "Coupon expired" });
-    }
-
-    // Check if this booking combination is eligible
-    const eligibleRoom = coupon.eligibleRooms?.find(room => 
-      room.hotelId === hotelId && room.roomId === roomId
-    );
-
-    if (!eligibleRoom) {
-      return res.status(400).json({ 
-        message: "This coupon is not eligible for the selected room" 
-      });
-    }
-
-    // Check remaining quota
-    const remainingQuota = getRemainingQuota(coupon);
-    if (remainingQuota <= 0) {
-      return res.status(400).json({ message: "Coupon usage limit reached" });
-    }
-
-    // Register the usage
-    const usageEntry = {
+    const result = await redeemCouponForBooking({
+      couponCode,
       userId,
+      bookingId,
       hotelId,
       roomId,
-      bookingId,
-      discountPrice: eligibleRoom.discountPrice,
-      finalPrice: eligibleRoom.finalPrice,
-      usedAt: new Date()
-    };
-
-    const newRemainingQuota = registerCouponUsage({
-      coupon,
-      usageCount: 1,
-      usageEntries: [usageEntry],
+      discountPrice: coupon.discountPrice,
     });
+    if (!result.ok) return res.status(result.status || 400).json({ message: result.message });
 
-    await coupon.save();
-
-    undefined;
+    const newRemainingQuota = getRemainingQuota(result.coupon);
 
     return res.status(200).json({
       message: "Coupon usage registered successfully",
       couponCode,
       bookingId,
       usage: {
-        usedCount: coupon.usedCount,
-        maxUsage: coupon.maxUsage || coupon.quantity,
+        usedCount: result.coupon.usedCount,
+        maxUsage: result.coupon.maxUsage || result.coupon.quantity,
         remainingQuota: newRemainingQuota,
       },
-      discountApplied: eligibleRoom.discountPrice,
+      discountApplied: result.coupon.discountPrice,
     });
 
   } catch (error) {
@@ -628,4 +701,96 @@ module.exports = {
   createCoupon,
   getUserDefaultCoupon,
   registerCouponUsageOnBooking,
+  redeemCouponForBooking,
+  couponAllowsBooking,
+};
+
+const applyPartnerCouponForUser = async ({ res, coupon, hotelId, roomId, userId }) => {
+  if (!hotelId || !roomId || !userId) {
+    return res.status(400).json({ message: "hotelId, roomId and userId required" });
+  }
+
+  if (hasCouponBeenRedeemedByUser(coupon, userId)) {
+    return res.status(409).json({ message: "You have already used this coupon" });
+  }
+
+  const couponHotelIds = normalizeIdList(coupon.hotelId);
+  const couponRoomIds = normalizeIdList(coupon.roomId);
+  if (couponHotelIds.length && !couponHotelIds.includes(String(hotelId))) {
+    return res.status(400).json({ message: "Coupon is not valid for this hotel" });
+  }
+
+  const hotel = await hotelModel.findOne({ hotelId: String(hotelId) }).lean();
+  if (!hotel) return res.status(404).json({ message: "Hotel not found" });
+
+  const normalize = (value) => String(value ?? "").trim();
+  const requestedRoomId = normalize(roomId);
+  const room = (hotel.rooms || []).find((candidate) => {
+    const candidates = [
+      candidate?.roomId,
+      candidate?._id,
+      candidate?.id,
+      candidate?.roomID,
+      candidate?.hotelRoomId,
+      candidate?.typeId,
+      candidate?.roomTypeID,
+      candidate?.room_type_id,
+      candidate?.roomTypeId,
+      candidate?.roomType?._id,
+      candidate?.roomType?.id,
+    ].map(normalize);
+    return candidates.includes(requestedRoomId);
+  });
+  if (!room) return res.status(404).json({ message: "Room not found" });
+
+  const roomAliases = [
+    room.roomId,
+    room._id,
+    room.id,
+    room.roomID,
+    room.hotelRoomId,
+    room.typeId,
+    room.roomTypeID,
+    room.room_type_id,
+    room.roomTypeId,
+    room.roomType?._id,
+    room.roomType?.id,
+  ].map(normalize);
+  if (couponRoomIds.length && !couponRoomIds.some((id) => roomAliases.includes(String(id)))) {
+    return res.status(400).json({ message: "Coupon is not valid for this room" });
+  }
+  if (Number(room.countRooms || 0) <= 0) {
+    return res.status(400).json({ message: "Room sold out" });
+  }
+
+  // User redemption must use the room's current payable price. If a hotel
+  // offer is already active, getRoomBasePrice() would return the pre-offer
+  // list price and the apply screen would disagree with booking pricing.
+  const originalPrice = toSafeNumber(room.price);
+  const discountPrice = Math.max(0, toSafeNumber(coupon.discountPrice));
+  const finalPrice = Math.max(0, originalPrice - discountPrice);
+  const canonicalRoomId = normalize(room.roomId || room._id || room.id || roomId);
+  const detail = {
+    hotelId: String(hotelId),
+    roomId: canonicalRoomId,
+    originalPrice,
+    discountPrice,
+    finalPrice,
+  };
+
+  return res.status(200).json({
+    message: "Partner coupon applied successfully - ready for booking",
+    couponType: "partner",
+    data: [detail],
+    couponCode: coupon.couponCode,
+    discountPrice,
+    discountAmount: discountPrice,
+    eligibleRooms: 1,
+    usage: {
+      usedCount: coupon.usedCount || 0,
+      maxUsage: coupon.maxUsage || coupon.quantity,
+      remainingQuota: getRemainingQuota(coupon),
+      note: "Usage count will increment only on actual booking",
+    },
+  });
 };

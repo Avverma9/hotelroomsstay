@@ -18,6 +18,18 @@ const usageHistorySchema = new mongoose.Schema(
   { _id: false },
 );
 
+const redemptionSchema = new mongoose.Schema(
+  {
+    userId: { type: String, required: true },
+    bookingId: { type: String, required: true },
+    hotelId: String,
+    roomId: String,
+    discountPrice: Number,
+    redeemedAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const couponSchema = new mongoose.Schema(
   {
     couponCode: {
@@ -88,6 +100,16 @@ const couponSchema = new mongoose.Schema(
 
     usageHistory: {
       type: [usageHistorySchema],
+      default: [],
+    },
+    // One redemption per account, independent of the coupon's total quota.
+    redemptions: {
+      type: [redemptionSchema],
+      default: [],
+    },
+    // Rooms captured by the unified partner-coupon apply endpoint.
+    eligibleRooms: {
+      type: [Object],
       default: [],
     },
   },

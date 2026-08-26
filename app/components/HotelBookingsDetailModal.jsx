@@ -44,9 +44,12 @@ const calculateBookingCosts = (booking) => {
   // Use server-provided fields first; fall back to back-calculation only if absent
   const baseRoomPrice = toNumber(booking?.baseRoomPrice);
   const discountedRoomPrice = toNumber(booking?.discountedRoomPrice) || baseRoomPrice;
-  const gstPct = toNumber(booking?.gstPrice) || 12;
-  const gst = toNumber(booking?.gstAmount) ||
-    (totalPaid > 0 ? Math.round(totalPaid * gstPct / (100 + gstPct)) : 0);
+  const hasServerGstRate = booking?.gstPrice !== undefined && booking?.gstPrice !== null;
+  const gstPct = hasServerGstRate ? toNumber(booking.gstPrice) : 0;
+  const hasServerGstAmount = booking?.gstAmount !== undefined && booking?.gstAmount !== null;
+  const gst = hasServerGstAmount
+    ? toNumber(booking.gstAmount)
+    : (totalPaid > 0 ? Math.round(totalPaid * gstPct / (100 + gstPct)) : 0);
   const discountAmount = toNumber(booking?.discountPrice);
 
   // foodPrice from server, or derive from foodDetails array
@@ -278,7 +281,7 @@ export default function HotelBookingsDetailModal({ visible, onClose, booking }) 
                 />
               )}
 
-              <InfoRow label={`GST & Taxes (${toNumber(booking?.gstPrice) || 12}%)`} value={formatCurrencyINR(costs.gst)} />
+              <InfoRow label={`GST & Taxes (${toNumber(booking?.gstPrice ?? 0)}%)`} value={formatCurrencyINR(costs.gst)} />
 
               <View className="my-3 border-t border-dashed border-neutral-300" />
 

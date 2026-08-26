@@ -315,6 +315,10 @@ const bookingSlice = createSlice({
       .addCase(getGstForHotelData.pending, (state) => {
         state.gstStatus = "loading";
         state.gstError = null;
+        // Do not keep showing the previous room's GST slab while the new
+        // discounted threshold is being resolved.
+        state.gstData = null;
+        state.gstAmount = 0;
       })
       .addCase(getGstForHotelData.fulfilled, (state, action) => {
         state.gstStatus = "succeeded";
@@ -324,6 +328,9 @@ const bookingSlice = createSlice({
       .addCase(getGstForHotelData.rejected, (state, action) => {
         state.gstStatus = "failed";
         state.gstError = action.payload || "Failed";
+        // 404 means there is no matching GST slab; pricing falls back to the
+        // configured threshold rule instead of reusing stale 18% data.
+        state.gstData = null;
         state.gstAmount = 0;
       })
 

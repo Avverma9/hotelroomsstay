@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 const bookingModel = require("../../models/booking/booking");
 const hotelModel = require("../../models/hotel/basicDetails");
 const userModel = require("../../models/user");
+const Coupon = require("../../models/coupons/coupon");
+const {
+  isCouponExpired,
+} = require("../coupons/couponUtils");
+const { couponAllowsBooking, redeemCouponForBooking } = require("../coupons/coupon");
 const { resolveToUserId } = require("../../utils/resolveUserId");
 const dashboardUserModel = require("../../models/dashboardUser");
 const {
@@ -336,7 +341,33 @@ const createBooking = async (req, res) => {
     }
     const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
     const roomBaseTotal = toMoney(perRoomPrice * roomCount * nights);
-    const discountAmount = Math.min(roomBaseTotal, Math.max(0, toMoney(discountPrice)));
+    let couponRecord = null;
+    let resolvedDiscountPrice = 0;
+    if (couponCode) {
+      couponRecord = await Coupon.findOne({ couponCode: String(couponCode).trim() });
+      if (!couponRecord) {
+        return res.status(404).json({ success: false, message: "Coupon code not found" });
+      }
+      if (isCouponExpired(couponRecord)) {
+        return res.status(400).json({ success: false, message: "Coupon expired or usage limit reached" });
+      }
+
+      const couponEligibility = couponAllowsBooking(couponRecord, {
+        userId: String(user.userId),
+        hotelId,
+        roomId: requestedRoomId,
+      });
+      if (!couponEligibility.ok) {
+        return res.status(couponEligibility.status || 400).json({
+          success: false,
+          message: couponEligibility.message,
+        });
+      }
+      // Never trust discountPrice sent by web/app/panel clients.
+      resolvedDiscountPrice = Math.max(0, toMoney(couponRecord.discountPrice));
+    }
+
+    const discountAmount = Math.min(roomBaseTotal, resolvedDiscountPrice);
     const discountedRoomTotal = toMoney(roomBaseTotal - discountAmount);
 
     // GST slabs historically use the discounted per-room, per-night amount.
@@ -440,6 +471,25 @@ const createBooking = async (req, res) => {
     });
 
     const savedBooking = await booking.save();
+
+    if (couponRecord) {
+      const redemption = await redeemCouponForBooking({
+        couponCode: couponRecord.couponCode,
+        userId: String(user.userId),
+        bookingId,
+        hotelId,
+        roomId: requestedRoomId,
+        discountPrice: discountAmount,
+      });
+
+      if (!redemption.ok) {
+        await bookingModel.deleteOne({ _id: savedBooking._id });
+        return res.status(redemption.status || 400).json({
+          success: false,
+          message: redemption.message,
+        });
+      }
+    }
 
     if (savedBooking.bookingStatus === "Confirmed" || savedBooking.bookingStatus === "Pending") {
       const emailSubject = savedBooking.bookingStatus === "Confirmed"

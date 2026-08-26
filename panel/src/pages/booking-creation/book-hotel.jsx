@@ -275,27 +275,32 @@ export default function BookHotel() {
     if (appliedCoupon) {
        discount = Number(appliedCoupon.discountPrice || 0)
     }
-    const discountedSubtotal = Math.max(0, subtotal - discount)
+    // The booking API applies coupons only to the room charge. Food add-ons
+    // remain payable in full and are not included in the hotel GST base.
+    const roomDiscount = Math.min(roomSubtotal, Math.max(0, discount))
+    const discountedRoomSubtotal = Math.max(0, roomSubtotal - roomDiscount)
     
     const matchedGST = String(selectedGST?.type || '').toLowerCase() === 'hotel' ? selectedGST : null
-    const gstPercent = Number(matchedGST?.gstPrice || selectedRoom.pricing.taxPercent || 12)
-    const tax = Math.round((discountedSubtotal * gstPercent) / 100)
+    const gstPercent = Number(matchedGST?.gstPrice ?? selectedRoom.pricing.taxPercent ?? 0)
+    const tax = Math.round((discountedRoomSubtotal * gstPercent) / 100)
     
     return { 
       roomSubtotal,
       foodSubtotal,
       subtotal, 
+      discountedRoomSubtotal,
       tax, 
-      discount, 
-      total: discountedSubtotal + tax,
+      discount: roomDiscount,
+      total: discountedRoomSubtotal + tax + foodSubtotal,
       gstPercent
     }
   }, [selectedRoom, roomCount, numberOfNights, selectedFoods, appliedCoupon, selectedGST])
 
   useEffect(() => {
     if (totals.subtotal <= 0) return
-    dispatch(getGST({ type: 'Hotel', gstThreshold: Math.max(0, totals.subtotal - totals.discount) }))
-  }, [dispatch, totals.subtotal, totals.discount])
+    const roomThreshold = totals.discountedRoomSubtotal / Math.max(1, roomCount * numberOfNights)
+    dispatch(getGST({ type: 'Hotel', gstThreshold: Math.max(0, roomThreshold) }))
+  }, [dispatch, totals.subtotal, totals.discountedRoomSubtotal, roomCount, numberOfNights])
 
   useEffect(() => {
     dispatch(clearAppliedCouponState())
@@ -449,7 +454,7 @@ export default function BookHotel() {
       },
       couponCode: appliedCoupon ? couponInput : '',
       discountPrice: appliedCoupon?.discountPrice || 0,
-      gstPrice: totals.tax,
+      gstPrice: totals.gstPercent,
       price: totals.total,
       bookingSource: 'Panel',
       destination: location?.city || storedHotel?.destination || '',

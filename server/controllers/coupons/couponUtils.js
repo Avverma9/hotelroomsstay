@@ -118,11 +118,23 @@ const registerCouponUsage = ({ coupon, usageCount, usageEntries = [] }) => {
   return remaining;
 };
 
+const hasCouponBeenRedeemedByUser = (coupon, userId) => {
+  const normalizedUserId = String(userId || "").trim();
+  if (!normalizedUserId) return false;
+
+  const redemptions = Array.isArray(coupon?.redemptions) ? coupon.redemptions : [];
+  const history = Array.isArray(coupon?.usageHistory) ? coupon.usageHistory : [];
+  return [...redemptions, ...history].some(
+    (entry) => String(entry?.userId || "").trim() === normalizedUserId,
+  );
+};
+
 module.exports = {
   normalizeIdList,
   getUsageLimit,
   isCouponExpired,
   getRemainingQuota,
   registerCouponUsage,
+  hasCouponBeenRedeemedByUser,
   normalizeValidityToEndOfDayIST,
 };

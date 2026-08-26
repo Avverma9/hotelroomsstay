@@ -1,0 +1,2 @@
+const puppeteer = require('puppeteer');
+(async()=>{const b=await puppeteer.launch({headless:true,args:['--no-sandbox']});const p=await b.newPage();await p.goto('http://127.0.0.1:5173/booking-creation/book-hotel',{waitUntil:'networkidle2',timeout:30000});console.log('url',p.url());console.log((await p.locator('body').innerText()).slice(0,3000));await p.screenshot({path:'smoke-panel-initial.png',fullPage:true});await b.close()})().catch(e=>{console.error(e.stack);process.exit(1)})

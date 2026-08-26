@@ -79,6 +79,16 @@ export const applyCoupon = createAsyncThunk(
           ? {
               couponCode: trimmedCouponCode,
               hotelIds: hotelIds.length > 0 ? hotelIds : [hotelId].filter(Boolean),
+              // When a panel booking is being made for a customer, use the
+              // same user redemption flow as app/web. The PMS hotel setup
+              // flow has no userId and continues to configure hotel offers.
+              ...(userId
+                ? {
+                    hotelId,
+                    roomId,
+                    userIds: [String(userId)],
+                  }
+                : {}),
             }
           : {
               couponCode: trimmedCouponCode,

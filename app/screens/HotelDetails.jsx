@@ -8,6 +8,8 @@ import React, {
 import {
   View,
   Text,
+  Animated,
+  Easing,
   ScrollView,
   Image,
   TouchableOpacity,
@@ -23,6 +25,7 @@ import {
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { getHotelById } from "../store/slices/hotelSlice";
 import {
@@ -65,6 +68,74 @@ const C = {
   redBg: "#FEF0EE",
   blue: "#1E4ED8",
   blueBg: "#EFF4FF",
+};
+
+const BookingLoadingModal = ({ visible }) => {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const [messageIndex, setMessageIndex] = useState(0);
+  const loadingMessages = [
+    "Securing your room and best price...",
+    "Checking room availability...",
+    "Applying your coupon discount...",
+    "Calculating the final price...",
+    "Almost there, confirming your stay...",
+  ];
+
+  useEffect(() => {
+    if (visible) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.12, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ])
+      ).start();
+      Animated.loop(
+        Animated.timing(progressAnim, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: false })
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+      progressAnim.setValue(0);
+      setMessageIndex(0);
+    }
+  }, [visible, pulseAnim, progressAnim]);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    const messageTimer = setInterval(() => {
+      setMessageIndex((current) => (current + 1) % loadingMessages.length);
+    }, 2000);
+    return () => clearInterval(messageTimer);
+  }, [visible, loadingMessages.length]);
+
+  const progressWidth = progressAnim.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
+
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={() => {}} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: "rgba(15, 23, 42, 0.65)", alignItems: "center", justifyContent: "center", paddingHorizontal: 24 }}>
+        <View style={{ width: "100%", maxWidth: 320, backgroundColor: C.white, borderRadius: 32, paddingHorizontal: 24, paddingVertical: 32, alignItems: "center", shadowColor: "#0F172A", shadowOpacity: 0.15, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 16 }}>
+          <Animated.View style={{ transform: [{ scale: pulseAnim }], marginBottom: 20 }}>
+            <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: "#EFF6FF", alignItems: "center", justifyContent: "center" }}>
+              <LinearGradient colors={["#2563EB", "#06B6D4"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center", shadowColor: "#2563EB", shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 6 }}>
+                <Ionicons name="bed-outline" size={30} color={C.white} />
+              </LinearGradient>
+            </View>
+          </Animated.View>
+          <Text style={{ fontSize: 20, fontWeight: "800", color: "#0F172A", textAlign: "center", letterSpacing: -0.3 }}>Confirming Booking</Text>
+          <Text style={{ marginTop: 6, fontSize: 13, color: "#64748B", fontWeight: "500", textAlign: "center", lineHeight: 18 }}>{loadingMessages[messageIndex]}</Text>
+          <View style={{ width: "100%", height: 5, backgroundColor: "#F1F5F9", borderRadius: 3, overflow: "hidden", marginTop: 22, marginBottom: 16 }}>
+            <Animated.View style={{ width: progressWidth, height: "100%", borderRadius: 3 }}>
+              <LinearGradient colors={["#2563EB", "#06B6D4"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1 }} />
+            </Animated.View>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#F8FAFC", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: "#F1F5F9" }}>
+            <Ionicons name="shield-checkmark" size={14} color="#10B981" />
+            <Text style={{ color: "#64748B", fontSize: 11, fontWeight: "600", marginLeft: 5 }}>Please do not refresh or close</Text>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 };
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -646,17 +717,20 @@ const HotelDetails = ({ navigation, route }) => {
     if (!selectedRoomData) return { base: 0, tax: 0, foodTotal: 0, total: 0, discount: 0, finalTotal: 0, couponApplied: false, perNight: 0, appliedTaxPercent: 0, taxLabel: "" };
     const pn = selectedRoomData.__pricing?.nightlyPrice ?? getRoomBasePrice(selectedRoomData);
     const bt = pn * roomsCount * nights;
+    const rd = parseNumber(discountAmount || couponResult?.discountPrice || couponResult?.discountAmount);
+    // Server pricing rule: coupon discount is applied to the room subtotal
+    // before GST, never after GST.
+    const taxableRoomBase = Math.max(bt - Math.min(Math.max(rd, 0), Math.max(bt, 0)), 0);
     const rtp = parseNumber(selectedRoomData?.pricing?.taxPercent || selectedRoomData?.pricing?.gstPercent);
     const rta = parseNumber(selectedRoomData?.pricing?.taxAmount);
     const isMO = !!selectedRoomData?.__pricing?.isOverrideApplied;
     let gt = 0, atp = 0, tl = "";
-    if (isMO) { atp = 12; gt = (bt * atp) / 100; tl = "GST (12%)"; }
-    else if (rtp > 0) { atp = rtp; gt = (bt * atp) / 100; tl = `GST (${atp}%)`; }
+    if (isMO) { atp = 12; gt = (taxableRoomBase * atp) / 100; tl = "GST (12%)"; }
+    else if (rtp > 0) { atp = rtp; gt = (taxableRoomBase * atp) / 100; tl = `GST (${atp}%)`; }
     else if (rta > 0) { gt = rta * roomsCount * nights; tl = "Taxes"; }
-    else if (gstConfig?.enabled && parseNumber(gstConfig?.rate) >= 0) { atp = parseNumber(gstConfig.rate); gt = (bt * atp) / 100; tl = `GST (${atp}%)`; }
-    else if (gstData?.gstPrice) { atp = parseNumber(gstData.gstPrice); gt = (bt * atp) / 100; tl = `GST (${atp}%)`; }
-    else { const minThresh = parseNumber(gstData?.gstMinThreshold) || 1000; const maxThresh = parseNumber(gstData?.gstMaxThreshold) || 7500; if (pn > maxThresh) atp = 18; else if (pn > minThresh) atp = parseNumber(gstData?.gstPrice) || 12; else atp = 0; gt = (bt * atp) / 100; tl = atp ? `GST (${atp}%)` : "No GST"; }
-    const rd = parseNumber(discountAmount || couponResult?.discountPrice || couponResult?.discountAmount);
+    else if (gstConfig?.enabled && parseNumber(gstConfig?.rate) >= 0) { atp = parseNumber(gstConfig.rate); gt = (taxableRoomBase * atp) / 100; tl = `GST (${atp}%)`; }
+    else if (gstData?.gstPrice) { atp = parseNumber(gstData.gstPrice); gt = (taxableRoomBase * atp) / 100; tl = `GST (${atp}%)`; }
+    else { const minThresh = parseNumber(gstData?.gstMinThreshold) || 1000; const maxThresh = parseNumber(gstData?.gstMaxThreshold) || 7500; if (taxableRoomBase / Math.max(roomsCount * nights, 1) > maxThresh) atp = 18; else if (taxableRoomBase / Math.max(roomsCount * nights, 1) > minThresh) atp = parseNumber(gstData?.gstPrice) || 12; else atp = 0; gt = (taxableRoomBase * atp) / 100; tl = atp ? `GST (${atp}%)` : "No GST"; }
     const discountedRoomGross = Math.max(bt + gt - Math.min(Math.max(rd, 0), Math.max(bt + gt, 0)), 0);
     const foodTotal = selectedFoodTotal;
     const finalTotal = discountedRoomGross + foodTotal;
@@ -669,6 +743,7 @@ const HotelDetails = ({ navigation, route }) => {
       finalTotal,
       couponApplied: rd > 0,
       perNight: pn,
+      taxablePerNight: taxableRoomBase / Math.max(roomsCount * nights, 1),
       appliedTaxPercent: atp,
       taxLabel: tl,
     };
@@ -677,11 +752,11 @@ const HotelDetails = ({ navigation, route }) => {
   const getRoomOfferDisplayDiscount = useCallback((room, np) => { const ed = parseNumber(room?.__pricing?.offerDiscount); if (ed > 0) return ed; return Math.max(parseNumber(room?.__pricing?.originalPrice) - parseNumber(np), 0); }, []);
 
   useEffect(() => {
-    if (!pricing?.perNight) return;
-    if (lastGstQueryRef.current === pricing.perNight && gstData) return;
-    lastGstQueryRef.current = pricing.perNight;
-    dispatch(getGstForHotelData({ type: "Hotel", gstThreshold: pricing.perNight }));
-  }, [dispatch, pricing?.perNight, gstData]);
+    if (!pricing?.taxablePerNight) return;
+    if (lastGstQueryRef.current === pricing.taxablePerNight && gstData) return;
+    lastGstQueryRef.current = pricing.taxablePerNight;
+    dispatch(getGstForHotelData({ type: "Hotel", gstThreshold: pricing.taxablePerNight }));
+  }, [dispatch, pricing?.taxablePerNight, gstData]);
 
   const navigateToHomeScreen = useCallback(() => {
     const p = navigation?.getParent?.();
@@ -1614,6 +1689,25 @@ const HotelDetails = ({ navigation, route }) => {
       </Modal>
 
       {/* ── DATE PICKER MODAL ───────────────────────────────────────── */}
+      {/* Booking API progress doodle */}
+      <BookingLoadingModal visible={bookingStatus === "loading"} />
+      <Modal animationType="fade" transparent visible={false} onRequestClose={() => {}} statusBarTranslucent>
+        <View style={{ flex: 1, backgroundColor: "rgba(14,27,53,0.62)", alignItems: "center", justifyContent: "center", paddingHorizontal: 28 }}>
+          <View style={{ width: "100%", maxWidth: 330, backgroundColor: C.cream, borderRadius: 26, borderWidth: 2, borderColor: C.navy, borderStyle: "dashed", paddingHorizontal: 24, paddingVertical: 28, alignItems: "center", shadowColor: C.navy, shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 12 }}>
+            <View style={{ width: 76, height: 76, borderRadius: 38, backgroundColor: C.goldLight, borderWidth: 2, borderColor: C.navy, alignItems: "center", justifyContent: "center", transform: [{ rotate: "-7deg" }] }}>
+              <Ionicons name="pencil-outline" size={38} color={C.navy} />
+              <View style={{ position: "absolute", width: 10, height: 10, borderRadius: 5, backgroundColor: C.green, top: 7, right: 7 }} />
+            </View>
+            <Text style={{ marginTop: 18, color: C.navy, fontSize: 19, fontWeight: "900", textAlign: "center" }}>Please wait!</Text>
+            <Text style={{ marginTop: 8, color: C.text2, fontSize: 14, lineHeight: 21, fontWeight: "700", textAlign: "center" }}>We are creating your booking</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 20, gap: 8 }}>
+              <ActivityIndicator size="small" color={C.gold} />
+              <Text style={{ color: C.slate5, fontSize: 12, fontWeight: "700" }}>Please don’t close the app</Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal animationType="slide" transparent visible={showDateModal} onRequestClose={() => setShowDateModal(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}>
           <View style={{ backgroundColor: C.white, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20 }}>

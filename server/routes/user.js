@@ -2,13 +2,15 @@ const express = require('express');
 const router = express.Router();
 const { upload } = require('../aws/upload');
 const userController = require('../controllers/user');
-const { getUserDefaultCoupon } = require('../controllers/coupons/coupon');
+const { getUserDefaultCoupon, applyCoupon } = require('../controllers/coupons/coupon');
 
 router.get('/account/self-delete/find', userController.findUserForSelfDelete);
 router.delete('/account/self-delete', userController.deleteUserAccountSelfService);
 router.post('/Signup', upload, userController.createSignup);
 // Backward-compatible path used by the existing customer frontend.
 router.post('/user-coupon/get-default-coupon/user', getUserDefaultCoupon);
+// Legacy app alias: keep it on the same unified coupon validation flow.
+router.patch('/user-coupon/apply/a/coupon-to-room/user', applyCoupon);
 router.get('/get/:userId', userController.getUserById);
 router.get('/get/user/by/query', userController.findUser);
 router.post('/signIn', userController.signIn);
