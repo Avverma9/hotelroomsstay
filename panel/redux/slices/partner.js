@@ -12,6 +12,7 @@ const getListFromPayload = (payload) => {
 const getPartnerFromPayload = (payload) => {
   if (payload?.data && !Array.isArray(payload.data)) return payload.data
   if (payload?.partner) return payload.partner
+  if (payload?.created) return payload.created
   return payload
 }
 

@@ -12,7 +12,6 @@ const SKIP_PATH_PREFIXES = [
   '/login/dashboard/user',
   '/forgot-password/dashboard/user',
   '/change-password/dashboard/user',
-  '/create/dashboard/user',
   '/signup',
   '/signIn',
   '/signIn/google',

@@ -9,6 +9,7 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
   MessageSquareMore,
   PencilLine,
   Plus,
@@ -458,10 +459,17 @@ function Partner() {
   const [submitting, setSubmitting] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [openActionMenuId, setOpenActionMenuId] = useState(null)
+  const [successMessage, setSuccessMessage] = useState('')
 
   useEffect(() => {
     dispatch(getAllPartners())
   }, [dispatch])
+
+  useEffect(() => {
+    if (!successMessage) return undefined
+    const timer = window.setTimeout(() => setSuccessMessage(''), 4000)
+    return () => window.clearTimeout(timer)
+  }, [successMessage])
 
   const masterFilterFields = useMemo(
     () => [
@@ -594,7 +602,8 @@ function Partner() {
       const formData = new FormData()
       appendPartnerFormData(formData, values, true)
 
-      await dispatch(addPartner(formData)).unwrap()
+      const response = await dispatch(addPartner(formData)).unwrap()
+      setSuccessMessage(response?.message || 'Partner created successfully.')
       closeDialog()
     } catch (submitError) {
       setSubmitting(false)
@@ -722,6 +731,13 @@ function Partner() {
                 >
                   Dismiss
                 </button>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="mb-5 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                <CheckCircle2 size={18} />
+                <span>{successMessage}</span>
               </div>
             )}
 

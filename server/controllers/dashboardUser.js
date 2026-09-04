@@ -95,10 +95,10 @@ const registerUser = async (req, res) => {
       pinCode,
       address,
     } = req.body;
+    // The caller's access to the partner-management route is validated by the
+    // global auth/route-access middleware.  The selected role is the role of
+    // the new account, not the role required to create it.
     const normalizedRole = String(role || "Rider").trim() || "Rider";
-    if (normalizedRole !== "Rider") {
-      return res.status(403).json({ message: "Only Rider accounts can register from this portal." });
-    }
     const emailExist = await Dashboard.findOne({ email: email });
     const mobileExist = await Dashboard.findOne({ mobile: mobile });
     if (emailExist) {
@@ -130,8 +130,13 @@ Email: ${email}
 Please log in using the password you set during registration.
 You can access the partner portal by clicking the button below.`;
     const link = process.env.ADMIN_PANEL;
-    await sendCustomEmail({ email, subject, message, link });
-    res.status(201).json({ message: "Registration Done", created });
+    // Account creation must not be reported as failed just because the
+    // welcome email provider is temporarily unavailable. The account is
+    // already persisted at this point.
+    sendCustomEmail({ email, subject, message, link }).catch((emailError) => {
+      console.error("Partner created, but welcome email failed:", emailError.message);
+    });
+    res.status(201).json({ message: "Partner created successfully", created });
   } catch (error) {
     return res.status(500).json({ message: "Internal server error" });
   }

@@ -20,7 +20,6 @@ const SKIP_PATH_PREFIXES = [
   "/login/dashboard/user",
   "/forgot-password/dashboard/user",
   "/change-password/dashboard/user",
-  "/create/dashboard/user",
   "/get/",
   "/additional/route-permissions/",
   "/additional/sidebar-links/",
@@ -85,8 +84,12 @@ const routeAccess = async (req, res, next) => {
     }
 
     // Use the panel page route sent by the frontend (x-page-route header).
-    // If header is absent (non-panel clients), skip the check entirely.
-    const pageRoute = req.headers["x-page-route"];
+    // Partner creation is a protected panel operation.  If a non-panel client
+    // omits the page header, check it against the canonical partner route
+    // instead of bypassing route permissions. The partner directory is
+    // mounted at /user in the panel.
+    const pageRoute = req.headers["x-page-route"] ||
+      (apiPath === "/create/dashboard/user" ? "/user" : "");
     if (!pageRoute) {
       return next();
     }
