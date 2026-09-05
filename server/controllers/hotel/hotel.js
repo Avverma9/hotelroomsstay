@@ -336,7 +336,7 @@ const applyMonthlyPricing = async (hotels, checkInDate, checkOutDate) => {
 
 const getHotelsByFilters = async (req, res) => {
   try {
-    const { search, hotelName, city, state, isAccepted, minPrice, maxPrice, checkInDate, checkOutDate, page = 1, limit = 10, sortBy = "price", sortOrder = "asc" } = req.query;
+    const { search, hotelName, hotelEmail, city, state, isAccepted, minPrice, maxPrice, checkInDate, checkOutDate, page = 1, limit = 10, sortBy = "price", sortOrder = "asc" } = req.query;
 
     let query = {};
     let andConditions = [];
@@ -349,6 +349,12 @@ const getHotelsByFilters = async (req, res) => {
     }
 
     if (hotelName) andConditions.push({ hotelName: { $regex: escapeRegex(hotelName), $options: "i" } });
+    if (hotelEmail) {
+      const normalizedEmail = String(hotelEmail).trim();
+      andConditions.push({
+        hotelEmail: { $regex: `^${escapeRegex(normalizedEmail)}$`, $options: "i" },
+      });
+    }
     if (city) andConditions.push({ city: { $regex: escapeRegex(city), $options: "i" } });
     if (state) andConditions.push({ state: { $regex: escapeRegex(state), $options: "i" } });
     

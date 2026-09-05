@@ -102,6 +102,10 @@ const resolveBookingActor = async (req) => {
 
 const sendCancellationOtp = async (req, res) => {
   try {
+    if (String(req.user?.role || "").trim().toLowerCase() === "pms") {
+      return res.status(403).json({ message: "PMS users cannot cancel bookings." });
+    }
+
     const { bookingId } = req.params;
     const booking = await bookingModel.findOne({ bookingId });
     if (!booking) {
@@ -130,6 +134,10 @@ const sendCancellationOtp = async (req, res) => {
 
 const verifyCancellationOtpAndCancel = async (req, res) => {
   try {
+    if (String(req.user?.role || "").trim().toLowerCase() === "pms") {
+      return res.status(403).json({ message: "PMS users cannot cancel bookings." });
+    }
+
     const { bookingId } = req.params;
     const { otp, cancellationReason = "" } = req.body;
 

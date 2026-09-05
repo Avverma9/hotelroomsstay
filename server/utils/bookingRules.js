@@ -234,6 +234,26 @@ function validateStatusTransition(currentStatus, newStatus, userRole) {
     };
   }
 
+  // PMS users can operate the stay lifecycle, but cannot cancel bookings.
+  if (role === "pms") {
+    if (currentStatus === "Pending" && newStatus === "Confirmed") {
+      return { allowed: true, reason: null };
+    }
+    if (currentStatus === "Confirmed" && ["Checked-in", "No-Show"].includes(newStatus)) {
+      return { allowed: true, reason: null };
+    }
+    if (currentStatus === "Checked-in" && newStatus === "Checked-out") {
+      return { allowed: true, reason: null };
+    }
+    if (newStatus === "Cancelled") {
+      return { allowed: false, reason: "PMS users cannot cancel bookings." };
+    }
+    return {
+      allowed: false,
+      reason: "PMS users can only update Pending to Confirmed, Confirmed to Checked-in/No-Show, or Checked-in to Checked-out.",
+    };
+  }
+
   // Regular users can only cancel their own Pending/Confirmed bookings
   if (role === "user" || role === "") {
     if (["Pending", "Confirmed"].includes(currentStatus) && newStatus === "Cancelled") {

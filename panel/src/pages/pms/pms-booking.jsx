@@ -232,7 +232,8 @@ const getEditableStatusOptions = (currentStatus, role = '') => {
 
   // PMS role: Confirmed → Checked-in → Checked-out only
   if (pmsRoles.has(normalizedRole)) {
-    if (normalizedStatus === 'confirmed') return ['Confirmed', 'Checked-in']
+    if (normalizedStatus === 'pending') return ['Pending', 'Confirmed']
+    if (normalizedStatus === 'confirmed') return ['Confirmed', 'Checked-in', 'No-Show']
     if (normalizedStatus === 'checked-in') return ['Checked-in', 'Checked-out']
     return [getStatusLabel(currentStatus || 'Pending')]
   }
