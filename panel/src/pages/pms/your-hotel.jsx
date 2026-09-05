@@ -8,7 +8,7 @@ function YourHotel() {
 
   const fixedFilters = useMemo(
     () => ({
-      hotelOwnerEmail: user?.email || '',
+      hotelEmail: user?.email || '',
     }),
     [user?.email],
   )

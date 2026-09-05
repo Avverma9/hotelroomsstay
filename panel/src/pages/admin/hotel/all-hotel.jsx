@@ -165,7 +165,14 @@ function AllHotels({
     }
   }, [autoFetchKey, dispatch, enableMasterFilter, fixedFilters, hasFixedFilters])
 
-  const normalizedHotels = useMemo(() => hotels.map(normalizeHotel), [hotels])
+  const normalizedHotels = useMemo(() => {
+    const normalized = hotels.map(normalizeHotel)
+    const fixedEmail = String(fixedFilters?.hotelEmail || '').trim().toLowerCase()
+
+    if (!fixedEmail) return normalized
+
+    return normalized.filter((hotel) => String(hotel.email || '').trim().toLowerCase() === fixedEmail)
+  }, [fixedFilters?.hotelEmail, hotels])
   const sourceHotels = useMemo(() => {
     const baseHotels = allHotels?.length ? allHotels : hotels
     return baseHotels.map(normalizeHotel)
@@ -322,7 +329,11 @@ function AllHotels({
 
   const handleResetFilters = () => {
     setFilterValues(createEmptyFilters())
-    dispatch(getAllHotels())
+    if (enableMasterFilter || !hasFixedFilters) {
+      dispatch(getAllHotels())
+    } else {
+      dispatch(getHotelsByFilters(fixedFilters))
+    }
   }
 
   const handleRefresh = () => {
