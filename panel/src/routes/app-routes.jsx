@@ -72,6 +72,7 @@ export const APP_ROUTES = [
   { path: '/manage-route-access', Component: ManageRouteAccess },
   { path: '/messenger', Component: Messenger },
   { path: '/your-bookings', Component: PmsBooking },
+  { path: '/your-booking', Component: PmsBooking },
   { path: '/panel-booking', Component: PanelBooking },
   { path: '/your-hotels', Component: YourHotel },
   { path: '/your-hotels/:id', Component: YourHotelDetails },

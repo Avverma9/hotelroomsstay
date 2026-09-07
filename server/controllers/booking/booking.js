@@ -280,6 +280,14 @@ const createBooking = async (req, res) => {
     hotelOwnerName = hotelOwnerName || payloadHotelDetails.hotelOwnerName;
     destination = destination || payloadHotelDetails.destination || payloadHotelDetails.hotelCity;
 
+    // Panel bookings may send a flat hotel object. Resolve the city from the
+    // selected hotel as a final fallback so missing UI mapping does not block
+    // an otherwise valid booking.
+    if (!hotelCity && !destination && hotelId) {
+      const selectedHotel = await hotelModel.findOne({ hotelId }).select("city destination").lean();
+      hotelCity = selectedHotel?.city || selectedHotel?.destination || "";
+    }
+
     hotelCity = String(hotelCity || destination || "").trim();
     if (!hotelCity) {
       return res.status(400).json({ success: false, message: "Hotel city is required" });

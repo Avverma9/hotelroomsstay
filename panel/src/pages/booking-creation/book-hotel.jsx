@@ -424,10 +424,10 @@ export default function BookHotel() {
       },
       hotelDetails: {
         hotelId: hotelData?.hotelId || hotelData?._id,
-        hotelName: basicInfo?.name || storedHotel?.hotelName,
-        hotelEmail: contacts?.email,
-        hotelCity: location?.city,
-        hotelOwnerName: basicInfo?.owner,
+        hotelName: basicInfo?.name || hotelData?.hotelName || hotelData?.name || storedHotel?.hotelName,
+        hotelEmail: contacts?.email || hotelData?.hotelEmail || hotelData?.email || storedHotel?.email,
+        hotelCity: location?.city || hotelData?.city || hotelData?.hotelCity || hotelData?.destination || storedHotel?.city || storedHotel?.destination,
+        hotelOwnerName: basicInfo?.owner || hotelData?.hotelOwnerName || hotelData?.owner,
       },
       numRooms: roomCount,
       foodDetails: selectedFoods.map(f => ({
@@ -457,7 +457,7 @@ export default function BookHotel() {
       gstPrice: totals.gstPercent,
       price: totals.total,
       bookingSource: 'Panel',
-      destination: location?.city || storedHotel?.destination || '',
+      destination: location?.city || hotelData?.city || hotelData?.hotelCity || hotelData?.destination || storedHotel?.city || storedHotel?.destination || '',
     }
 
     dispatch(
@@ -1020,7 +1020,7 @@ export default function BookHotel() {
               onClick={() => {
                 setShowSuccessPopup(false)
                 setBookingResponse(null)
-                navigate('/booking-creation')
+                navigate('/your-booking')
               }}
               className="w-full bg-slate-900 text-white px-6 py-3 rounded-xl text-sm font-black uppercase tracking-wider hover:bg-slate-800 transition-colors"
             >
