@@ -3,9 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  FlatList,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -90,60 +88,6 @@ function HotelFoodDoodles() {
   );
 }
 
-function CountryCodePicker({ selectedCode, onSelect, disabled }) {
-  const [open, setOpen] = useState(false);
-  const selected = COUNTRY_CODES.find((c) => c.code === selectedCode);
-
-  return (
-    <>
-      <TouchableOpacity
-        style={[styles.countryTrigger, disabled && { opacity: 0.5 }]}
-        disabled={disabled}
-        onPress={() => setOpen(true)}
-        activeOpacity={0.75}
-      >
-        <Text style={{ fontSize: 18 }}>{selected?.flag}</Text>
-        <Text style={styles.countryTriggerText}>{selectedCode}</Text>
-        <Ionicons name="chevron-down" size={12} color={THEME.textMuted} />
-      </TouchableOpacity>
-
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setOpen(false)}>
-          <View style={styles.countryModalCard}>
-            <View style={styles.countryModalHeader}>
-              <Text style={styles.countryModalTitle}>Select Country</Text>
-              <TouchableOpacity onPress={() => setOpen(false)} style={styles.modalCloseBtn}>
-                <Ionicons name="close" size={16} color={THEME.textMain} />
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={COUNTRY_CODES}
-              keyExtractor={(item) => item.code}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.countryOption, item.code === selectedCode && styles.countryOptionSelected]}
-                  onPress={() => {
-                    onSelect(item.code);
-                    setOpen(false);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={{ fontSize: 20 }}>{item.flag}</Text>
-                  <Text style={styles.countryOptionName}>{item.name}</Text>
-                  <Text style={styles.countryOptionCode}>{item.code}</Text>
-                  {item.code === selectedCode && (
-                    <Ionicons name="checkmark-circle" size={18} color={THEME.primary} />
-                  )}
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </>
-  );
-}
-
 function SixDigitOTP({ value, onComplete, disabled }) {
   const [digits, setDigits] = useState(Array(6).fill(""));
   const refs = useRef([]);
@@ -196,11 +140,8 @@ export default function LoginPage({ navigation }) {
   const { signIn } = useAuth();
 
   const [mode, setMode] = useState("password");
-  const [authMethod, setAuthMethod] = useState("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [phone, setPhone] = useState("");
-  const [countryCode, setCountryCode] = useState("+91");
   const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -256,22 +197,13 @@ export default function LoginPage({ navigation }) {
   };
 
   const requestOtp = async () => {
-    if (authMethod === "email" && !email) {
+    if (!email) {
       toast("error", "Required", "Enter your email.");
-      return;
-    }
-    if (authMethod === "mobile" && !phone) {
-      toast("error", "Required", "Enter your mobile number.");
       return;
     }
     setLoading(true);
     try {
-      let res;
-      if (authMethod === "email") {
-        res = await axios.post(`${baseURL}/mail/send-otp`, { email, loginType: "user" });
-      } else {
-        res = await axios.post(`${baseURL}/send-otp`, { phoneNumber: `${countryCode}${phone}` });
-      }
+      const res = await axios.post(`${baseURL}/mail/send-otp`, { email, loginType: "user" });
       toast("success", "OTP Sent", res.data?.message || "Verification code dispatched.");
       setOtpSent(true);
       setResendTimer(60);
@@ -289,13 +221,7 @@ export default function LoginPage({ navigation }) {
     }
     setLoading(true);
     try {
-      let res;
-      if (authMethod === "email") {
-        res = await axios.post(`${baseURL}/mail/verify-otp`, { email, otp, loginType: "user" });
-      } else {
-        const fp = `${countryCode}${phone}`;
-        res = await axios.post(`${baseURL}/verify-otp`, { phoneNumber: fp, mobile: fp, code: otp });
-      }
+      const res = await axios.post(`${baseURL}/mail/verify-otp`, { email, otp, loginType: "user" });
       const auth = extractAuth(res);
       if (!auth.token || !auth.userId) throw new Error("Missing credentials.");
       await signIn(auth.token, auth.userId, auth.email, res.data?.refreshToken);
@@ -340,7 +266,8 @@ export default function LoginPage({ navigation }) {
                   <MaterialCommunityIcons name="office-building" size={26} color="#FFFFFF" />
                 </LinearGradient>
               </View>
-              <Text style={styles.brandTitle}>HotelRoomsStay</Text>
+              <Text style={styles.brandShortName}>HRS</Text>
+              <Text style={styles.brandTitle}>Hotelroomstay</Text>
               <Text style={styles.brandSubtitle}>STAY & DINE EXPERIENCES</Text>
             </Animated.View>
 
@@ -355,7 +282,7 @@ export default function LoginPage({ navigation }) {
               <View style={styles.segmentContainer}>
                 {[
                   { key: "password", label: "Password", icon: "lock-closed-outline" },
-                  { key: "otp", label: "Fast OTP", icon: "phone-portrait-outline" },
+                  { key: "otp", label: "Email OTP", icon: "mail-outline" },
                 ].map((item) => (
                   <TouchableOpacity
                     key={item.key}
@@ -378,34 +305,8 @@ export default function LoginPage({ navigation }) {
                 ))}
               </View>
 
-              {/* OTP DELIVERY SELECTOR */}
-              {mode === "otp" && !otpSent && (
-                <View style={styles.otpPillWrap}>
-                  {[
-                    { key: "email", label: "Email Passcode", icon: "mail-outline" },
-                    { key: "mobile", label: "SMS Passcode", icon: "chatbubble-ellipses-outline" },
-                  ].map((m) => (
-                    <TouchableOpacity
-                      key={m.key}
-                      style={[styles.otpPill, authMethod === m.key && styles.otpPillActive]}
-                      onPress={() => setAuthMethod(m.key)}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons
-                        name={m.icon}
-                        size={14}
-                        color={authMethod === m.key ? THEME.primary : THEME.textMuted}
-                      />
-                      <Text style={[styles.otpPillText, authMethod === m.key && styles.otpPillTextActive]}>
-                        {m.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-
               {/* EMAIL FIELD */}
-              {(mode === "password" || authMethod === "email") && (
+              {(mode === "password" || mode === "otp") && (
                 <View style={styles.fieldBlock}>
                   <Text style={styles.label}>EMAIL ADDRESS</Text>
                   <View style={styles.inputWrap}>
@@ -421,29 +322,6 @@ export default function LoginPage({ navigation }) {
                       style={styles.input}
                       selectionColor={THEME.primary}
                     />
-                  </View>
-                </View>
-              )}
-
-              {/* MOBILE FIELD */}
-              {mode === "otp" && authMethod === "mobile" && (
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>MOBILE NUMBER</Text>
-                  <View style={styles.phoneRow}>
-                    <CountryCodePicker selectedCode={countryCode} onSelect={setCountryCode} disabled={otpSent} />
-                    <View style={[styles.inputWrap, { flex: 1 }]}>
-                      <Ionicons name="call-outline" size={17} color={THEME.textSubtle} style={styles.inputIcon} />
-                      <TextInput
-                        value={phone}
-                        onChangeText={(t) => setPhone(t.replace(/[^\d]/g, ""))}
-                        editable={!otpSent}
-                        placeholder="Mobile number"
-                        placeholderTextColor={THEME.textSubtle}
-                        keyboardType="phone-pad"
-                        style={styles.input}
-                        selectionColor={THEME.primary}
-                      />
-                    </View>
                   </View>
                 </View>
               )}
@@ -480,7 +358,7 @@ export default function LoginPage({ navigation }) {
                   <View style={styles.otpMetaRow}>
                     <Text style={styles.label}>ENTER 6-DIGIT CODE</Text>
                     <Text style={styles.targetInfo}>
-                      {authMethod === "email" ? email : `${countryCode} ${phone}`}
+                      {email}
                     </Text>
                   </View>
                   <SixDigitOTP disabled={loading} value={otp} onComplete={setOtp} />
@@ -549,7 +427,7 @@ export default function LoginPage({ navigation }) {
 
             {/* BRAND FOOTER */}
             <Animated.Text style={[styles.pageFooter, { opacity: fadeAnim }]}>
-              © 2026 HotelRoomsStay • Curated Hospitality
+              © 2026 Hotelroomstay • Curated Hospitality
             </Animated.Text>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -594,6 +472,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: THEME.textMain,
     letterSpacing: -0.5,
+  },
+  brandShortName: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: THEME.primary,
+    letterSpacing: 3,
+    marginBottom: 1,
   },
   brandSubtitle: {
     fontSize: 10,
