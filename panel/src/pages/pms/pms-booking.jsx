@@ -42,6 +42,7 @@ import {
 import Breadcrumb from '../../components/breadcrumb'
 import MasterFilter from '../../components/master-filter'
 import { formatDate, formatDateTime, formatCurrency, formatDateInput } from '../../utils/format'
+import { getPartnerById } from '../../../redux/slices/partner'
 
 const statusOptions = [
   'Pending',
@@ -288,7 +289,37 @@ const getContactFromPerson = (person) => {
 
 // Enterprise Grade Vertical Timeline
 const StatusTimeline = ({ history, currentUpdatedAt, currentUserName }) => {
+  const dispatch = useDispatch()
   const [selectedActor, setSelectedActor] = useState(null)
+  const [actorContact, setActorContact] = useState({ email: '', mobile: '' })
+  const [actorLoading, setActorLoading] = useState(false)
+
+  const openActorDetails = async (entry, index) => {
+    const fallbackContact = getContactFromPerson(entry.changedBy)
+    setSelectedActor(index)
+    setActorContact(fallbackContact)
+
+    const actorId = entry?.changedBy?.id
+    if (!actorId) return
+
+    setActorLoading(true)
+    try {
+      const partner = await dispatch(getPartnerById(actorId)).unwrap()
+      setActorContact({
+        email: String(partner?.email || partner?.emailAddress || fallbackContact.email || '').trim(),
+        mobile: String(partner?.mobile || partner?.phone || partner?.phoneNumber || fallbackContact.mobile || '').trim(),
+      })
+    } catch {
+      // Keep contact data already present in the booking history if lookup fails.
+    } finally {
+      setActorLoading(false)
+    }
+  }
+
+  const closeActorDetails = () => {
+    setSelectedActor(null)
+    setActorLoading(false)
+  }
   if (!history || history.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-10">
@@ -343,7 +374,7 @@ const StatusTimeline = ({ history, currentUpdatedAt, currentUserName }) => {
                 <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setSelectedActor(selectedActor === index ? null : index)}
+                  onClick={() => selectedActor === index ? closeActorDetails() : openActorDetails(entry, index)}
                   className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200/60 transition hover:bg-indigo-50 hover:text-indigo-700"
                   aria-label={`View contact details for ${getDisplayNameFromPerson(entry.changedBy, currentUserName || 'System Auto')}`}
                 >
@@ -353,12 +384,18 @@ const StatusTimeline = ({ history, currentUpdatedAt, currentUserName }) => {
                 {selectedActor === index && (() => {
                   const contact = getContactFromPerson(entry.changedBy)
                   return (
-                    <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl">
-                      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Updated by</p>
-                      <p className="text-sm font-bold text-slate-900">{getDisplayNameFromPerson(entry.changedBy, currentUserName || 'System Auto')}</p>
-                      <div className="mt-3 space-y-2 text-xs text-slate-600">
-                        <div className="flex items-center gap-2"><Mail size={13} className="text-indigo-500" />{contact.email || 'Email not available'}</div>
-                        <div className="flex items-center gap-2"><Phone size={13} className="text-indigo-500" />{contact.mobile || 'Mobile not available'}</div>
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={closeActorDetails}>
+                      <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]" />
+                      <div className="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-2xl" onClick={(event) => event.stopPropagation()}>
+                        <button type="button" onClick={closeActorDetails} aria-label="Close contact details" className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
+                          <X size={18} />
+                        </button>
+                        <p className="mb-1 text-xs font-bold uppercase tracking-wider text-indigo-500">Updated by</p>
+                        <p className="pr-8 text-lg font-bold text-slate-900">{getDisplayNameFromPerson(entry.changedBy, currentUserName || 'System Auto')}</p>
+                        <div className="mt-5 space-y-3 text-sm text-slate-600">
+                          <div className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2.5"><Mail size={16} className="text-indigo-500" /><span className="break-all">{actorLoading ? 'Loading email…' : (actorContact.email || 'Email not available')}</span></div>
+                          <div className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2.5"><Phone size={16} className="text-indigo-500" /><span>{actorLoading ? 'Loading mobile…' : (actorContact.mobile || 'Mobile not available')}</span></div>
+                        </div>
                       </div>
                     </div>
                   )

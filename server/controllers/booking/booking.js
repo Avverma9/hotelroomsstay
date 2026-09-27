@@ -110,18 +110,30 @@ const enrichStatusHistoryActors = async (booking) => {
   const history = Array.isArray(booking?.statusHistory) ? booking.statusHistory : [];
   const dashboardIds = history
     .filter((entry) => entry?.changedBy?.type === "dashboard_user" && entry?.changedBy?.id)
-    .map((entry) => String(entry.changedBy.id));
+    .map((entry) => String(entry.changedBy.id))
+    .filter((id) => mongoose.Types.ObjectId.isValid(id));
+  const dashboardNames = history
+    .filter((entry) => entry?.changedBy?.type === "dashboard_user" && entry?.changedBy?.name)
+    .map((entry) => String(entry.changedBy.name).trim())
+    .filter(Boolean);
 
-  if (!dashboardIds.length) return booking;
+  if (!dashboardIds.length && !dashboardNames.length) return booking;
 
   const actors = await dashboardUserModel
-    .find({ _id: { $in: dashboardIds } })
+    .find({
+      $or: [
+        ...(dashboardIds.length ? [{ _id: { $in: dashboardIds } }] : []),
+        ...(dashboardNames.length ? [{ name: { $in: dashboardNames } }] : []),
+      ],
+    })
     .select("name email mobile role")
     .lean();
   const actorMap = new Map(actors.map((actor) => [String(actor._id), actor]));
+  const actorNameMap = new Map(actors.map((actor) => [String(actor.name || '').trim().toLowerCase(), actor]));
 
   booking.statusHistory = history.map((entry) => {
-    const actor = actorMap.get(String(entry?.changedBy?.id || ""));
+    const actor = actorMap.get(String(entry?.changedBy?.id || ""))
+      || actorNameMap.get(String(entry?.changedBy?.name || '').trim().toLowerCase());
     if (!actor) return entry;
     return {
       ...entry,
