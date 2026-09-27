@@ -354,10 +354,19 @@ exports.getAllCars = async (req, res) => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(100, Math.max(5, Number(req.query.limit) || 20));
     const skip = (page - 1) * limit;
+    const query = req.query.availableOnly === 'true'
+      ? {
+          $and: [
+            { $or: [{ isAvailable: { $ne: false } }, { isAvailable: { $exists: false } }] },
+            { $or: [{ isRunning: { $ne: false } }, { isRunning: { $exists: false } }] },
+            { $or: [{ runningStatus: { $exists: false } }, { runningStatus: { $not: /unavailable|not available/i } }] },
+          ],
+        }
+      : {};
 
     const [total, data] = await Promise.all([
-      Car.countDocuments(),
-      Car.find().skip(skip).limit(limit).lean(),
+      Car.countDocuments(query),
+      Car.find(query).skip(skip).limit(limit).lean(),
     ]);
 
     return res.status(200).json({ data: await withCabPricing(data), total, page, limit });
@@ -419,8 +428,17 @@ exports.filterCar = async (req, res) => {
       dropP,
       pickupD,
       dropD,
+      availableOnly,
     } = req.query;
     const query = {};
+
+    if (availableOnly === 'true') {
+      query.$and = [
+        { $or: [{ isAvailable: { $ne: false } }, { isAvailable: { $exists: false } }] },
+        { $or: [{ isRunning: { $ne: false } }, { isRunning: { $exists: false } }] },
+        { $or: [{ runningStatus: { $exists: false } }, { runningStatus: { $not: /unavailable|not available/i } }] },
+      ];
+    }
 
     if (make) query.make = make;
     if (model) query.model = model;

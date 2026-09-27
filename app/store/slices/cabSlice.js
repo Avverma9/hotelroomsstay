@@ -15,10 +15,17 @@ const getCabId = (cab) =>
   ).trim();
 
 const normalizeCabList = (payload) => {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.cars)) return payload.cars;
-  return [];
+  const items = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.cars)
+        ? payload.cars
+        : [];
+  return items.filter((cab) => {
+    const status = String(cab?.runningStatus || '').trim().toLowerCase();
+    return cab?.isAvailable !== false && cab?.isRunning !== false && !status.includes('unavailable') && !status.includes('not available');
+  });
 };
 
 const normalizeCabBookingList = (payload) => {
@@ -117,7 +124,7 @@ export const fetchAllCabs = createAsyncThunk(
   "cab/fetchAllCabs",
   async (_, { rejectWithValue }) => {
     try {
-      const response = await api.get("/travel/get-all-car");
+      const response = await api.get("/travel/get-all-car", { params: { availableOnly: true, page: 1, limit: 100 } });
       return {
         items: normalizeCabList(response?.data),
         message: response?.data?.message || null,
@@ -135,6 +142,7 @@ export const filterCabsByQuery = createAsyncThunk(
   async (params = {}, { rejectWithValue }) => {
     try {
       const queryParams = sanitizeCabFilterParams(params);
+      queryParams.availableOnly = true;
       const response = await api.get("/travel/filter-car/by-query", {
         params: queryParams,
       });

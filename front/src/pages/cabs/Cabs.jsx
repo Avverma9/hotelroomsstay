@@ -331,6 +331,7 @@ export default function CarsPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       let result = [...cabs];
+      result = result.filter(c => resolveCabBookingState(c).canBook);
       
       // Search Params
       if (searchParams.from) result = result.filter(c => c.pickupP?.toLowerCase().includes(searchParams.from.toLowerCase()));

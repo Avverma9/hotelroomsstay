@@ -28,7 +28,7 @@ export const getCarById = createAsyncThunk('car/getCarById', async (id, { reject
 
 export const getAllCars = createAsyncThunk('car/getAll', async ({ page = 1, limit = 20 } = {}, { rejectWithValue }) => {
   try {
-    const response = await apiClient.get(`/travel/get-all-car?page=${page}&limit=${limit}`);
+    const response = await apiClient.get(`/travel/get-all-car?page=${page}&limit=${limit}&availableOnly=true`);
     // expect { data, total, page, limit }
     return response.data;
   } catch (error) {
@@ -40,7 +40,7 @@ export const getAllCars = createAsyncThunk('car/getAll', async ({ page = 1, limi
 
 export const filterCar = createAsyncThunk('car/filterCar', async ({ query, value }, { rejectWithValue }) => {
   try {
-    const response = await apiClient.get(`/travel/filter-car/by-query?${query}=${value}`);
+    const response = await apiClient.get(`/travel/filter-car/by-query?${query}=${value}&availableOnly=true`);
     return response.data;
   } catch (error) {
     const errorMessage = error.response?.data?.message || error.message;
