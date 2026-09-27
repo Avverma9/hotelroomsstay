@@ -161,6 +161,8 @@ const bookingSchema = new mongoose.Schema(
         changedBy: {
           id: String,
           name: String,
+          email: String,
+          mobile: String,
           role: String,
           type: {
             type: String,

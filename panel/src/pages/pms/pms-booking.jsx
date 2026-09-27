@@ -12,6 +12,7 @@ import {
   Users,
   MapPin,
   Mail,
+  Phone,
   ChevronDown,
   PencilLine,
   X,
@@ -277,8 +278,17 @@ const getDisplayNameFromPerson = (person, fallbackName = 'System Auto') => {
   return fallbackName
 }
 
+const getContactFromPerson = (person) => {
+  if (!person || typeof person !== 'object') return { email: '', mobile: '' }
+  return {
+    email: String(person.email || person.emailAddress || '').trim(),
+    mobile: String(person.mobile || person.phone || person.phoneNumber || person.contactNumber || '').trim(),
+  }
+}
+
 // Enterprise Grade Vertical Timeline
 const StatusTimeline = ({ history, currentUpdatedAt, currentUserName }) => {
+  const [selectedActor, setSelectedActor] = useState(null)
   if (!history || history.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-10">
@@ -330,9 +340,29 @@ const StatusTimeline = ({ history, currentUpdatedAt, currentUserName }) => {
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200/60">
+                <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setSelectedActor(selectedActor === index ? null : index)}
+                  className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200/60 transition hover:bg-indigo-50 hover:text-indigo-700"
+                  aria-label={`View contact details for ${getDisplayNameFromPerson(entry.changedBy, currentUserName || 'System Auto')}`}
+                >
                   <UserCog size={14} className="text-slate-400" />
                   {getDisplayNameFromPerson(entry.changedBy, currentUserName || 'System Auto')}
+                </button>
+                {selectedActor === index && (() => {
+                  const contact = getContactFromPerson(entry.changedBy)
+                  return (
+                    <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl">
+                      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Updated by</p>
+                      <p className="text-sm font-bold text-slate-900">{getDisplayNameFromPerson(entry.changedBy, currentUserName || 'System Auto')}</p>
+                      <div className="mt-3 space-y-2 text-xs text-slate-600">
+                        <div className="flex items-center gap-2"><Mail size={13} className="text-indigo-500" />{contact.email || 'Email not available'}</div>
+                        <div className="flex items-center gap-2"><Phone size={13} className="text-indigo-500" />{contact.mobile || 'Mobile not available'}</div>
+                      </div>
+                    </div>
+                  )
+                })()}
                 </div>
               </div>
               

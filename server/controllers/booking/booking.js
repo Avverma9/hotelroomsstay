@@ -58,6 +58,8 @@ const buildStatusHistoryEntry = ({
   changedBy: {
     id: String(changedBy?.id || ""),
     name: String(changedBy?.name || "Unknown"),
+    email: String(changedBy?.email || ""),
+    mobile: String(changedBy?.mobile || ""),
     role: String(changedBy?.role || ""),
     type: String(changedBy?.type || "user"),
   },
@@ -77,27 +79,62 @@ const resolveBookingActor = async (req) => {
   const actorRole = String(req.user.role || "").trim();
   if (actorRole) {
     const dashboardUser = await dashboardUserModel.findById(req.user.id)
-      .select("name role")
+      .select("name role email mobile")
       .lean();
 
     return {
       id: String(req.user.id || ""),
       name: dashboardUser?.name || "Dashboard User",
+      email: dashboardUser?.email || "",
+      mobile: dashboardUser?.mobile || "",
       role: dashboardUser?.role || actorRole,
       type: "dashboard_user",
     };
   }
 
   const appUser = await userModel.findOne({ userId: req.user.id })
-    .select("userName")
+    .select("userName email mobile")
     .lean();
 
   return {
     id: String(req.user.id || ""),
     name: appUser?.userName || "App User",
+    email: appUser?.email || "",
+    mobile: appUser?.mobile || "",
     role: "User",
     type: "app_user",
   };
+};
+
+const enrichStatusHistoryActors = async (booking) => {
+  const history = Array.isArray(booking?.statusHistory) ? booking.statusHistory : [];
+  const dashboardIds = history
+    .filter((entry) => entry?.changedBy?.type === "dashboard_user" && entry?.changedBy?.id)
+    .map((entry) => String(entry.changedBy.id));
+
+  if (!dashboardIds.length) return booking;
+
+  const actors = await dashboardUserModel
+    .find({ _id: { $in: dashboardIds } })
+    .select("name email mobile role")
+    .lean();
+  const actorMap = new Map(actors.map((actor) => [String(actor._id), actor]));
+
+  booking.statusHistory = history.map((entry) => {
+    const actor = actorMap.get(String(entry?.changedBy?.id || ""));
+    if (!actor) return entry;
+    return {
+      ...entry,
+      changedBy: {
+        ...entry.changedBy,
+        name: entry.changedBy.name || actor.name,
+        email: entry.changedBy.email || actor.email || "",
+        mobile: entry.changedBy.mobile || actor.mobile || "",
+        role: entry.changedBy.role || actor.role || "",
+      },
+    };
+  });
+  return booking;
 };
 
 const sendCancellationOtp = async (req, res) => {
@@ -602,6 +639,8 @@ const getBookingById = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
+
+    await enrichStatusHistoryActors(booking);
 
     return res.status(200).json({
       message: "Booking fetched successfully",
