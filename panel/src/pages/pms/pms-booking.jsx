@@ -280,10 +280,11 @@ const getDisplayNameFromPerson = (person, fallbackName = 'System Auto') => {
 }
 
 const getContactFromPerson = (person) => {
-  if (!person || typeof person !== 'object') return { email: '', mobile: '' }
+  if (!person || typeof person !== 'object') return { email: '', mobile: '', role: '' }
   return {
     email: String(person.email || person.emailAddress || '').trim(),
     mobile: String(person.mobile || person.phone || person.phoneNumber || person.contactNumber || '').trim(),
+    role: String(person.role || '').trim(),
   }
 }
 
@@ -291,7 +292,7 @@ const getContactFromPerson = (person) => {
 const StatusTimeline = ({ history, currentUpdatedAt, currentUserName }) => {
   const dispatch = useDispatch()
   const [selectedActor, setSelectedActor] = useState(null)
-  const [actorContact, setActorContact] = useState({ email: '', mobile: '' })
+  const [actorContact, setActorContact] = useState({ email: '', mobile: '', role: '' })
   const [actorLoading, setActorLoading] = useState(false)
 
   const openActorDetails = async (entry, index) => {
@@ -308,6 +309,7 @@ const StatusTimeline = ({ history, currentUpdatedAt, currentUserName }) => {
       setActorContact({
         email: String(partner?.email || partner?.emailAddress || fallbackContact.email || '').trim(),
         mobile: String(partner?.mobile || partner?.phone || partner?.phoneNumber || fallbackContact.mobile || '').trim(),
+        role: String(partner?.role || fallbackContact.role || '').trim(),
       })
     } catch {
       // Keep contact data already present in the booking history if lookup fails.
@@ -395,6 +397,7 @@ const StatusTimeline = ({ history, currentUpdatedAt, currentUserName }) => {
                         <div className="mt-5 space-y-3 text-sm text-slate-600">
                           <div className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2.5"><Mail size={16} className="text-indigo-500" /><span className="break-all">{actorLoading ? 'Loading email…' : (actorContact.email || 'Email not available')}</span></div>
                           <div className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2.5"><Phone size={16} className="text-indigo-500" /><span>{actorLoading ? 'Loading mobile…' : (actorContact.mobile || 'Mobile not available')}</span></div>
+                          <div className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2.5"><UserCog size={16} className="text-indigo-500" /><span>{actorLoading ? 'Loading role…' : (actorContact.role || 'Role not available')}</span></div>
                         </div>
                       </div>
                     </div>
