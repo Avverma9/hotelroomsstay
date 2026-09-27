@@ -55,9 +55,9 @@ export const getMyCars = createAsyncThunk(
 
 export const getAllCars = createAsyncThunk(
   "car/getAllCars",
-  async (_, { rejectWithValue }) => {
+  async ({ page = 1, limit = 20 } = {}, { rejectWithValue }) => {
     try {
-      const response = await api.get("/travel/get-all-car");
+      const response = await api.get("/travel/get-all-car", { params: { page, limit } });
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || "Failed to fetch cars.");
@@ -327,6 +327,7 @@ export const deleteOwnerAvailability = createAsyncThunk(
 const initialState = {
   // Car data
   cars: [],
+  carsPagination: { total: 0, page: 1, limit: 20 },
   selectedCar: null,
   ownerCars: [],
   filteredCars: [],
@@ -436,6 +437,11 @@ const carSlice = createSlice({
       .addCase(getAllCars.fulfilled, (state, action) => {
         state.loading = false;
         state.cars = action.payload?.data || action.payload || [];
+        state.carsPagination = {
+          total: Number(action.payload?.total) || state.cars.length,
+          page: Number(action.payload?.page) || 1,
+          limit: Number(action.payload?.limit) || 20,
+        };
       })
       .addCase(getAllCars.rejected, rejected)
 

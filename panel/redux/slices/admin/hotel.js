@@ -67,9 +67,9 @@ export const getHotelsByFilters = createAsyncThunk(
 
 export const getAllHotelReviews = createAsyncThunk(
   'admin/getAllHotelReviews',
-  async (_, { rejectWithValue }) => {
+  async ({ page = 1, limit = 20 } = {}, { rejectWithValue }) => {
     try {
-      const response = await api.get('/find-all-users-hotel-review')
+      const response = await api.get('/find-all-users-hotel-review', { params: { page, limit } })
       return response.data
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch hotel reviews.')

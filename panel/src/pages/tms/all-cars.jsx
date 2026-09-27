@@ -28,6 +28,7 @@ import {
 import { getAllCars, getSeatsData, bookCar } from '../../../redux/slices/tms/travel/car'
 import { selectAuth } from '../../../redux/slices/authSlice'
 import Breadcrumb from '../../components/breadcrumb'
+import Pagination from '../../components/pagination'
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?q=80&w=2070&auto=format&fit=crop'
@@ -697,15 +698,18 @@ const CarCard = ({ car, onBook }) => {
 // ── Main ───────────────────────────────────────────────────────────────────────
 export default function AllCars() {
   const dispatch = useDispatch()
-  const { cars, loading, error } = useSelector((state) => state.car)
+  const { cars, carsPagination = {}, loading, error } = useSelector((state) => state.car)
 
   const [searchTerm, setSearchTerm]       = useState('')
   const [typeFilter, setTypeFilter]       = useState('')
   const [sharingFilter, setSharingFilter] = useState('')
   const [statusFilter, setStatusFilter]   = useState('')
   const [selectedCar, setSelectedCar]     = useState(null)
+  const [page, setPage]                   = useState(1)
+  const limit = 20
 
-  useEffect(() => { dispatch(getAllCars()) }, [dispatch])
+  useEffect(() => { dispatch(getAllCars({ page, limit })) }, [dispatch, page])
+  useEffect(() => { setPage(1) }, [searchTerm, typeFilter, sharingFilter, statusFilter])
 
   const filteredCars = useMemo(() => {
     if (!Array.isArray(cars)) return []
@@ -835,6 +839,7 @@ export default function AllCars() {
             ))}
           </div>
         )}
+        <Pagination page={carsPagination.page || page} totalPages={Math.max(1, Math.ceil((carsPagination.total || 0) / (carsPagination.limit || limit)))} total={carsPagination.total || 0} limit={carsPagination.limit || limit} itemCount={filteredCars.length} onPageChange={setPage} loading={loading} />
       </div>
 
       {/* Book Now Drawer */}

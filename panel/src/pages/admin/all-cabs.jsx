@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux"
 import { deleteCarById, getAllCars } from "../../../redux/slices/tms/travel/car"
 import { Eye, Pencil, Trash2, Car, MapPin, Search, RefreshCw } from "lucide-react"
 import AdminTable, { tableClasses } from '../../components/admin-table'
+import Pagination from '../../components/pagination'
 
 function formatCurrency(val) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(val)
@@ -58,11 +59,14 @@ function StatusBadge({ car }) {
 
 export default function AllCabs() {
   const dispatch = useDispatch()
-  const { cars = [], loading, error } = useSelector(s => s.car)
+  const { cars = [], carsPagination = {}, loading, error } = useSelector(s => s.car)
   const [query, setQuery] = useState("")
   const [deleting, setDeleting] = useState(null)
+  const [page, setPage] = useState(1)
+  const limit = 20
 
-  useEffect(() => { dispatch(getAllCars()) }, [dispatch])
+  useEffect(() => { dispatch(getAllCars({ page, limit })) }, [dispatch, page])
+  useEffect(() => { setPage(1) }, [query])
 
   const filtered = query.trim()
     ? cars.filter(c =>
@@ -111,7 +115,7 @@ export default function AllCabs() {
           </div>
           <button
             className="w-9 h-9 bg-white border-[1.5px] border-gray-200 rounded-lg cursor-pointer flex items-center justify-center text-gray-500 transition-all hover:border-orange-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => dispatch(getAllCars())}
+            onClick={() => dispatch(getAllCars({ page, limit }))}
             title="Refresh"
             disabled={loading}
           >
@@ -270,6 +274,7 @@ export default function AllCabs() {
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-orange-600 animate-pulse" />
         )}
       </div>
+      <Pagination page={carsPagination.page || page} totalPages={Math.max(1, Math.ceil((carsPagination.total || 0) / (carsPagination.limit || limit)))} total={carsPagination.total || 0} limit={carsPagination.limit || limit} itemCount={filtered.length} onPageChange={setPage} loading={loading} />
     </div>
   )
 }

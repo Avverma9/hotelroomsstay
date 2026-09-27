@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { deleteHotelReview, getAllHotelReviews, updateHotelReview } from "../../../redux/slices/admin/hotel"
-import { 
+import {
   Search, 
   RefreshCw, 
   MessageSquare, 
@@ -15,6 +15,7 @@ import {
   CheckCircle2, 
   AlertCircle 
 } from "lucide-react"
+import Pagination from "../../components/pagination"
 
 const formatDate = (dateStr) => {
   if (!dateStr) return "-"
@@ -217,10 +218,11 @@ export default function AllReviews() {
   
   const [query, setQuery] = useState("")
   const [selectedReview, setSelectedReview] = useState(null)
+  const [page, setPage] = useState(1)
+  const limit = 20
 
-  useEffect(() => {
-    dispatch(getAllHotelReviews())
-  }, [dispatch])
+  useEffect(() => { dispatch(getAllHotelReviews({ page, limit })) }, [dispatch, page])
+  useEffect(() => { setPage(1) }, [query])
 
   const rawReviews = hotelReviews?.reviews || []
   const pagination = hotelReviews?.pagination || {}
@@ -271,7 +273,7 @@ export default function AllReviews() {
               />
             </div>
             <button
-              onClick={() => dispatch(getAllHotelReviews())}
+              onClick={() => dispatch(getAllHotelReviews({ page, limit }))}
               disabled={loading}
               className="w-11 h-11 flex items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors disabled:opacity-50"
             >
@@ -447,6 +449,7 @@ export default function AllReviews() {
             ))}
           </div>
         )}
+        <Pagination page={pagination.page || page} totalPages={pagination.totalPages || Math.max(1, Math.ceil((pagination.total || 0) / (pagination.limit || limit)))} total={pagination.total || rawReviews.length} limit={pagination.limit || limit} itemCount={filteredReviews.length} onPageChange={setPage} loading={loading} />
       </div>
     </div>
   )
