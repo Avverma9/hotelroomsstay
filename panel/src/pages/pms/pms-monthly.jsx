@@ -47,6 +47,9 @@ const nextMonthEnd = () => {
   return d.toISOString().split('T')[0];
 };
 
+const findRoomForPrice = (hotel, price) =>
+  (hotel?.rooms || []).find((room) => String(room.roomId) === String(price?.roomId));
+
 const normalizeHotel = (hotel) => {
   const startingPrice =
     hotel?.pricing?.startingFrom ||
@@ -70,7 +73,7 @@ const normalizeHotel = (hotel) => {
     totalRooms: Array.isArray(hotel?.rooms) ? hotel.rooms.length : Number(hotel?.countRooms || 0),
     rooms: (hotel?.rooms || hotel?.roomDetails || hotel?.roomTypes || hotel?.roomsDetails || []).map((room, index) => ({
       roomId: room?._id || room?.id || room?.roomId || `room-${index + 1}`,
-      roomName: room?.type || room?.name || `Room ${index + 1}`,
+      roomName: room?.type || room?.roomType || room?.name || room?.roomCategory || `Room ${index + 1}`,
       bedType: room?.bedTypes || room?.bedType || room?.beds || '',
     })),
     raw: hotel,
@@ -108,14 +111,21 @@ function PriceModal({ mode, entry, hotelId, rooms = [], onClose, onSave, saving 
     setForm((prev) => ({ ...prev, roomId: prev.roomId || rooms[0].roomId }));
   }, [isEdit, rooms]);
 
-  const handleSubmit = (e) => {
+  const [formError, setFormError] = useState('');
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave({
-      ...(isEdit ? {} : { roomId: form.roomId }),
-      startDate: form.startDate,
-      endDate: form.endDate,
-      monthPrice: Number(form.monthPrice),
-    });
+    setFormError('');
+    try {
+      await onSave({
+        ...(isEdit ? {} : { roomId: form.roomId }),
+        startDate: form.startDate,
+        endDate: form.endDate,
+        monthPrice: Number(form.monthPrice),
+      });
+    } catch (error) {
+      setFormError(error?.error || error?.message || 'Unable to save monthly price.');
+    }
   };
 
   return (
@@ -170,6 +180,7 @@ function PriceModal({ mode, entry, hotelId, rooms = [], onClose, onSave, saving 
               <input required type="number" min="0" value={form.monthPrice} onChange={set('monthPrice')} placeholder="e.g. 25000" className="w-full rounded-2xl border border-gray-200 bg-gray-50 py-3.5 pl-11 pr-4 text-sm font-semibold text-gray-800 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50 placeholder:text-gray-400" />
             </div>
           </div>
+          {formError && <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700">{formError}</div>}
           <button type="submit" disabled={saving} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-blue-700 hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 disabled:pointer-events-none">
             {saving ? <><Loader2 size={16} className="animate-spin" /> Saving...</> : <><CheckCircle2 size={16} /> {isEdit ? 'Update Price' : 'Set Price'}</>}
           </button>
@@ -304,9 +315,9 @@ export default function PmsMonthly() {
   }, [prices]);
 
   const handleAdd = (data) => {
-    dispatch(setMonthlyPrice({ hotelId: selectedHotelId, roomId: data.roomId, data: { startDate: data.startDate, endDate: data.endDate, monthPrice: data.monthPrice } })).unwrap().then(() => setAddModal(false)).catch(() => {});
+    return dispatch(setMonthlyPrice({ hotelId: selectedHotelId, roomId: data.roomId, data: { startDate: data.startDate, endDate: data.endDate, monthPrice: data.monthPrice } })).unwrap().then(() => setAddModal(false));
   };
-  const handleEdit = (data) => { dispatch(updateMonthlyPrice({ id: editTarget._id, data })).unwrap().then(() => setEditTarget(null)).catch(() => {}); };
+  const handleEdit = (data) => dispatch(updateMonthlyPrice({ id: editTarget._id, data })).unwrap().then(() => setEditTarget(null));
   const handleDelete = (id) => { dispatch(deleteMonthlyPrice(id)); };
   const handleDeleteAll = () => { dispatch(deleteAllMonthlyPricesByHotel(selectedHotelId)).unwrap().then(() => setDeleteAllOpen(false)).catch(() => {}); };
   const handleSelectHotel = (hotel) => { setSelectedHotelId(hotel.hotelId); dispatch(getMonthlyPricesByHotel(hotel.hotelId)); };
@@ -403,8 +414,8 @@ export default function PmsMonthly() {
                                         </td>
                                         <td className="px-6 py-5">
                                             <div className="space-y-0.5">
-                                                <p className="text-sm font-bold text-gray-800">{p.roomType || <span className="text-gray-400 font-medium">-</span>}</p>
-                                                {p.roomBedType && <p className="text-xs font-medium text-gray-400">{p.roomBedType}</p>}
+                                                <p className="text-sm font-bold text-gray-800">{p.roomType || findRoomForPrice(selectedHotel, p)?.roomName || <span className="text-gray-400 font-medium">-</span>}</p>
+                                                {(p.roomBedType || findRoomForPrice(selectedHotel, p)?.bedType) && <p className="text-xs font-medium text-gray-400">{p.roomBedType || findRoomForPrice(selectedHotel, p)?.bedType}</p>}
                                             </div>
                                         </td>
                                         <td className="px-6 py-5">

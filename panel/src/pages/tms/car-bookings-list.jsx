@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import {
   getBookingsOfOwner,
+  getMyCars,
   changeBookingStatus,
   updateBooking,
   clearCarError,
@@ -467,7 +468,7 @@ function BookingDetailModal({ booking, onClose, onStatusChange, onEdit, updating
 export default function CarBookingsList({ ownerId: propOwnerId }) {
   const dispatch = useDispatch()
   const { user } = useSelector(selectAuth)
-  const { ownerBookings, owners, loading, error, success, ownerAvailability } = useSelector((state) => state.car)
+  const { ownerBookings, ownerCars, owners, loading, error, success, ownerAvailability } = useSelector((state) => state.car)
 
   const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
@@ -488,11 +489,27 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
     return ['All', ...Array.from(statuses)]
   }, [bookingsList])
 
-  // Get unique cars from bookings
+  // Build the car selector from the owner's registered cars, then enrich/merge
+  // any cars that only appear in booking records. Previously this was derived
+  // from bookings only, so a car with zero bookings was invisible here.
   const uniqueCars = useMemo(() => {
     const carMap = new Map()
+
+    ;(Array.isArray(ownerCars) ? ownerCars : []).forEach((car) => {
+      const carKey = car._id || car.id || car.carId || car.vehicleNumber
+      if (!carKey) return
+      carMap.set(String(carKey), {
+        id: String(carKey),
+        name: `${car.make || ''} ${car.model || ''}`.trim() || car.vehicleNumber || 'Unknown Car',
+        vehicleNumber: car.vehicleNumber,
+        vehicleType: car.vehicleType,
+        make: car.make,
+        model: car.model,
+      })
+    })
+
     bookingsList.forEach((b) => {
-      const carKey = b.vehicleId || b.carId || `${b.make}-${b.model}-${b.vehicleNumber}`
+      const carKey = String(b.vehicleId || b.carId || `${b.make}-${b.model}-${b.vehicleNumber}`)
       if (!carMap.has(carKey)) {
         carMap.set(carKey, {
           id: carKey,
@@ -505,7 +522,7 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
       }
     })
     return Array.from(carMap.values())
-  }, [bookingsList])
+  }, [bookingsList, ownerCars])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -543,6 +560,7 @@ export default function CarBookingsList({ ownerId: propOwnerId }) {
   }
 
   useEffect(() => {
+    if (resolvedOwnerId) dispatch(getMyCars())
     load()
     if (viewMode === 'calendar') {
       loadOwnerAvailability()

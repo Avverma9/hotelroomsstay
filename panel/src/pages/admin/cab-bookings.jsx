@@ -20,10 +20,12 @@ import {
   Phone,
   Mail,
   CalendarDays,
+  Calendar,
   Hash,
 } from 'lucide-react'
 import {
   getTravelBookings,
+  getAllCars,
   changeBookingStatus,
   clearCarError,
   clearCarSuccess,
@@ -31,6 +33,7 @@ import {
 import Breadcrumb from '../../components/breadcrumb'
 import BookingStatusBadge, { cfgFor, NEXT_STATUSES, STATUS_CFG, RideStatusBadge } from '../../components/tms/booking-status'
 import { formatDate as fmt, formatDateTime as fmtDT, formatCurrency as fmtCurrency } from '../../utils/format'
+import CarAvailabilityCalendar from '../../components/tms/CarAvailabilityCalendar'
 
 const StatusBadge = BookingStatusBadge
 const NEXT = NEXT_STATUSES
@@ -281,16 +284,22 @@ const ALL_STATUSES = ['Pending', 'Confirmed', 'Cancelled', 'Completed', 'Rejecte
 
 export default function AllCarBookings() {
   const dispatch = useDispatch()
-  const { bookings, loading, error, success } = useSelector((state) => state.car)
+  const { bookings, cars, loading, error, success } = useSelector((state) => state.car)
 
   const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [typeFilter, setTypeFilter]     = useState('All')
   const [modal, setModal]               = useState(null)   // { booking, mode: 'view'|'edit' }
   const [updating, setUpdating]         = useState(false)
+  const [viewMode, setViewMode]         = useState('list')
+  const [selectedCar, setSelectedCar]   = useState(null)
 
   useEffect(() => {
+    // This page uses admin-wide booking/car APIs. Clear any owner-only error
+    // left behind when navigating from the owner travel-bookings screen.
+    dispatch(clearCarError())
     dispatch(getTravelBookings())
+    dispatch(getAllCars({ page: 1, limit: 100 }))
   }, [dispatch])
 
   // Auto-dismiss toasts
@@ -321,6 +330,29 @@ export default function AllCarBookings() {
       return true
     })
   }, [bookings, search, statusFilter, typeFilter])
+
+  const calendarCars = useMemo(() => {
+    const carMap = new Map()
+    ;(Array.isArray(cars) ? cars : []).forEach((car) => {
+      const id = car?._id || car?.id || car?.vehicleNumber
+      if (!id) return
+      carMap.set(String(id), {
+        id: String(id),
+        name: `${car.make || ''} ${car.model || ''}`.trim() || car.vehicleNumber || 'Unknown Car',
+        vehicleNumber: car.vehicleNumber,
+      })
+    })
+    ;(Array.isArray(bookings) ? bookings : []).forEach((booking) => {
+      const id = booking?.carId || booking?.vehicleId || booking?.vehicleNumber
+      if (!id || carMap.has(String(id))) return
+      carMap.set(String(id), {
+        id: String(id),
+        name: `${booking.make || ''} ${booking.model || ''}`.trim() || booking.vehicleType || 'Unknown Car',
+        vehicleNumber: booking.vehicleNumber,
+      })
+    })
+    return Array.from(carMap.values())
+  }, [cars, bookings])
 
   // ── KPI counts ───────────────────────────────────────────────────────────
   const counts = useMemo(() => {
@@ -366,13 +398,23 @@ export default function AllCarBookings() {
               <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">All Car Bookings</h1>
               <p className="mt-1 text-sm text-slate-500">All travel bookings across the platform</p>
             </div>
-            <button
-              onClick={() => dispatch(getTravelBookings())}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-            >
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-              Refresh
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex rounded-xl border border-slate-200 bg-white p-1">
+                <button onClick={() => setViewMode('list')} className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+                  <Car size={14} /> List
+                </button>
+                <button onClick={() => setViewMode('calendar')} className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${viewMode === 'calendar' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+                  <Calendar size={14} /> Calendar
+                </button>
+              </div>
+              <button
+                onClick={() => { dispatch(clearCarError()); dispatch(getTravelBookings()); dispatch(getAllCars({ page: 1, limit: 100 })) }}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+            </div>
           </div>
         </div>
 
@@ -462,8 +504,40 @@ export default function AllCarBookings() {
           </div>
         </div>
 
+        {viewMode === 'calendar' && (
+          <section className="mb-6 space-y-6">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <label className="mb-2 block text-sm font-bold text-slate-700">Select Car</label>
+              <select
+                value={selectedCar?.id || ''}
+                onChange={(e) => setSelectedCar(calendarCars.find((car) => car.id === e.target.value) || null)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 outline-none focus:border-indigo-300 focus:bg-white"
+              >
+                <option value="">-- Select a car --</option>
+                {calendarCars.map((car) => <option key={car.id} value={car.id}>{car.name}{car.vehicleNumber ? ` (${car.vehicleNumber})` : ''}</option>)}
+              </select>
+            </div>
+            {selectedCar ? (
+              <CarAvailabilityCalendar
+                carId={selectedCar.id}
+                carName={selectedCar.name}
+                bookings={(Array.isArray(bookings) ? bookings : []).filter((booking) => String(booking.carId || booking.vehicleId || booking.vehicleNumber) === selectedCar.id)}
+                ownerAvailability={[]}
+                mode="view"
+                onDateClick={() => {}}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-white py-20">
+                <Calendar size={48} className="mb-4 text-slate-300" />
+                <p className="text-base font-semibold text-slate-700">Select a car to view calendar</p>
+                <p className="mt-1 text-sm text-slate-400">All registered cars are available in the selector</p>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* ── Table / Cards container ── */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-sm">
+        {viewMode === 'list' && <div className="overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-sm">
 
           {/* MOBILE CARDS (< md) */}
           <div className="md:hidden">
@@ -660,7 +734,7 @@ export default function AllCarBookings() {
               </tbody>
             </table>
           </div>
-        </div>
+        </div>}
 
         {/* Result count */}
         {!loading && bookingList.length > 0 && (

@@ -2,6 +2,12 @@ const month = require("../../models/booking/monthly");
 const basicDetails = require("../../models/hotel/basicDetails");
 const cron = require('node-cron');
 
+const getRoomKeys = (room) => [room?.roomId, room?._id, room?.id]
+  .filter((value) => value !== undefined && value !== null && String(value).trim())
+  .map((value) => String(value).trim());
+const getRoomType = (room) => room?.type || room?.roomType || room?.name || room?.roomCategory || null;
+const getRoomBedType = (room) => room?.bedTypes || room?.bedType || room?.beds || null;
+
 /* =========================================================
    CREATE MONTHLY PRICE
    POST /monthly-set-room-price/:hotelId/:roomId
@@ -20,6 +26,18 @@ const newMonth = async (req, res) => {
     }
     if (new Date(endDate) <= new Date(startDate)) {
       return res.status(400).json({ error: "endDate must be after startDate." });
+    }
+
+    const duplicate = await month.findOne({
+      hotelId,
+      roomId,
+      startDate: { $lte: String(endDate) },
+      endDate: { $gte: String(startDate) },
+    }).lean();
+    if (duplicate) {
+      return res.status(409).json({
+        error: "This room already has a monthly price for the selected date range. Please choose another room or dates.",
+      });
     }
 
     const createdPrice = await month.create({
@@ -70,15 +88,21 @@ const getPriceByHotelId = async function (req, res) {
       return res.status(404).json({ error: "Hotel not found" });
     }
 
-    const matchedRooms = hotel.rooms.filter(room => roomIds.includes(room.roomId));
+    const matchedRooms = hotel.rooms.filter(room =>
+      roomIds.some((roomId) =>
+        getRoomKeys(room).includes(String(roomId))
+      )
+    );
 
     const combinedData = monthlyPrices.map(price => {
       // FIX: roomInfo?.type — prevents crash if room was deleted from hotel
-      const roomInfo = matchedRooms.find(room => room.roomId === price.roomId);
+      const roomInfo = matchedRooms.find(room =>
+        getRoomKeys(room).includes(String(price.roomId))
+      );
       return {
         ...price.toObject(),
-        roomType: roomInfo?.type || null,
-        roomBedType: roomInfo?.bedTypes || null,
+        roomType: getRoomType(roomInfo),
+        roomBedType: getRoomBedType(roomInfo),
       };
     });
 
@@ -103,6 +127,25 @@ const updateMonth = async (req, res) => {
     }
     if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
       return res.status(400).json({ error: "endDate must be after startDate." });
+    }
+
+    const current = await month.findById(id).lean();
+    if (!current) {
+      return res.status(404).json({ error: "Monthly price entry not found." });
+    }
+    const nextStartDate = String(startDate || current.startDate);
+    const nextEndDate = String(endDate || current.endDate);
+    const duplicate = await month.findOne({
+      _id: { $ne: id },
+      hotelId: current.hotelId,
+      roomId: current.roomId,
+      startDate: { $lte: nextEndDate },
+      endDate: { $gte: nextStartDate },
+    }).lean();
+    if (duplicate) {
+      return res.status(409).json({
+        error: "This room already has a monthly price for the selected date range. Please choose another room or dates.",
+      });
     }
 
     const updateFields = {};

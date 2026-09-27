@@ -126,6 +126,15 @@ const carSchema = new Schema({
   },
 });
 
+// Never allow a save operation to make a car available after its drop date/time.
+carSchema.pre("save", function (next) {
+  if (this.dropD && new Date(this.dropD) <= new Date()) {
+    this.isAvailable = false;
+    this.runningStatus = "Unavailable";
+  }
+  next();
+});
+
 // Create and export the Car model
 const Car = mongoose.model("Car", carSchema);
 

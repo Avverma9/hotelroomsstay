@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Car = require('../../models/travel/cars');
+const { markExpiredCarsUnavailable, isCarDateExpired } = require('../../utils/carAvailability');
 const CarOwner = require('../../models/travel/carOwner');
 const User = require('../../models/user');
 const DashboardUser = require('../../models/dashboardUser');
@@ -349,7 +350,8 @@ exports.getSeatsData = async (req, res) => {
 };
 
 exports.getAllCars = async (req, res) => {
-  try {
+    try {
+        await markExpiredCarsUnavailable();
     // Support pagination to avoid returning entire collection
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(100, Math.max(5, Number(req.query.limit) || 20));
@@ -417,7 +419,8 @@ exports.getCarByOwnerId = async (req, res) => {
 };
 
 exports.filterCar = async (req, res) => {
-  try {
+    try {
+        await markExpiredCarsUnavailable();
     const {
       make,
       model,
@@ -492,7 +495,8 @@ exports.filterCar = async (req, res) => {
 };
 
 exports.getMyCars = async (req, res) => {
-  try {
+    try {
+        await markExpiredCarsUnavailable();
     const dashUser = await resolveDashboardUserFromRequest(req);
     if (!dashUser) {
       return res.status(200).json([]);
@@ -683,8 +687,13 @@ exports.releaseSeat = async (req, res) => {
     // Recalculate car availability
     const allBooked =
       car.seatConfig.length > 0 && car.seatConfig.every((s) => Boolean(s.isBooked));
-    car.isAvailable = !allBooked;
-    car.runningStatus = allBooked ? 'On A Trip' : 'Available';
+    if (isCarDateExpired(car)) {
+        car.isAvailable = false;
+        car.runningStatus = 'Unavailable';
+    } else {
+        car.isAvailable = !allBooked;
+        car.runningStatus = allBooked ? 'On A Trip' : 'Available';
+    }
 
     await car.save();
     return res.status(200).json({ message: 'Seat released successfully', car });

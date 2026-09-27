@@ -4,6 +4,7 @@ const CarBooking = require("../../models/travel/carBooking");
 const RideHistory = require("../../models/travel/rideHistory");
 const OwnerAvailability = require("../../models/travel/ownerAvailability");
 const Car = require("../../models/travel/cars");
+const { isCarDateExpired } = require("../../utils/carAvailability");
 const CarOwner = require("../../models/travel/carOwner");
 const DashboardUser = require("../../models/dashboardUser");
 const User = require("../../models/user");
@@ -66,8 +67,13 @@ const recalculateCarAvailability = (car) => {
   const seats = Array.isArray(car.seatConfig) ? car.seatConfig : [];
   const allSeatsBooked =
     seats.length > 0 && seats.every((seat) => Boolean(seat.isBooked));
-  car.isAvailable = !allSeatsBooked;
-  car.runningStatus = allSeatsBooked ? "On A Trip" : "Available";
+  if (isCarDateExpired(car)) {
+    car.isAvailable = false;
+    car.runningStatus = "Unavailable";
+  } else {
+    car.isAvailable = !allSeatsBooked;
+    car.runningStatus = allSeatsBooked ? "On A Trip" : "Available";
+  }
 };
 
 const releaseSeatsByIds = async ({ carId, seatIds = [], bookedBy }) => {

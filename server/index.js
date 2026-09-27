@@ -10,6 +10,7 @@ const webSocketHandler = require("./controllers/chatApp/webSocket");
 const routes = require("./routes/index");
 const connectDB = require("./config/db");
 const { startAutoCancelJob } = require("./jobs/autoCancelPendingBookings");
+const { startCarAvailabilityJob, markExpiredCarsUnavailable } = require("./utils/carAvailability");
 const mailerRoutes = require("./nodemailer/routes");
 const setupChatRoutes = require("./routes/chatApp/chatAppRoutes");
 const requireAuth = require("./authentication/requireAuth");
@@ -52,6 +53,11 @@ const startServer = () => {
     .then(() => {
       undefined;
       startAutoCancelJob();
+      startCarAvailabilityJob();
+      // Also reconcile immediately on boot instead of waiting for the first minute tick.
+      markExpiredCarsUnavailable().catch((error) =>
+        console.error("[CarAvailability] Initial reconciliation failed:", error.message)
+      );
     })
     .catch((err) => console.error("Database connection error:", err));
 
