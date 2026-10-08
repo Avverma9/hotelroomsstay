@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   Modal,
   ScrollView,
@@ -10,7 +9,8 @@ import {
   View,
   StatusBar,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
@@ -40,6 +40,7 @@ const formatTime = (d) =>
     hour: "numeric",
     minute: "2-digit",
   });
+const hasValidDate = (value) => value && !Number.isNaN(new Date(value).getTime());
 
 const normalizeBool = (value) => {
   if (typeof value === "boolean") return value;
@@ -131,6 +132,8 @@ const resolveCabBookingState = (cab) => {
     return { key: "unavailable", label: "Unavailable", canBook: false };
 
   const status = String(cab?.runningStatus || "").trim().toLowerCase();
+  if (status.includes("on a trip"))
+    return { key: "unavailable", label: "On a Trip", canBook: false };
   if (status.includes("unavailable") || status.includes("not available"))
     return { key: "unavailable", label: "Unavailable", canBook: false };
 
@@ -154,6 +157,16 @@ const matchesCabSearchQuery = (cab, query) => {
   return searchableFields.some((field) =>
     String(field ?? "").toLowerCase().includes(normalized)
   );
+};
+
+const cabMatchesSelectedDateTime = (cab, selectedDate) => {
+  if (!selectedDate) return true;
+  const start = new Date(selectedDate);
+  if (Number.isNaN(start.getTime())) return true;
+  const cabStart = new Date(cab?.pickupD);
+  const cabEnd = new Date(cab?.dropD);
+  if (Number.isNaN(cabStart.getTime()) || Number.isNaN(cabEnd.getTime())) return false;
+  return cabStart <= start && cabEnd >= start;
 };
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
@@ -254,9 +267,47 @@ const FilterInput = ({ label, value, onChangeText, placeholder, keyboardType }) 
   </View>
 );
 
+const VehicleLookupInput = ({ label, value, onChangeText, placeholder, options, loading, onFocus }) => {
+  const [focused, setFocused] = useState(false);
+  const normalized = String(value || "").trim().toLowerCase();
+  const suggestions = (options || [])
+    .filter((item) => !normalized || item.toLowerCase().includes(normalized))
+    .slice(0, 8);
+
+  return (
+    <View style={{ flex: 1, zIndex: 20 }}>
+      <Text style={{ fontSize: 10, fontWeight: "700", color: "#94a3b8", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 5 }}>
+        {label}
+      </Text>
+      <TextInput
+        value={value}
+        onChangeText={(text) => { setFocused(true); onChangeText(text); }}
+        onFocus={() => { setFocused(true); if (onFocus) onFocus(); }}
+        onBlur={() => setTimeout(() => setFocused(false), 180)}
+        placeholder={placeholder}
+        placeholderTextColor="#cbd5e1"
+        autoCapitalize="words"
+        style={{ height: 40, borderRadius: 8, borderWidth: 1, borderColor: "#e2e8f0", backgroundColor: "#f8fafc", paddingHorizontal: 11, fontSize: 13, fontWeight: "600", color: "#1e293b" }}
+      />
+      {focused && suggestions.length > 0 && (
+        <View style={{ position: "absolute", top: 67, left: 0, right: 0, backgroundColor: "#fff", borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 9, elevation: 5, shadowColor: "#0f172a", shadowOpacity: 0.12, shadowRadius: 6, zIndex: 30 }}>
+          {loading ? (
+            <Text style={{ padding: 10, fontSize: 11, color: "#64748b" }}>Loading…</Text>
+          ) : suggestions.map((item) => (
+            <TouchableOpacity key={item} onPress={() => onChangeText(item)} style={{ paddingHorizontal: 10, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#334155" }}>{item}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+};
+
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function Cabs({ navigation }) {
+  const insets = useSafeAreaInsets();
   const dispatch = useDispatch();
   const tabBarHeight = useBottomTabBarHeight();
   const { items: cabItems, status, error } = useSelector((s) => s.cab || {});
@@ -264,6 +315,9 @@ export default function Cabs({ navigation }) {
   const [route, setRoute] = useState({ pickup: "", drop: "" });
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilterDock, setShowFilterDock] = useState(false);
+  const [vehicleMakes, setVehicleMakes] = useState([]);
+  const [vehicleModels, setVehicleModels] = useState([]);
+  const [vehicleLookupLoading, setVehicleLookupLoading] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState({
     make: "",
     model: "",
@@ -277,7 +331,9 @@ export default function Cabs({ navigation }) {
   const [isSearching, setIsSearching] = useState(false);
 
   const [pickupDateTime, setPickupDateTime] = useState(new Date());
-  const [hasEditedPickupDateTime, setHasEditedPickupDateTime] = useState(false);
+  // A cab result is always date-bound. Keeping this active from first render
+  // prevents the unfiltered all-cabs list from showing rides from other months.
+  const [hasEditedPickupDateTime, setHasEditedPickupDateTime] = useState(true);
   const [openPicker, setOpenPicker] = useState(null);
 
   const activeDockFilterCount = useMemo(
@@ -293,7 +349,11 @@ export default function Cabs({ navigation }) {
     if (q) { next.q = q; next.searchQuery = q; }
     if (pickup) next.pickupP = pickup;
     if (drop) next.dropP = drop;
-    if (hasEditedPickupDateTime) next.pickupD = pickupDateTime.toISOString();
+    if (hasEditedPickupDateTime) {
+      // Preserve the selected time as well as the date. A ride that already
+      // ended before the requested time must not appear in the results.
+      next.pickupD = new Date(pickupDateTime).toISOString();
+    }
     if (advancedFilters.make.trim()) next.make = advancedFilters.make.trim();
     if (advancedFilters.model.trim()) next.model = advancedFilters.model.trim();
     if (advancedFilters.vehicleNumber.trim()) next.vehicleNumber = advancedFilters.vehicleNumber.trim();
@@ -304,6 +364,7 @@ export default function Cabs({ navigation }) {
 
     const hasServerFilters = Object.keys(next).length > 0;
     if (hasServerFilters) {
+      next.availableOnly = "true";
       if (selectedCabType === "Car" || selectedCabType === "Bus")
         next.vehicleType = selectedCabType.toLowerCase();
       if (selectedCabType === "Shared" || selectedCabType === "Private")
@@ -337,16 +398,58 @@ export default function Cabs({ navigation }) {
       if (selectedCabType === "Private" && sharingType !== "private") return false;
       if (pickup && !String(cab?.pickupP || "").toLowerCase().includes(pickup)) return false;
       if (drop && !String(cab?.dropP || "").toLowerCase().includes(drop)) return false;
+      if (hasEditedPickupDateTime && !cabMatchesSelectedDateTime(cab, pickupDateTime)) return false;
       if (!matchesCabSearchQuery(cab, query)) return false;
       return true;
     });
-  }, [cabItems, selectedCabType, route.pickup, route.drop, searchQuery]);
+  }, [cabItems, selectedCabType, route.pickup, route.drop, searchQuery, hasEditedPickupDateTime, pickupDateTime]);
 
   const handleSwap = () => setRoute((p) => ({ pickup: p.drop, drop: p.pickup }));
   const updateAdvancedFilter = (field, value) =>
     setAdvancedFilters((prev) => ({ ...prev, [field]: value }));
   const clearAdvancedFilters = () =>
     setAdvancedFilters({ make: "", model: "", vehicleNumber: "", fuelType: "", seater: "", pickupD: "", dropD: "" });
+
+  useEffect(() => {
+    if (!showFilterDock || vehicleMakes.length) return;
+    let cancelled = false;
+    setVehicleLookupLoading(true);
+    fetch("https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/car?format=json")
+      .then((response) => response.json())
+      .then((payload) => {
+        if (cancelled) return;
+        const names = [...new Set((payload?.Results || []).map((item) => String(item?.MakeName || "").trim()).filter(Boolean))].sort();
+        setVehicleMakes(names);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setVehicleLookupLoading(false); });
+    return () => { cancelled = true; };
+  }, [showFilterDock, vehicleMakes.length]);
+
+  useEffect(() => {
+    const make = String(advancedFilters.make || "").trim();
+    if (!showFilterDock || make.length < 2) {
+      setVehicleModels([]);
+      return undefined;
+    }
+    let cancelled = false;
+    setVehicleLookupLoading(true);
+    fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodeURIComponent(make)}?format=json`)
+      .then((response) => response.json())
+      .then((payload) => {
+        if (cancelled) return;
+        const names = [...new Set((payload?.Results || []).map((item) => String(item?.Model_Name || "").trim()).filter(Boolean))].sort();
+        setVehicleModels(names);
+      })
+      .catch(() => setVehicleModels([]))
+      .finally(() => { if (!cancelled) setVehicleLookupLoading(false); });
+    return () => { cancelled = true; };
+  }, [showFilterDock, advancedFilters.make]);
+
+  const handleMakeChange = (value) => {
+    updateAdvancedFilter("make", value);
+    updateAdvancedFilter("model", "");
+  };
 
   const runCabSearchRequest = async () => {
     if (Object.keys(queryParams).length === 0) return dispatch(fetchAllCabs());
@@ -545,7 +648,7 @@ export default function Cabs({ navigation }) {
               }}
             >
               {isSearching ? (
-                <ActivityIndicator color="#f59e0b" size="small" />
+                <PlayStoreWavyLoader color="#f59e0b" size="small" />
               ) : (
                 <>
                   <Feather name="search" size={14} color="#f59e0b" />
@@ -727,7 +830,13 @@ export default function Cabs({ navigation }) {
           )}
 
           {status === "loading" && filteredCabs.length === 0 ? (
-            <CabsSkeleton count={4} />
+            <>
+              <View style={{ alignItems: "center", paddingVertical: 10 }}>
+                <PlayStoreWavyLoader size="medium" color="#0d3b8f" />
+                <Text style={{ marginTop: 8, fontSize: 11, fontWeight: "600", color: "#64748b" }}>Loading cabs...</Text>
+              </View>
+              <CabsSkeleton count={4} />
+            </>
           ) : filteredCabs.length === 0 ? (
             <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 56 }}>
               <View
@@ -910,6 +1019,46 @@ export default function Cabs({ navigation }) {
                   </View>
 
                   {/* ── Divider ── */}
+                  <View
+                    style={{
+                      marginHorizontal: 12,
+                      marginBottom: 12,
+                      padding: 10,
+                      borderRadius: 12,
+                      backgroundColor: "#f8fafc",
+                      borderWidth: 1,
+                      borderColor: "#e2e8f0",
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 7 }}>
+                      <Feather name="clock" size={12} color="#0d3b8f" />
+                      <Text style={{ marginLeft: 5, fontSize: 9.5, fontWeight: "900", color: "#64748b", letterSpacing: 0.7 }}>
+                        RIDE SCHEDULE
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: "row", alignItems: "stretch" }}>
+                      <View style={{ flex: 1, flexDirection: "row", alignItems: "center", minWidth: 0 }}>
+                        <View style={{ height: 8, width: 8, borderRadius: 4, backgroundColor: "#10b981", marginRight: 7 }} />
+                        <View style={{ minWidth: 0 }}>
+                          <Text style={{ fontSize: 9, fontWeight: "800", color: "#94a3b8", letterSpacing: 0.4 }}>STARTS</Text>
+                          <Text numberOfLines={1} style={{ marginTop: 2, fontSize: 11, fontWeight: "800", color: "#0f172a" }}>
+                            {hasValidDate(cab?.pickupD) ? `${formatDate(cab.pickupD)} · ${formatTime(cab.pickupD)}` : "Time not available"}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={{ width: 1, backgroundColor: "#cbd5e1", marginHorizontal: 10 }} />
+                      <View style={{ flex: 1, flexDirection: "row", alignItems: "center", minWidth: 0 }}>
+                        <View style={{ height: 8, width: 8, borderRadius: 2, backgroundColor: "#f43f5e", marginRight: 7 }} />
+                        <View style={{ minWidth: 0 }}>
+                          <Text style={{ fontSize: 9, fontWeight: "800", color: "#94a3b8", letterSpacing: 0.4 }}>ENDS</Text>
+                          <Text numberOfLines={1} style={{ marginTop: 2, fontSize: 11, fontWeight: "800", color: "#0f172a" }}>
+                            {hasValidDate(cab?.dropD) ? `${formatDate(cab.dropD)} · ${formatTime(cab.dropD)}` : "Time not available"}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+
                   <View style={{ height: 1, backgroundColor: "#f1f5f9", marginHorizontal: 12 }} />
 
                   {/* ── Bottom action row ── */}
@@ -1019,7 +1168,7 @@ export default function Cabs({ navigation }) {
               borderTopRightRadius: 24,
               paddingHorizontal: 20,
               paddingTop: 8,
-              paddingBottom: 24,
+              paddingBottom: 24 + insets.bottom,
               maxHeight: "84%",
             }}
           >
@@ -1062,8 +1211,8 @@ export default function Cabs({ navigation }) {
 
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={{ flexDirection: "row", gap: 10 }}>
-                <FilterInput label="Make" value={advancedFilters.make} onChangeText={(v) => updateAdvancedFilter("make", v)} placeholder="Toyota" />
-                <FilterInput label="Model" value={advancedFilters.model} onChangeText={(v) => updateAdvancedFilter("model", v)} placeholder="Innova" />
+                <VehicleLookupInput label="Make" value={advancedFilters.make} onChangeText={handleMakeChange} onFocus={() => {}} options={vehicleMakes} loading={vehicleLookupLoading} placeholder="Toyota" />
+                <VehicleLookupInput label="Model" value={advancedFilters.model} onChangeText={(v) => updateAdvancedFilter("model", v)} onFocus={() => {}} options={vehicleModels} loading={vehicleLookupLoading} placeholder="Innova" />
               </View>
 
               <View style={{ marginTop: 12 }}>

@@ -122,6 +122,19 @@ exports.createBooking = async (req, res) => {
     const finalTourStartDate =
       tourStartDate || finalFrom;
 
+    const tourWindowStart = tour.tourStartDate || tour.from;
+    const tourWindowEnd = tour.tourEndDate || tour.to || finalTo;
+    if (
+      tourWindowStart && finalFrom && new Date(finalFrom) < new Date(tourWindowStart) ||
+      tourWindowEnd && finalTo && new Date(finalTo) > new Date(tourWindowEnd)
+    ) {
+      await session.abortTransaction();
+      return res.status(409).json({
+        success: false,
+        message: "Tour is not available for the selected dates",
+      });
+    }
+
     /* ================= PRICING ================= */
 
     const basePrice = Number(tour.price || 0);

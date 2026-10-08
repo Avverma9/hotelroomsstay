@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
   KeyboardAvoidingView,
@@ -13,6 +12,7 @@ import {
   View,
   StatusBar,
 } from "react-native";
+import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import axios from "axios";
@@ -379,7 +379,7 @@ export default function LoginPage({ navigation }) {
                   style={styles.actionBtnGradient}
                 >
                   {loading ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <PlayStoreWavyLoader color="#FFFFFF" size="small" />
                   ) : (
                     <>
                       <Text style={styles.actionBtnText}>

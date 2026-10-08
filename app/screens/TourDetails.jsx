@@ -1,6 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   ScrollView,
   Text,
@@ -12,6 +11,7 @@ import {
   StatusBar,
   Platform,
 } from "react-native";
+import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
@@ -810,7 +810,15 @@ export default function TourDetails({ navigation, route }) {
   if (!tourId) return null;
 
   if (isTourLoading) {
-    return <TourDetailsSkeleton onBack={() => navigation.goBack()} />;
+    return (
+      <View style={{ flex: 1 }}>
+        <View style={{ alignItems: "center", paddingVertical: 10, backgroundColor: "#F8FAFC" }}>
+          <PlayStoreWavyLoader size="medium" color="#0d3b8f" />
+          <Text style={{ marginTop: 8, fontSize: 11, fontWeight: "600", color: "#64748B" }}>Loading tour details...</Text>
+        </View>
+        <TourDetailsSkeleton onBack={() => navigation.goBack()} />
+      </View>
+    );
   }
 
   if (isTourFailed) {
@@ -1522,7 +1530,7 @@ export default function TourDetails({ navigation, route }) {
                           className={`w-full py-4 rounded-2xl flex-row justify-center items-center shadow-lg ${tourBookingStatus === 'loading' ? 'bg-gray-300 shadow-none' : 'bg-blue-600 shadow-blue-200'}`}
                       >
                           {tourBookingStatus === 'loading' ? (
-                              <ActivityIndicator color="white" />
+                              <PlayStoreWavyLoader color="white" />
                           ) : (
                               <>
                                   <Ionicons name="lock-closed" size={18} color="white" style={{marginRight: 8}} />

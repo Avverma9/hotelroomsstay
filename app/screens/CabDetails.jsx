@@ -1,16 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
@@ -27,6 +28,18 @@ import { useAppModal } from "../contexts/AppModalContext";
 import { getUserId } from "../utils/credentials";
 import Header from "../components/Header";
 import api from "../utils/api";
+
+// ─── constants ────────────────────────────────────────────────────────────────
+
+const BOOKING_WAIT_PHRASES = [
+  "Please wait...",
+  "Checking cab availability...",
+  "Confirming your booking...",
+  "We are getting everything ready...",
+  "Almost done, hold on...",
+];
+const PHRASE_INTERVAL_MS = 1600;
+const BOOKING_DONE_DISPLAY_MS = 1800;
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -133,14 +146,6 @@ const resolveCabFare = (cab) => {
   return 0;
 };
 
-const getBookingResponseId = (response) =>
-  response?.bookingId ||
-  response?.data?.bookingId ||
-  response?.data?._id ||
-  response?.result?.bookingId ||
-  response?._id ||
-  null;
-
 // ─── small reusable pieces ────────────────────────────────────────────────────
 
 /** Single label+value cell used in the Vehicle Info grid */
@@ -188,11 +193,59 @@ const FormField = ({ label, ...inputProps }) => (
   </View>
 );
 
+/** Full-screen popup: loader + rotating wait phrases (shown while booking API is pending) */
+const BookingLoadingPopup = ({ visible, completed = false }) => {
+  const [phraseIndex, setPhraseIndex] = useState(0);
+
+  useEffect(() => {
+    if (!visible) {
+      setPhraseIndex(0);
+      return undefined;
+    }
+    if (completed) return undefined;
+
+    const timer = setInterval(() => {
+      setPhraseIndex((prev) => (prev + 1) % BOOKING_WAIT_PHRASES.length);
+    }, PHRASE_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [visible, completed]);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={() => {}} // block Android back button while booking
+    >
+      <View style={styles.loadingOverlay}>
+        <View style={styles.loadingCard}>
+          {completed ? (
+            <View style={styles.doneIcon}>
+              <Text style={styles.doneIconText}>✓</Text>
+            </View>
+          ) : (
+            <PlayStoreWavyLoader size="large" color="#1D4ED8" />
+          )}
+
+          <Text style={[styles.phraseText, completed ? styles.doneText : styles.phraseActive]}>
+            {completed ? "Done!" : BOOKING_WAIT_PHRASES[phraseIndex]}
+          </Text>
+
+          <Text style={styles.loadingHint}>
+            {completed ? "Your cab booking was created successfully." : "Please do not close the app or press back."}
+          </Text>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 // ─── main component ───────────────────────────────────────────────────────────
 
 export default function CabDetails({ navigation, route }) {
   const dispatch = useDispatch();
-  const { showError, showInfo, showSuccess } = useAppModal();
+  const { showError, showInfo } = useAppModal();
   const { cabId, cab: previewCab } = route?.params || {};
   const requestedCabId = String(cabId || getCabId(previewCab) || "").trim();
 
@@ -209,21 +262,25 @@ export default function CabDetails({ navigation, route }) {
   const userLoading = userState?.loading;
 
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
+  const [localBookingSubmitting, setLocalBookingSubmitting] = useState(false);
+  const [bookingPopupCompleted, setBookingPopupCompleted] = useState(false);
+  const [bookingSubmitError, setBookingSubmitError] = useState("");
   const [selectedSeatIds, setSelectedSeatIds] = useState([]);
   const [travelGst, setTravelGst] = useState(null);
+
   // passengers[0] is always the primary passenger (pre-filled from logged-in user)
   // length always mirrors selectedSeatIds.length for shared, or stays [1] for private
   const makePassenger = (user = null) => ({
-    name:   user?.userName  || "",
-    mobile: user?.mobile    || "",
-    email:  user?.email     || "",
+    name: user?.userName || "",
+    mobile: user?.mobile || "",
+    email: user?.email || "",
   });
   const [passengers, setPassengers] = useState([makePassenger(loggedUser)]);
 
   // Update passengers when user data becomes available
   useEffect(() => {
     if (loggedUser && !userLoading) {
-      setPassengers(prev => {
+      setPassengers((prev) => {
         const updated = [...prev];
         updated[0] = makePassenger(loggedUser);
         return updated;
@@ -240,18 +297,19 @@ export default function CabDetails({ navigation, route }) {
   }, []);
 
   // Keep passengers list in sync with seat count
-  const syncPassengersToCount = useCallback((count) => {
-    setPassengers((prev) => {
-      if (count <= 0) return [makePassenger(loggedUser)];
-      if (count === prev.length) return prev;
-      if (count > prev.length) {
-        // Add empty slots
-        return [...prev, ...Array(count - prev.length).fill(null).map(() => makePassenger())];
-      }
-      // Trim to count (always keep at least passenger[0])
-      return prev.slice(0, count);
-    });
-  }, [loggedUser]);
+  const syncPassengersToCount = useCallback(
+    (count) => {
+      setPassengers((prev) => {
+        if (count <= 0) return [makePassenger(loggedUser)];
+        if (count === prev.length) return prev;
+        if (count > prev.length) {
+          return [...prev, ...Array(count - prev.length).fill(null).map(() => makePassenger())];
+        }
+        return prev.slice(0, count);
+      });
+    },
+    [loggedUser]
+  );
 
   const cab = selectedCab || previewCab || null;
   const resolvedCabId = getCabId(cab) || requestedCabId;
@@ -290,16 +348,27 @@ export default function CabDetails({ navigation, route }) {
   const cabFinalAmount = Number((cabTaxableAmount + travelGstAmount).toFixed(2));
 
   useEffect(() => {
-    if (!cabTaxableAmount) { setTravelGst(null); return undefined; }
+    if (!cabTaxableAmount) {
+      setTravelGst(null);
+      return undefined;
+    }
     let cancelled = false;
-    api.get("/gst/get-single-gst", { params: { type: "Travel", gstThreshold: cabTaxableAmount } })
-      .then((response) => { if (!cancelled) setTravelGst(response?.data || null); })
-      .catch(() => { if (!cancelled) setTravelGst(null); });
-    return () => { cancelled = true; };
+    api
+      .get("/gst/get-single-gst", { params: { type: "Travel", gstThreshold: cabTaxableAmount } })
+      .then((response) => {
+        if (!cancelled) setTravelGst(response?.data || null);
+      })
+      .catch(() => {
+        if (!cancelled) setTravelGst(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [cabTaxableAmount]);
+
   const bookingState = useMemo(() => resolveCabBookingState(cab, seatStats), [cab, seatStats]);
   const isAvailable = bookingState.canBook;
-  const isBookingSubmitting = cabBookingStatus === "loading";
+  const isBookingSubmitting = localBookingSubmitting || cabBookingStatus === "loading";
 
   const availableSeatChoices = useMemo(
     () =>
@@ -358,46 +427,74 @@ export default function CabDetails({ navigation, route }) {
     setPassengers((prev) => {
       const updated = [...prev];
       updated[0] = {
-        name:   loggedUser?.userName  || "",
-        mobile: loggedUser?.mobile    || "",
-        email:  loggedUser?.email     || "",
+        name: loggedUser?.userName || "",
+        mobile: loggedUser?.mobile || "",
+        email: loggedUser?.email || "",
       };
       return updated;
     });
     setBookingModalVisible(true);
   }, [bookingState.key, isAvailable, showInfo, loggedUser]);
 
-  const toggleSeatSelection = useCallback((seatId) => {
-    const token = String(seatId);
-    setSelectedSeatIds((prev) => {
-      const exists = prev.some((item) => String(item) === token);
-      const next = exists ? prev.filter((item) => String(item) !== token) : [...prev, token];
-      // Sync passenger forms to new seat count
-      syncPassengersToCount(next.length || 1);
-      return next;
-    });
-  }, [syncPassengersToCount]);
+  const toggleSeatSelection = useCallback(
+    (seatId) => {
+      const token = String(seatId);
+      setSelectedSeatIds((prev) => {
+        const exists = prev.some((item) => String(item) === token);
+        const next = exists ? prev.filter((item) => String(item) !== token) : [...prev, token];
+        // Sync passenger forms to new seat count
+        syncPassengersToCount(next.length || 1);
+        return next;
+      });
+    },
+    [syncPassengersToCount]
+  );
 
   const submitCabBooking = async () => {
     if (isBookingSubmitting) return;
-    if (!resolvedCabId) { showError("Cab Not Found", "Unable to identify the selected cab."); return; }
+    setBookingSubmitError("");
+    if (!resolvedCabId) {
+      showError("Cab Not Found", "Unable to identify the selected cab.");
+      return;
+    }
 
     const loggedInUserId = await getUserId();
-    if (!loggedInUserId) { showError("Login Required", "Please login to continue booking."); return; }
+    if (!loggedInUserId) {
+      showError("Login Required", "Please login to continue booking.");
+      return;
+    }
 
     // Validate all passenger forms
     for (let i = 0; i < passengers.length; i++) {
       const p = passengers[i];
       const label = passengers.length > 1 ? ` (Passenger ${i + 1})` : "";
-      if (!p.name.trim()) { showError("Missing Details", `Please enter passenger name${label}.`); return; }
+      if (!p.name.trim()) {
+        showError("Missing Details", `Please enter passenger name${label}.`);
+        return;
+      }
       const mob = p.mobile.replace(/[^\d]/g, "");
-      if (!mob || mob.length < 10) { showError("Invalid Mobile", `Enter valid 10-digit mobile${label}.`); return; }
-      if (!validateEmail(p.email)) { showError("Invalid Email", `Enter valid email${label}.`); return; }
+      if (!mob || mob.length < 10) {
+        showError("Invalid Mobile", `Enter valid 10-digit mobile${label}.`);
+        return;
+      }
+      if (!validateEmail(p.email)) {
+        showError("Invalid Email", `Enter valid email${label}.`);
+        return;
+      }
     }
 
-    if (isShared && availableSeatChoices.length === 0) { showError("Seat Data Missing", "No seat IDs found for this shared cab."); return; }
-    if (isShared && availableSeatChoices.length > 0 && selectedSeatIds.length === 0) { showError("Select Seats", "Please select at least one seat for shared booking."); return; }
-    if (isShared && selectedSeatIds.length > seatStats.available) { showError("Seat Limit Exceeded", `Only ${seatStats.available} seats are available.`); return; }
+    if (isShared && availableSeatChoices.length === 0) {
+      showError("Seat Data Missing", "No seat IDs found for this shared cab.");
+      return;
+    }
+    if (isShared && availableSeatChoices.length > 0 && selectedSeatIds.length === 0) {
+      showError("Select Seats", "Please select at least one seat for shared booking.");
+      return;
+    }
+    if (isShared && selectedSeatIds.length > seatStats.available) {
+      showError("Seat Limit Exceeded", `Only ${seatStats.available} seats are available.`);
+      return;
+    }
 
     const primary = passengers[0];
     const payload = {
@@ -415,9 +512,9 @@ export default function CabDetails({ navigation, route }) {
     // Attach extra passengers if more than 1
     if (passengers.length > 1) {
       payload.passengers = passengers.map((p) => ({
-        name:   p.name.trim(),
+        name: p.name.trim(),
         mobile: p.mobile.replace(/[^\d]/g, ""),
-        email:  p.email.trim(),
+        email: p.email.trim(),
       }));
     }
 
@@ -427,13 +524,10 @@ export default function CabDetails({ navigation, route }) {
     if (cabVehicleType) payload.vehicleType = cabVehicleType;
     if (isShared) payload.seats = selectedSeatIds;
 
+    setLocalBookingSubmitting(true);
+    setBookingPopupCompleted(false);
     try {
-      const response = await dispatch(createCabBooking(payload)).unwrap();
-      const bookingId = getBookingResponseId(response);
-      const bookingData = response?.data || response || {};
-      const pickupCode = bookingData?.pickupCode || "";
-      const dropCode = bookingData?.dropCode || "";
-      const rideStatus = bookingData?.rideStatus || "";
+      await dispatch(createCabBooking(payload)).unwrap();
 
       setBookingModalVisible(false);
       resetFormState();
@@ -441,19 +535,29 @@ export default function CabDetails({ navigation, route }) {
       if (resolvedCabId) dispatch(fetchCabById(resolvedCabId));
       dispatch(fetchAllCabs());
 
-      const codeParts = [];
-      if (pickupCode) codeParts.push(`Pickup Code: ${pickupCode}`);
-      if (dropCode) codeParts.push(`Drop Code: ${dropCode}`);
-      if (rideStatus) codeParts.push(`Status: ${rideStatus}`);
+      // Keep the completion state visible long enough for the user to read it.
+      setBookingPopupCompleted(true);
+      await new Promise((resolve) => setTimeout(resolve, BOOKING_DONE_DISPLAY_MS));
+      setLocalBookingSubmitting(false);
 
-      showSuccess(
-        "Booking Confirmed",
-        [bookingId ? `Booking ID: ${bookingId}` : "Cab booking created successfully.", ...codeParts]
-          .filter(Boolean)
-          .join("\n")
-      );
+      // The Done state is the success confirmation. Then open the cab-bookings
+      // section so the newly-created booking is visible immediately.
+      navigation.navigate("MainTabs", {
+        screen: "Profile",
+        params: { focusBookingType: "Cabs", bookingRefreshKey: Date.now() },
+      });
     } catch (error) {
-      showError("Booking Failed", String(error?.message || "Unable to create cab booking right now."));
+      const message = String(
+        error?.message ||
+          error?.error?.message ||
+          error?.data?.message ||
+          "Unable to create cab booking right now. Please try again."
+      );
+      setBookingSubmitError(message);
+      setBookingPopupCompleted(false);
+      setBookingModalVisible(true);
+    } finally {
+      setLocalBookingSubmitting(false);
     }
   };
 
@@ -461,7 +565,7 @@ export default function CabDetails({ navigation, route }) {
   if (selectedCabStatus === "loading" && !cab) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#F8FAFC", alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator size="large" color="#1D4ED8" />
+        <PlayStoreWavyLoader size="large" color="#1D4ED8" />
         <Text style={{ fontSize: 13, fontWeight: "600", color: "#94A3B8", marginTop: 12 }}>
           Loading cab details…
         </Text>
@@ -481,7 +585,7 @@ export default function CabDetails({ navigation, route }) {
           {selectedCabError?.message || "Unable to load selected cab details."}
         </Text>
         <TouchableOpacity
-          onPress={() => requestedCabId ? dispatch(fetchCabById(requestedCabId)) : navigation.goBack()}
+          onPress={() => (requestedCabId ? dispatch(fetchCabById(requestedCabId)) : navigation.goBack())}
           activeOpacity={0.85}
           style={{ marginTop: 20, height: 44, paddingHorizontal: 28, borderRadius: 10, backgroundColor: "#1D4ED8", alignItems: "center", justifyContent: "center" }}
         >
@@ -495,7 +599,7 @@ export default function CabDetails({ navigation, route }) {
 
   // ── Booking state colors ─────────────────────────────────────────────────────
   const stateColors = {
-    available:   { bg: "#EFF6FF", border: "#BFDBFE", text: "#1D4ED8" },
+    available: { bg: "#EFF6FF", border: "#BFDBFE", text: "#1D4ED8" },
     fullyBooked: { bg: "#FFFBEB", border: "#FDE68A", text: "#B45309" },
     unavailable: { bg: "#FFF1F2", border: "#FECDD3", text: "#BE123C" },
   };
@@ -520,7 +624,6 @@ export default function CabDetails({ navigation, route }) {
       >
         {/* ── Hero card ─────────────────────────────────────────────────────── */}
         <View style={{ marginHorizontal: 12, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, borderWidth: 0.5, borderColor: "#E2E8F0", overflow: "hidden" }}>
-
           {/* Image */}
           <View style={{ height: 200, backgroundColor: "#F1F5F9" }}>
             <Image
@@ -624,17 +727,14 @@ export default function CabDetails({ navigation, route }) {
 
             {/* Stat row */}
             <View style={{ flexDirection: "row", padding: 12, gap: 8 }}>
-              {/* Total */}
               <View style={{ flex: 1, backgroundColor: "#F8FAFC", borderRadius: 10, borderWidth: 0.5, borderColor: "#E2E8F0", padding: 10 }}>
                 <Text style={{ fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, color: "#94A3B8" }}>Total</Text>
                 <Text style={{ fontSize: 20, fontWeight: "700", color: "#0F172A", marginTop: 4 }}>{seatStats.total}</Text>
               </View>
-              {/* Booked */}
               <View style={{ flex: 1, backgroundColor: "#FFF1F2", borderRadius: 10, borderWidth: 0.5, borderColor: "#FECDD3", padding: 10 }}>
                 <Text style={{ fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, color: "#BE123C" }}>Booked</Text>
                 <Text style={{ fontSize: 20, fontWeight: "700", color: "#BE123C", marginTop: 4 }}>{seatStats.booked}</Text>
               </View>
-              {/* Available */}
               <View style={{ flex: 1, backgroundColor: "#F0FDF4", borderRadius: 10, borderWidth: 0.5, borderColor: "#BBF7D0", padding: 10 }}>
                 <Text style={{ fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, color: "#15803D" }}>Available</Text>
                 <Text style={{ fontSize: 20, fontWeight: "700", color: "#15803D", marginTop: 4 }}>{seatStats.available}</Text>
@@ -711,10 +811,12 @@ export default function CabDetails({ navigation, route }) {
       </View>
 
       {/* ── Booking Modal ─────────────────────────────────────────────────────── */}
+      {/* Hidden while submitting so the loading popup can show (iOS can't stack two Modals).
+          Form state is kept, so if booking fails the sheet reappears with the data intact. */}
       <Modal
         transparent
         animationType="slide"
-        visible={bookingModalVisible}
+        visible={bookingModalVisible && !localBookingSubmitting}
         onRequestClose={closeBookingModal}
       >
         <KeyboardAvoidingView
@@ -722,7 +824,6 @@ export default function CabDetails({ navigation, route }) {
           style={{ flex: 1, backgroundColor: "rgba(15,23,42,0.45)", justifyContent: "flex-end" }}
         >
           <View style={{ backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 20, maxHeight: "88%" }}>
-
             {/* Modal header */}
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
               <View>
@@ -738,6 +839,14 @@ export default function CabDetails({ navigation, route }) {
                 <Ionicons name="close" size={18} color="#475569" />
               </TouchableOpacity>
             </View>
+
+            {!!bookingSubmitError && (
+              <View style={{ marginBottom: 12, padding: 10, borderRadius: 10, backgroundColor: "#FFF1F2", borderWidth: 1, borderColor: "#FECDD3" }}>
+                <Text style={{ fontSize: 12, lineHeight: 17, fontWeight: "600", color: "#BE123C" }}>
+                  {bookingSubmitError}
+                </Text>
+              </View>
+            )}
 
             <ScrollView showsVerticalScrollIndicator={false}>
               {/* Cab summary strip */}
@@ -765,17 +874,25 @@ export default function CabDetails({ navigation, route }) {
                 >
                   <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
-                      <View style={{
-                        width: 22, height: 22, borderRadius: 11,
-                        backgroundColor: idx === 0 ? "#1D4ED8" : "#64748B",
-                        alignItems: "center", justifyContent: "center",
-                      }}>
+                      <View
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 11,
+                          backgroundColor: idx === 0 ? "#1D4ED8" : "#64748B",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
                         <Text style={{ fontSize: 11, fontWeight: "800", color: "#fff" }}>{idx + 1}</Text>
                       </View>
                       <Text style={{ fontSize: 12, fontWeight: "700", color: "#334155" }}>
                         {idx === 0 ? "Primary Passenger" : `Passenger ${idx + 1}`}
                         {isShared && selectedSeatIds[idx] ? (
-                          <Text style={{ fontWeight: "600", color: "#64748B" }}>{"  ·  S"}{selectedSeatIds[idx]?.toString().slice(-4)}</Text>
+                          <Text style={{ fontWeight: "600", color: "#64748B" }}>
+                            {"  ·  S"}
+                            {selectedSeatIds[idx]?.toString().slice(-4)}
+                          </Text>
                         ) : null}
                       </Text>
                     </View>
@@ -854,7 +971,7 @@ export default function CabDetails({ navigation, route }) {
                     {allSeatChoicesForDisplay.map((seat) => {
                       const active = selectedSeatIds.some((item) => String(item) === String(seat.seatId));
                       const isBooked = seat.isBooked;
-                      
+
                       return (
                         <TouchableOpacity
                           key={seat.seatId}
@@ -881,12 +998,8 @@ export default function CabDetails({ navigation, route }) {
                     })}
                   </View>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
-                    <Text style={{ fontSize: 11, color: "#94A3B8" }}>
-                      Selected: {selectedSeatIds.length}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: "#DC2626" }}>
-                      • Booked seats cannot be selected
-                    </Text>
+                    <Text style={{ fontSize: 11, color: "#94A3B8" }}>Selected: {selectedSeatIds.length}</Text>
+                    <Text style={{ fontSize: 11, color: "#DC2626" }}>• Booked seats cannot be selected</Text>
                   </View>
                 </View>
               ) : isShared ? (
@@ -937,7 +1050,7 @@ export default function CabDetails({ navigation, route }) {
                 style={{ flex: 1.5, height: 46, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: isBookingSubmitting ? "#CBD5E1" : "#1D4ED8" }}
               >
                 {isBookingSubmitting ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <PlayStoreWavyLoader size="small" color="#fff" />
                 ) : (
                   <Text style={{ fontSize: 13, fontWeight: "700", color: "#fff" }}>Confirm Booking</Text>
                 )}
@@ -946,6 +1059,71 @@ export default function CabDetails({ navigation, route }) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* ── Booking loading popup (loader + 5 wait phrases) ──────────────────── */}
+      <BookingLoadingPopup visible={localBookingSubmitting} completed={bookingPopupCompleted} />
     </SafeAreaView>
   );
 }
+
+// ─── styles (loading popup) ───────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  loadingCard: {
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    alignItems: "center",
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+  },
+  phraseText: {
+    textAlign: "center",
+    fontSize: 13,
+    marginTop: 20,
+  },
+  phraseActive: {
+    color: "#1D4ED8",
+    fontWeight: "800",
+    fontSize: 15,
+  },
+  doneIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#DCFCE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  doneIconText: {
+    color: "#16A34A",
+    fontSize: 34,
+    fontWeight: "800",
+    lineHeight: 38,
+  },
+  doneText: {
+    color: "#16A34A",
+    fontWeight: "800",
+    fontSize: 18,
+  },
+  loadingHint: {
+    marginTop: 18,
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#94A3B8",
+    textAlign: "center",
+  },
+});

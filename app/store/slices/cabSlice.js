@@ -22,10 +22,10 @@ const normalizeCabList = (payload) => {
       : Array.isArray(payload?.cars)
         ? payload.cars
         : [];
-  return items.filter((cab) => {
-    const status = String(cab?.runningStatus || '').trim().toLowerCase();
-    return cab?.isAvailable !== false && cab?.isRunning !== false && !status.includes('unavailable') && !status.includes('not available');
-  });
+    return items.filter((cab) => {
+      const status = String(cab?.runningStatus || '').trim().toLowerCase();
+      return cab?.isAvailable !== false && cab?.isRunning !== false && !status.includes('on a trip') && !status.includes('unavailable') && !status.includes('not available');
+    });
 };
 
 const normalizeCabBookingList = (payload) => {
@@ -206,7 +206,9 @@ export const createCabBooking = createAsyncThunk(
         return rejectWithValue({ message: "Customer email is required." });
       }
 
-      const response = await api.post("/travel/create-travel/booking", bookingPayload);
+      // Do not leave the Confirm button spinning forever if the server or
+      // notification pipeline stops responding.
+      const response = await api.post("/travel/create-travel/booking", bookingPayload, { timeout: 30000 });
       return response?.data || {};
     } catch (error) {
       return rejectWithValue(

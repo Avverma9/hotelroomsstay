@@ -3,12 +3,12 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
   ScrollView,
   Image,
   Animated,
   Easing,
 } from "react-native";
+import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
 import { router } from "../utils/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { Ionicons } from "@expo/vector-icons";
@@ -237,6 +237,14 @@ export default function HomeScreenFrontCabs() {
     router.navigate("Cabs");
   };
 
+  const navigateToCabDetails = (cab) => {
+    const cabId = cab?._id || cab?.id || cab?.cabId;
+    router.navigate("CabDetails", {
+      cabId: cabId ? String(cabId) : undefined,
+      cab,
+    });
+  };
+
   return (
     <View className="flex-1 bg-white mt-1">
       <View className="px-4 pt-4">
@@ -247,7 +255,7 @@ export default function HomeScreenFrontCabs() {
               <TinyFireIcon />
             </View>
             <Text className="text-[12px] text-slate-500 font-semibold mt-0.5">
-              Live cab inventory with updated fare and route details
+              Our Best Cab services
             </Text>
           </View>
 
@@ -263,7 +271,7 @@ export default function HomeScreenFrontCabs() {
 
       {status === "loading" && topCabs.length === 0 ? (
         <View className="items-center mt-6">
-          <ActivityIndicator size="small" color="#0d3b8f" />
+          <PlayStoreWavyLoader size="small" color="#0d3b8f" />
           <Text className="text-[11px] text-slate-500 font-semibold mt-2">
             Loading cabs...
           </Text>
@@ -306,7 +314,7 @@ export default function HomeScreenFrontCabs() {
             <CabCard
               key={cab?._id || `${cab?.make || "cab"}-${idx}`}
               cab={cab}
-              onPress={navigateToCabs}
+              onPress={() => navigateToCabDetails(cab)}
             />
           ))}
         </ScrollView>

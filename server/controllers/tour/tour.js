@@ -609,10 +609,21 @@ exports.filterTours = async (req, res) => {
     const d1 = toDate(fromDate || startDate);
     const d2 = toDate(toDateQuery || endDate);
     if (d1 || d2) {
-      const range = {};
-      if (d1) range.$gte = d1;
-      if (d2) range.$lte = d2;
-      filter.$or = [{ from: range }, { to: range }, { tourStartDate: range }];
+      const requestedStart = d1 || d2;
+      const requestedEnd = d2 || d1;
+      if (requestedStart > requestedEnd) {
+        return res.status(400).json({ success: false, message: "fromDate must be before or equal to toDate" });
+      }
+
+      // A tour is eligible only when its complete date window contains the
+      // requested window. This prevents a tour ending on the 10th from being
+      // returned for a search on the 11th.
+      andClauses.push({
+        $or: [
+          { tourStartDate: { $lte: requestedStart }, tourEndDate: { $gte: requestedEnd } },
+          { from: { $lte: requestedStart }, to: { $gte: requestedEnd } },
+        ],
+      });
     }
 
     if (q && String(q).trim()) {

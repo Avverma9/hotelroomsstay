@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { Modal, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const MODAL_THEMES = {
   info: {
@@ -50,6 +51,7 @@ const getModalState = (config = {}) => ({
 });
 
 export function AppModalProvider({ children }) {
+  const insets = useSafeAreaInsets();
   const [modal, setModal] = useState(DEFAULT_MODAL_STATE);
 
   const closeModal = useCallback(() => {
@@ -97,13 +99,9 @@ export function AppModalProvider({ children }) {
           message,
           ...options,
         }),
-      showError: (title, message, options = {}) =>
-        openModal({
-          type: "error",
-          title,
-          message,
-          ...options,
-        }),
+      // Screens render failures inline; errors must not interrupt the user
+      // with a blocking popup.
+      showError: () => {},
       showWarning: (title, message, options = {}) =>
         openModal({
           type: "warning",
@@ -138,7 +136,7 @@ export function AppModalProvider({ children }) {
           if (modal.dismissible) closeModal();
         }}
       >
-        <View className="flex-1 bg-black/45 px-5 items-center justify-center">
+        <View className="flex-1 bg-black/45 px-5 items-center justify-center" style={{ paddingBottom: insets.bottom }}>
           <View className="w-full max-w-[360px] rounded-3xl bg-white border border-slate-200 overflow-hidden">
             <View className="px-5 pt-4 pb-3.5" style={{ backgroundColor: theme.softBg }}>
               <View className="flex-row items-center">

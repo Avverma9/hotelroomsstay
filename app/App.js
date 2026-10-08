@@ -14,11 +14,11 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import {
   Text,
   View,
-  ActivityIndicator,
   TouchableOpacity,
   Modal,
   LogBox,
 } from "react-native";
+import PlayStoreWavyLoader from "./components/PlayStoreWavyLoader";
 import {
   SafeAreaProvider,
   useSafeAreaInsets,
@@ -27,7 +27,6 @@ import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { AppModalProvider } from "./contexts/AppModalContext";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
-import Toast from "react-native-toast-message";
 import ThemedStatusBar from "./components/ThemedStatusBar";
 import { requestStartupPermissionsIfNeeded } from "./utils/startupPermissions";
 import { baseURL } from "./utils/baseUrl";
@@ -147,7 +146,7 @@ class NavigationErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
-          <ActivityIndicator size="large" color="#0d3b8f" />
+          <PlayStoreWavyLoader size="large" color="#0d3b8f" />
         </View>
       );
     }
@@ -329,7 +328,7 @@ function LoadingScreen() {
         backgroundColor: "#fff",
       }}
     >
-      <ActivityIndicator size="large" color="#0d3b8f" />
+      <PlayStoreWavyLoader size="large" color="#0d3b8f" />
     </View>
   );
 }
@@ -738,7 +737,6 @@ export default function App() {
             <AppModalProvider>
               <HealthAwareNavigator />
             </AppModalProvider>
-            <Toast />
           </SafeAreaProvider>
         </ThemeProvider>
       </AuthProvider>

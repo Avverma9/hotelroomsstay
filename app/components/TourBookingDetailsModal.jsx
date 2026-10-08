@@ -1,6 +1,6 @@
 import React from "react";
 import { Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 // --- Helpers (Kept logic same, just cleaner formatting) ---
@@ -87,6 +87,7 @@ const Tag = ({ text, type = "neutral" }) => (
 );
 
 export default function TourBookingDetailsModal({ visible, onClose, booking }) {
+  const insets = useSafeAreaInsets();
   if (!visible) return null;
 
   // Process Data
@@ -131,7 +132,7 @@ export default function TourBookingDetailsModal({ visible, onClose, booking }) {
             </TouchableOpacity>
           </View>
 
-          <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 + insets.bottom }} showsVerticalScrollIndicator={false}>
             
             {/* 1. Quick Stats Grid */}
             <View className="flex-row flex-wrap bg-white p-4 mb-3 border-b border-neutral-200">

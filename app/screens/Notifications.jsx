@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   LayoutAnimation,
   Platform,
   RefreshControl,
@@ -10,6 +9,7 @@ import {
   UIManager,
   View,
 } from "react-native";
+import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../components/Header";
@@ -316,7 +316,7 @@ export default function Notifications({ navigation }) {
               }`}
             >
               {isClearingAll ? (
-                <ActivityIndicator size="small" color="#475569" />
+                <PlayStoreWavyLoader size="small" color="#475569" />
               ) : (
                 <>
                   <Ionicons name="trash-outline" size={14} color="#475569" />
@@ -331,7 +331,7 @@ export default function Notifications({ navigation }) {
 
         {isLoading ? (
           <View className="flex-1 items-center justify-center py-16">
-            <ActivityIndicator size="small" color="#0d3b8f" />
+            <PlayStoreWavyLoader size="small" color="#0d3b8f" />
             <Text className="text-[12px] font-semibold text-slate-500 mt-2">
               Loading notifications...
             </Text>
@@ -370,7 +370,7 @@ export default function Notifications({ navigation }) {
               disabled={isRefreshing}
             >
               {isRefreshing ? (
-                <ActivityIndicator
+                <PlayStoreWavyLoader
                   size="small"
                   color="rgba(255,255,255,0.82)"
                 />
@@ -430,7 +430,7 @@ export default function Notifications({ navigation }) {
                             }`}
                           >
                             {isDeleting ? (
-                              <ActivityIndicator size="small" color="#475569" />
+                              <PlayStoreWavyLoader size="small" color="#475569" />
                             ) : (
                               <Ionicons
                                 name="close"
@@ -466,7 +466,7 @@ export default function Notifications({ navigation }) {
               disabled={isRefreshing}
             >
               {isRefreshing ? (
-                <ActivityIndicator
+                <PlayStoreWavyLoader
                   size="small"
                   color="rgba(255,255,255,0.82)"
                 />

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -14,7 +13,8 @@ import {
   Modal,
   Animated,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
@@ -273,7 +273,7 @@ const GoldButton = ({ label, icon, onPress, disabled, loading, small }) => (
     style={[S.goldBtn, small && S.goldBtnSm, (disabled || loading) && { opacity: 0.45 }]}
   >
     {loading ? (
-      <ActivityIndicator size="small" color={C.bgDeep} />
+      <PlayStoreWavyLoader size="small" color={C.bgDeep} />
     ) : (
       <>
         {icon && <Ionicons name={icon} size={small ? 12 : 15} color={C.bgDeep} />}
@@ -295,7 +295,7 @@ const GhostButton = ({ label, icon, onPress, disabled, loading, variant }) => {
       style={[S.ghostBtn, { backgroundColor: bg, borderColor: brd }, disabled && { opacity: 0.4 }]}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={col} />
+        <PlayStoreWavyLoader size="small" color={col} />
       ) : (
         <>
           {icon && <Ionicons name={icon} size={12} color={col} />}
@@ -382,10 +382,11 @@ const BookingCard = ({ item, onViewBooking }) => {
 
 // ─── Main Profile Screen ──────────────────────────────────────────────────────
 
-const Profile = () => {
+const Profile = ({ route }) => {
   const dispatch = useDispatch();
   const { signOut } = useAuth();
   const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState("Bookings");
   const [bookingType, setBookingType] = useState("Hotel");
@@ -471,6 +472,12 @@ const Profile = () => {
     return () => { mounted = false; };
   }, []);
   useEffect(() => { if (userId) dispatch(fetchUserComplaints({ userId })); }, [dispatch, userId]);
+  useEffect(() => {
+    if (route?.params?.focusBookingType !== "Cabs") return;
+    setActiveTab("Bookings");
+    setBookingType("Cabs");
+    setPage(1);
+  }, [route?.params?.focusBookingType, route?.params?.bookingRefreshKey]);
   useEffect(() => { setPage(1); }, [bookingType, bookingStatusFilter]);
   useEffect(() => {
     if (activeTab !== "Bookings" || !userId) return;
@@ -702,6 +709,7 @@ const Profile = () => {
       {/* Tour Bookings */}
       {bookingType === "Tour" && (
         <>
+          {tourBookingsLoading && <View style={S.inlineLoader}><PlayStoreWavyLoader size="small" color={C.gold} /></View>}
           {tourBookingsLoading && [0, 1, 2].map((i) => <TourBookingCardSkeleton key={i} />)}
           {!!tourBookingsError && !tourBookingsLoading && <Text style={S.errorTxt}>{String(tourBookingsError?.message || tourBookingsError)}</Text>}
           {!tourBookingsLoading && !tourBookingsError && (
@@ -754,6 +762,7 @@ const Profile = () => {
       {/* Cab Bookings */}
       {bookingType === "Cabs" && (
         <>
+          {cabBookingsLoading && <View style={S.inlineLoader}><PlayStoreWavyLoader size="small" color={C.gold} /></View>}
           {cabBookingsLoading && [0, 1, 2].map((i) => <HotelBookingCardSkeleton key={i} />)}
           {!!cabBookingsError && !cabBookingsLoading && <Text style={S.errorTxt}>{String(cabBookingsError?.message || cabBookingsError)}</Text>}
           {!cabBookingsLoading && !cabBookingsError && (
@@ -839,6 +848,7 @@ const Profile = () => {
 
   const renderCoupons = () => (
     <View>
+      {couponsState?.status === "loading" && <View style={S.inlineLoader}><PlayStoreWavyLoader size="small" color={C.gold} /></View>}
       {couponsState?.status === "loading" && [0, 1, 2].map((i) => <CouponCardSkeleton key={i} />)}
       {couponsState?.status === "failed" && <Text style={S.errorTxt}>{String(couponsState?.error?.message || couponsState?.error)}</Text>}
       {coupons.map((coupon, index) => {
@@ -920,6 +930,7 @@ const Profile = () => {
           </View>
         )}
 
+        {complaintsState?.status === "loading" && <View style={S.inlineLoader}><PlayStoreWavyLoader size="small" color={C.gold} /></View>}
         {complaintsState?.status === "loading" && [0, 1, 2].map((i) => <ComplaintCardSkeleton key={i} />)}
 
         {complaintsState?.status === "failed" && (
@@ -1261,7 +1272,7 @@ const Profile = () => {
                 </View>
               </ScrollView>
 
-              <View style={S.sheetFooter}>
+              <View style={[S.sheetFooter, { paddingBottom: insets.bottom }]}>
                 <TouchableOpacity onPress={handleCloseCreateComplaintModal} disabled={isComplaintCreating} style={S.ghostActionBtn}>
                   <Text style={S.ghostActionTxt}>Cancel</Text>
                 </TouchableOpacity>
@@ -1271,7 +1282,7 @@ const Profile = () => {
                   style={[S.solidActionBtn, (isComplaintCreating || !userId) && { opacity: 0.45 }]}
                 >
                   {isComplaintCreating
-                    ? <ActivityIndicator size="small" color={C.bgDeep} />
+                    ? <PlayStoreWavyLoader size="small" color={C.bgDeep} />
                     : <Text style={S.solidActionTxt}>Submit Complaint</Text>}
                 </TouchableOpacity>
               </View>
@@ -1309,7 +1320,7 @@ const Profile = () => {
               >
                 {complaintsState?.detailStatus === "loading" && (
                   <View style={{ alignItems: "center", paddingVertical: 20 }}>
-                    <ActivityIndicator size="small" color={C.gold} />
+                    <PlayStoreWavyLoader size="small" color={C.gold} />
                   </View>
                 )}
                 {complaintChats.length ? complaintChats.map((chat, idx) => {
@@ -1336,7 +1347,7 @@ const Profile = () => {
               </ScrollView>
 
               {/* Input */}
-              <View style={S.chatInputBar}>
+              <View style={[S.chatInputBar, { paddingBottom: insets.bottom }]}>
                 <TextInput
                   value={chatMessage}
                   onChangeText={setChatMessage}
@@ -1350,7 +1361,7 @@ const Profile = () => {
                   style={[S.sendBtn, (!String(chatMessage || "").trim() || complaintsState?.chatStatus === "loading") && { opacity: 0.4 }]}
                 >
                   {complaintsState?.chatStatus === "loading"
-                    ? <ActivityIndicator size="small" color={C.bgDeep} />
+                    ? <PlayStoreWavyLoader size="small" color={C.bgDeep} />
                     : <Ionicons name="send" size={15} color={C.bgDeep} />}
                 </TouchableOpacity>
               </View>
@@ -1422,7 +1433,7 @@ const Profile = () => {
             </ScrollView>
 
             {/* Save Footer */}
-            <View style={S.editFooter}>
+            <View style={[S.editFooter, { paddingBottom: 14 + insets.bottom }]}>
               <TouchableOpacity
                 onPress={handleUpdateProfile}
                 disabled={profileUpdateState?.status === "loading"}
@@ -1431,7 +1442,7 @@ const Profile = () => {
               >
                 <LinearGradient colors={[C.goldBright, C.goldDeep]} style={S.saveBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                   {profileUpdateState?.status === "loading"
-                    ? <ActivityIndicator color={C.bgDeep} />
+                    ? <PlayStoreWavyLoader color={C.bgDeep} />
                     : <><Text style={S.saveBtnTxt}>Save Changes</Text><Ionicons name="checkmark" size={18} color={C.bgDeep} /></>}
                 </LinearGradient>
               </TouchableOpacity>
@@ -1447,6 +1458,7 @@ const Profile = () => {
 
 const S = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: C.bgDeep },
+  inlineLoader: { alignItems: "center", paddingVertical: 8 },
 
   // ── Hero ──
   hero: { paddingHorizontal: 20, paddingTop: Platform.OS === "ios" ? 52 : 34, paddingBottom: 20 },

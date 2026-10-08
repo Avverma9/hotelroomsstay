@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require("uuid");
 
 // Models
 const hotelModel = require("../../models/hotel/basicDetails");
+const bookingModel = require("../../models/booking/booking");
 const monthModel = require("../../models/booking/monthly");
 const bookingsModel = require("../../models/booking/booking");
 const gstModel = require("../../models/GST/gst");
@@ -336,7 +337,7 @@ const applyMonthlyPricing = async (hotels, checkInDate, checkOutDate) => {
 
 const getHotelsByFilters = async (req, res) => {
   try {
-    const { search, hotelName, hotelEmail, city, state, isAccepted, minPrice, maxPrice, checkInDate, checkOutDate, page = 1, limit = 10, sortBy = "price", sortOrder = "asc" } = req.query;
+    const { search, hotelName, hotelEmail, city, state, isAccepted, minPrice, maxPrice, starRating, amenities, bedType, bedTypes, roomType, type, checkInDate, checkOutDate, countRooms = 1, page = 1, limit = 10, sortBy = "price", sortOrder = "asc" } = req.query;
 
     let query = {};
     let andConditions = [];
@@ -361,16 +362,91 @@ const getHotelsByFilters = async (req, res) => {
     const status = isAccepted === 'false' ? false : true;
     andConditions.push({ isAccepted: status });
 
+    let stayStart = null;
+    let stayEnd = null;
+    if (checkInDate || checkOutDate) {
+      if (!checkInDate || !checkOutDate) {
+        return res.status(400).json({ success: false, error: "checkInDate and checkOutDate are required together" });
+      }
+      stayStart = new Date(checkInDate);
+      stayEnd = new Date(checkOutDate);
+      if (Number.isNaN(stayStart.getTime()) || Number.isNaN(stayEnd.getTime()) || stayEnd <= stayStart) {
+        return res.status(400).json({ success: false, error: "Valid check-in and check-out dates are required" });
+      }
+
+      // The property itself must be active for the entire requested stay.
+      andConditions.push(
+        { startDate: { $lte: stayStart } },
+        { endDate: { $gte: stayEnd } },
+      );
+    }
+
     if (andConditions.length > 0) query.$and = andConditions;
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // Room and amenity filters are applied before pagination so page counts remain correct.
+    const requestedAmenities = String(amenities || "").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
+    if (requestedAmenities.length) {
+      const amenityRows = await amenitiesModel.find({}).lean();
+      const matchingHotelIds = amenityRows.filter((row) => {
+        const available = (row.amenities || []).map((item) => String(item).toLowerCase());
+        return requestedAmenities.every((wanted) => available.some((item) => item.includes(wanted)));
+      }).map((row) => row.hotelId);
+      andConditions.push({ hotelId: { $in: matchingHotelIds } });
+      query.$and = andConditions;
+    }
+
     const [allHotels, gstData] = await Promise.all([
-      hotelModel.find(query).skip(skip).limit(parseInt(limit)).lean(),
+      hotelModel.find(query).lean(),
       gstModel.findOne({ type: "Hotel" }).lean()
     ]);
 
-    const total = await hotelModel.countDocuments(query);
-    const processed = await applyMonthlyPricing(allHotels, checkInDate, checkOutDate);
+    const requestedStar = Number(starRating);
+    const min = minPrice === undefined || minPrice === "" ? null : Number(minPrice);
+    const max = maxPrice === undefined || maxPrice === "" ? null : Number(maxPrice);
+    const wantedBed = String(bedType || bedTypes || "").trim().toLowerCase();
+    const wantedRoom = String(roomType || type || "").trim().toLowerCase();
+    let processed = await applyMonthlyPricing(allHotels, checkInDate, checkOutDate);
+    const requestedRooms = Math.max(1, Number(countRooms) || 1);
+    if (stayStart && stayEnd && processed.length) {
+      const blockingBookings = await bookingModel.find({
+        "hotelDetails.hotelId": { $in: processed.map((hotel) => hotel.hotelId) },
+        bookingStatus: { $in: ["Confirmed", "Pending", "Checked-in"] },
+        checkInDate: { $lt: stayEnd },
+        checkOutDate: { $gt: stayStart },
+      }).select("hotelDetails roomDetails numRooms").lean();
+      const blockedByHotelRoom = new Map();
+      blockingBookings.forEach((booking) => {
+        const hotelId = String(booking?.hotelDetails?.hotelId || "");
+        const quantity = Math.max(1, Number(booking?.numRooms) || 1);
+        (booking.roomDetails || []).forEach((room) => {
+          const key = `${hotelId}:${String(room?.roomId || "")}`;
+          blockedByHotelRoom.set(key, (blockedByHotelRoom.get(key) || 0) + quantity);
+        });
+      });
+      processed = processed.map((hotel) => ({
+        ...hotel,
+        rooms: (hotel.rooms || []).filter((room) => {
+          const capacity = Math.max(0, Number(room?.totalRooms || room?.countRooms || 0));
+          const blocked = blockedByHotelRoom.get(`${hotel.hotelId}:${String(room?.roomId || room?._id || "")}`) || 0;
+          return capacity - blocked >= requestedRooms && room?.soldOut !== true;
+        }),
+      })).filter((hotel) => hotel.rooms.length > 0);
+    }
+    processed = processed.filter((hotel) => {
+      if (Number.isFinite(requestedStar) && Number(hotel.starRating) < requestedStar) return false;
+      if (min !== null && Number.isFinite(min) && Number(hotel.startingPrice) < min) return false;
+      if (max !== null && Number.isFinite(max) && Number(hotel.startingPrice) > max) return false;
+      if (wantedBed && !(hotel.rooms || []).some((room) => String(room.bedTypes || "").toLowerCase().includes(wantedBed))) return false;
+      if (wantedRoom && !(hotel.rooms || []).some((room) => String(room.type || "").toLowerCase().includes(wantedRoom))) return false;
+      return true;
+    });
+    if (sortBy === "price") {
+      processed.sort((a, b) => (Number(a.startingPrice) - Number(b.startingPrice)) * (String(sortOrder).toLowerCase() === "desc" ? -1 : 1));
+    }
+    const total = processed.length;
+    const pageNumber = Math.max(1, parseInt(page) || 1);
+    const pageSize = Math.max(1, parseInt(limit) || 10);
+    processed = processed.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
 
     res.json({ success: true, total, data: processed, gstInfo: gstData });
   } catch (error) {

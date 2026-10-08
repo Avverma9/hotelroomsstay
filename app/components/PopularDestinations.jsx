@@ -5,9 +5,8 @@ import {
   TouchableOpacity,
   Image,
   ScrollView,
-  ActivityIndicator,
-  Alert,
 } from "react-native";
+import PlayStoreWavyLoader from "./PlayStoreWavyLoader";
 import * as Location from "expo-location";
 // Icons के लिए @expo/vector-icons (Ionicons) का उपयोग किया गया है
 import { Ionicons } from "@expo/vector-icons";
@@ -30,7 +29,6 @@ const PopularDestinations = ({ locations = [], onSelectLocation }) => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (!isMounted.current) return;
       if (status !== "granted") {
-        Alert.alert("Permission required", "Location permission is needed.");
         setLoading(false);
         return;
       }
@@ -49,7 +47,6 @@ const PopularDestinations = ({ locations = [], onSelectLocation }) => {
     } catch (e) {
       if (isMounted.current) {
         setLoading(false);
-        Alert.alert("Error", "Unable to get current location");
       }
     }
   };
@@ -78,7 +75,7 @@ const PopularDestinations = ({ locations = [], onSelectLocation }) => {
         >
           <View className="w-[76px] h-[76px] rounded-[22px] bg-blue-50/80 border border-blue-100/60 items-center justify-center shadow-sm mb-2">
             {loading ? (
-              <ActivityIndicator size="small" color="#2563EB" />
+              <PlayStoreWavyLoader size="small" color="#2563EB" />
             ) : (
               <View className="w-10 h-10 rounded-full bg-blue-500/10 items-center justify-center">
                 <Ionicons name="navigate" size={20} color="#2563EB" />

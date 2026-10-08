@@ -361,7 +361,7 @@ exports.getAllCars = async (req, res) => {
           $and: [
             { $or: [{ isAvailable: { $ne: false } }, { isAvailable: { $exists: false } }] },
             { $or: [{ isRunning: { $ne: false } }, { isRunning: { $exists: false } }] },
-            { $or: [{ runningStatus: { $exists: false } }, { runningStatus: { $not: /unavailable|not available/i } }] },
+            { $or: [{ runningStatus: { $exists: false } }, { runningStatus: { $not: /on a trip|unavailable|not available/i } }] },
           ],
         }
       : {};
@@ -439,7 +439,7 @@ exports.filterCar = async (req, res) => {
       query.$and = [
         { $or: [{ isAvailable: { $ne: false } }, { isAvailable: { $exists: false } }] },
         { $or: [{ isRunning: { $ne: false } }, { isRunning: { $exists: false } }] },
-        { $or: [{ runningStatus: { $exists: false } }, { runningStatus: { $not: /unavailable|not available/i } }] },
+        { $or: [{ runningStatus: { $exists: false } }, { runningStatus: { $not: /on a trip|unavailable|not available/i } }] },
       ];
     }
 
@@ -460,19 +460,34 @@ exports.filterCar = async (req, res) => {
       query.dropP = { $regex: new RegExp(dropP, 'i') };
     }
 
-    if (pickupD && dropD) {
-      const pickupDate = toDate(pickupD);
-      const dropDate = toDate(dropD);
+    if (pickupD || dropD) {
+      const requestedPickup = toDate(pickupD || dropD);
+      const requestedDrop = toDate(dropD || pickupD);
 
-      if (!pickupDate || !dropDate) {
+      if (!requestedPickup || !requestedDrop) {
         return res.status(400).json({ message: 'Invalid pickupD or dropD date format' });
       }
-      if (pickupDate > dropDate) {
+      if (requestedPickup > requestedDrop) {
         return res.status(400).json({ message: 'pickupD must be less than or equal to dropD' });
       }
 
-      query.pickupD = { $gte: pickupDate };
-      query.dropD = { $lte: dropDate };
+      // A date-only pickupD represents a calendar-day search. When the app
+      // sends an ISO timestamp, require the cab to be running at that exact
+      // requested time.
+      if (!dropD && String(pickupD).includes('T')) {
+        query.pickupD = { $lte: requestedPickup };
+        query.dropD = { $gte: requestedPickup };
+      } else if (!dropD) {
+        const dayStart = new Date(requestedPickup);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setHours(23, 59, 59, 999);
+        query.pickupD = { $lte: dayEnd };
+        query.dropD = { $gte: dayStart };
+      } else {
+        query.pickupD = { $lte: requestedPickup };
+        query.dropD = { $gte: requestedDrop };
+      }
     }
 
     if (Object.keys(query).length === 0) {

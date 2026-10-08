@@ -1,5 +1,6 @@
 import React from "react";
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
@@ -24,7 +25,7 @@ export default function ServerUnavailable({ onRetry, isRetrying = false }) {
           activeOpacity={0.85}
         >
           {isRetrying ? (
-            <ActivityIndicator color="#ffffff" size="small" />
+            <PlayStoreWavyLoader color="#ffffff" size="small" />
           ) : (
             <Text style={styles.retryButtonText}>Retry Now</Text>
           )}

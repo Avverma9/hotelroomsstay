@@ -3,12 +3,12 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
   ScrollView,
   Image,
   Animated,
   Easing,
 } from "react-native";
+import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
 import { router } from "../utils/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { Ionicons } from "@expo/vector-icons";
@@ -203,7 +203,7 @@ export default function HomeScreenFrontTour() {
             <HomeScreenFrontTourSkeleton />
           </ScrollView>
           <View className="items-center mt-2">
-            <ActivityIndicator size="small" color="#0d3b8f" />
+            <PlayStoreWavyLoader size="small" color="#0d3b8f" />
             <Text className="text-[11px] text-slate-500 font-semibold mt-2">
               Loading tours...
             </Text>

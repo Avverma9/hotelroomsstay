@@ -1,36 +1,30 @@
-import React, { useEffect } from 'react';
-import {
-  View,
-  Text,
-  Animated,
-  Dimensions,
-  StyleSheet,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import Svg, { Path } from 'react-native-svg';
+import React, { useEffect } from "react";
+import { View, Text, Animated, Dimensions, StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import Svg, { Path } from "react-native-svg";
 
-const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get("window");
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 export default function BootScreen() {
   // Doodle circle animation
   const circleProgress = React.useRef(new Animated.Value(0)).current;
-  
+
   // Letter H animation
   const letterHScale = React.useRef(new Animated.Value(0)).current;
   const letterHOpacity = React.useRef(new Animated.Value(0)).current;
-  
+
   // Letters R and S animations
   const letterRScale = React.useRef(new Animated.Value(0.8)).current;
   const letterROpacity = React.useRef(new Animated.Value(0)).current;
   const letterRRotate = React.useRef(new Animated.Value(-10)).current;
-  
+
   const letterSScale = React.useRef(new Animated.Value(0.8)).current;
   const letterSOpacity = React.useRef(new Animated.Value(0)).current;
   const letterSRotate = React.useRef(new Animated.Value(-10)).current;
-  
+
   // Sub-text animations
   const subHOpacity = React.useRef(new Animated.Value(0)).current;
   const subHTranslate = React.useRef(new Animated.Value(-10)).current;
@@ -38,23 +32,20 @@ export default function BootScreen() {
   const subRTranslate = React.useRef(new Animated.Value(-10)).current;
   const subSOpacity = React.useRef(new Animated.Value(0)).current;
   const subSTranslate = React.useRef(new Animated.Value(-10)).current;
-  
+
   // Icon animations
   const icon1Opacity = React.useRef(new Animated.Value(0)).current;
   const icon1Translate = React.useRef(new Animated.Value(20)).current;
   const icon1Scale = React.useRef(new Animated.Value(0.5)).current;
-  
+
   const icon2Opacity = React.useRef(new Animated.Value(0)).current;
   const icon2Translate = React.useRef(new Animated.Value(20)).current;
   const icon2Scale = React.useRef(new Animated.Value(0.5)).current;
-  
+
   const icon3Opacity = React.useRef(new Animated.Value(0)).current;
   const icon3Translate = React.useRef(new Animated.Value(20)).current;
   const icon3Scale = React.useRef(new Animated.Value(0.5)).current;
-  
-  // Loading line animation
-  const loaderProgress = React.useRef(new Animated.Value(0)).current;
-  
+
   // Wiggle animation (continuous)
   const wiggleRotate = React.useRef(new Animated.Value(0)).current;
 
@@ -65,7 +56,7 @@ export default function BootScreen() {
       duration: 1500,
       useNativeDriver: true,
     }).start();
-    
+
     // Letter H pop and shake
     Animated.sequence([
       Animated.delay(500),
@@ -83,7 +74,7 @@ export default function BootScreen() {
         }),
       ]),
     ]).start();
-    
+
     // Letter R scribble in
     Animated.sequence([
       Animated.delay(1200),
@@ -105,7 +96,7 @@ export default function BootScreen() {
         }),
       ]),
     ]).start();
-    
+
     // Letter S scribble in
     Animated.sequence([
       Animated.delay(1400),
@@ -127,39 +118,71 @@ export default function BootScreen() {
         }),
       ]),
     ]).start();
-    
+
     // Sub-text animations
     Animated.sequence([
       Animated.delay(1000),
       Animated.parallel([
-        Animated.timing(subHOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(subHTranslate, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(subHOpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(subHTranslate, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
       ]),
     ]).start();
-    
+
     Animated.sequence([
       Animated.delay(1600),
       Animated.parallel([
-        Animated.timing(subROpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(subRTranslate, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(subROpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(subRTranslate, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
       ]),
     ]).start();
-    
+
     Animated.sequence([
       Animated.delay(1800),
       Animated.parallel([
-        Animated.timing(subSOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(subSTranslate, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(subSOpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(subSTranslate, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
       ]),
     ]).start();
-    
+
     // Icon jump animations
     const jumpIcon = (opacity, translate, scale, delay) => {
       Animated.sequence([
         Animated.delay(delay),
         Animated.parallel([
-          Animated.timing(opacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-          Animated.timing(translate, { toValue: 0, duration: 600, useNativeDriver: true }),
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(translate, {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: true,
+          }),
           Animated.spring(scale, {
             toValue: 1,
             friction: 4,
@@ -169,25 +192,30 @@ export default function BootScreen() {
         ]),
       ]).start();
     };
-    
+
     jumpIcon(icon1Opacity, icon1Translate, icon1Scale, 2200);
     jumpIcon(icon2Opacity, icon2Translate, icon2Scale, 2400);
     jumpIcon(icon3Opacity, icon3Translate, icon3Scale, 2600);
-    
-    // Loading line animation
-    Animated.timing(loaderProgress, {
-      toValue: 1,
-      duration: 3500,
-      useNativeDriver: true,
-    }).start();
-    
+
     // Continuous wiggle effect
     const wiggleAnim = Animated.loop(
       Animated.sequence([
-        Animated.timing(wiggleRotate, { toValue: 1, duration: 750, useNativeDriver: true }),
-        Animated.timing(wiggleRotate, { toValue: -1, duration: 1500, useNativeDriver: true }),
-        Animated.timing(wiggleRotate, { toValue: 0, duration: 750, useNativeDriver: true }),
-      ])
+        Animated.timing(wiggleRotate, {
+          toValue: 1,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(wiggleRotate, {
+          toValue: -1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(wiggleRotate, {
+          toValue: 0,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ]),
     );
     wiggleAnim.start();
 
@@ -198,21 +226,19 @@ export default function BootScreen() {
 
   const wiggleRotateInterpolate = wiggleRotate.interpolate({
     inputRange: [-1, 0, 1],
-    outputRange: ['-1deg', '0deg', '1deg'],
+    outputRange: ["-1deg", "0deg", "1deg"],
   });
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.mainContainer}>
-        
         {/* Main Logo Container with Wiggle */}
-        <Animated.View 
+        <Animated.View
           style={[
             styles.logoWrapper,
-            { transform: [{ rotate: wiggleRotateInterpolate }] }
+            { transform: [{ rotate: wiggleRotateInterpolate }] },
           ]}
         >
-          
           {/* H Block with Doodle Circle */}
           <View style={styles.letterBlock}>
             {/* Doodle Circle SVG */}
@@ -236,7 +262,7 @@ export default function BootScreen() {
                 })}
               />
             </Svg>
-            
+
             <Animated.Text
               style={[
                 styles.mainLetter,
@@ -248,7 +274,7 @@ export default function BootScreen() {
             >
               H
             </Animated.Text>
-            
+
             <Animated.Text
               style={[
                 styles.subText,
@@ -271,17 +297,18 @@ export default function BootScreen() {
                 opacity: letterROpacity,
                 transform: [
                   { scale: letterRScale },
-                  { rotate: letterRRotate.interpolate({
+                  {
+                    rotate: letterRRotate.interpolate({
                       inputRange: [-10, 0],
-                      outputRange: ['-10deg', '0deg'],
-                    })
+                      outputRange: ["-10deg", "0deg"],
+                    }),
                   },
                 ],
               },
             ]}
           >
             <Animated.Text style={styles.mainLetter}>R</Animated.Text>
-            
+
             <Animated.Text
               style={[
                 styles.subText,
@@ -304,17 +331,20 @@ export default function BootScreen() {
                 opacity: letterSOpacity,
                 transform: [
                   { scale: letterSScale },
-                  { rotate: letterSRotate.interpolate({
+                  {
+                    rotate: letterSRotate.interpolate({
                       inputRange: [-10, 0],
-                      outputRange: ['-10deg', '0deg'],
-                    })
+                      outputRange: ["-10deg", "0deg"],
+                    }),
                   },
                 ],
               },
             ]}
           >
-            <Animated.Text style={[styles.mainLetter, styles.letterSOrange]}>S</Animated.Text>
-            
+            <Animated.Text style={[styles.mainLetter, styles.letterSOrange]}>
+              S
+            </Animated.Text>
+
             <Animated.Text
               style={[
                 styles.subText,
@@ -328,41 +358,10 @@ export default function BootScreen() {
               Stay
             </Animated.Text>
           </Animated.View>
-          
         </Animated.View>
-
-
 
         {/* Tagline */}
         <Text style={styles.tagline}>Let's go somewhere!</Text>
-
-        {/* Doodle Loading Line */}
-        <View style={styles.loaderContainer}>
-          <Svg width={256} height={24} viewBox="0 0 200 20">
-            {/* Base line */}
-            <Path
-              d="M5,10 Q50,15 100,10 T195,10"
-              fill="none"
-              stroke="#eee"
-              strokeWidth="4"
-              strokeLinecap="round"
-            />
-            {/* Animated loading line */}
-            <AnimatedPath
-              d="M5,10 Q50,15 100,10 T195,10"
-              fill="none"
-              stroke="#333"
-              strokeWidth="4"
-              strokeLinecap="round"
-              strokeDasharray={200}
-              strokeDashoffset={loaderProgress.interpolate({
-                inputRange: [0, 1],
-                outputRange: [200, 0],
-              })}
-            />
-          </Svg>
-        </View>
-
       </View>
     </SafeAreaView>
   );
@@ -371,104 +370,98 @@ export default function BootScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
   },
   mainContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 20,
   },
   logoWrapper: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "center",
     marginBottom: 32,
     gap: 12,
   },
   letterBlock: {
-    alignItems: 'center',
-    justifyContent: 'flex-end',
+    alignItems: "center",
+    justifyContent: "flex-end",
     height: 128,
     width: 80,
     paddingBottom: 4,
-    position: 'relative',
+    position: "relative",
   },
   doodleCircle: {
-    position: 'absolute',
+    position: "absolute",
     top: -10,
     left: 0,
     right: 0,
   },
   mainLetter: {
     fontSize: 70,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontWeight: "bold",
+    color: "#111827",
     marginBottom: 8,
     zIndex: 10,
   },
   letterSOrange: {
-    color: '#f97316',
-    transform: [{ rotate: '5deg' }],
+    color: "#f97316",
+    transform: [{ rotate: "5deg" }],
   },
   subText: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   subTextOrange: {
-    color: '#ea580c',
+    color: "#ea580c",
   },
   subTextBlue: {
-    color: '#2563eb',
+    color: "#2563eb",
   },
   iconsContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 32,
     marginBottom: 16,
     marginTop: 16,
   },
   iconBox: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   iconCircle: {
     width: 56,
     height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
   },
   iconScribbleBg: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#e5e7eb',
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#e5e7eb",
     borderRadius: 28,
     opacity: 0.5,
   },
   iconScribbleBgOrange: {
-    backgroundColor: '#fed7aa',
+    backgroundColor: "#fed7aa",
     opacity: 0.8,
   },
   iconLabel: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginTop: 4,
-    color: '#111827',
+    color: "#111827",
   },
   iconLabelOrange: {
-    color: '#ea580c',
+    color: "#ea580c",
   },
   tagline: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#9ca3af',
+    fontWeight: "bold",
+    color: "#9ca3af",
     letterSpacing: 1,
     marginBottom: 32,
-  },
-  loaderContainer: {
-    position: 'absolute',
-    bottom: 48,
-    width: 256,
-    height: 24,
   },
 });

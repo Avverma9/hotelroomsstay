@@ -4,11 +4,12 @@ import {
   Text,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   Modal,
   ScrollView,
 } from "react-native";
+import PlayStoreWavyLoader from "./PlayStoreWavyLoader";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import api from "../utils/api";
 
@@ -31,6 +32,7 @@ const formatDateLabel = (date) => {
 };
 
 const CalendarPickerModal = ({ visible, checkIn, checkOut, onSave, onClose }) => {
+  const insets = useSafeAreaInsets();
   const today = getCleanToday();
 
   const [inDate, setInDate] = useState(
@@ -104,7 +106,7 @@ const CalendarPickerModal = ({ visible, checkIn, checkOut, onSave, onClose }) =>
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
-        <View style={{ backgroundColor: "#ffffff", borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 32 }}>
+        <View style={{ backgroundColor: "#ffffff", borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 32 + insets.bottom }}>
           <View style={{ width: 40, height: 4, backgroundColor: "#E2E8F0", borderRadius: 2, alignSelf: "center", marginBottom: 16 }} />
 
           <View style={{ flexDirection: "row", justifyContent: "between", alignItems: "center", marginBottom: 16 }}>
@@ -252,6 +254,7 @@ const SearchCard = ({
   isLocatingCurrentLocation = false,
   onUseCurrentLocation = () => {},
 }) => {
+  const insets = useSafeAreaInsets();
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [showDateModal, setShowDateModal] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
@@ -379,7 +382,7 @@ const SearchCard = ({
             </TouchableOpacity>
           )}
 
-          {suggestionsLoading && <ActivityIndicator size="small" color="#2563EB" style={{ marginRight: 8 }} />}
+          {suggestionsLoading && <PlayStoreWavyLoader size="small" color="#2563EB" style={{ marginRight: 8 }} />}
 
           <TouchableOpacity
             onPress={onUseCurrentLocation}
@@ -387,7 +390,7 @@ const SearchCard = ({
             style={{ flexDirection: "row", alignItems: "center", borderLeftWidth: 1, borderLeftColor: "#CBD5E1", paddingLeft: 8 }}
           >
             {isLocatingCurrentLocation ? (
-              <ActivityIndicator size="small" color="#2563EB" />
+              <PlayStoreWavyLoader size="small" color="#2563EB" />
             ) : (
               <Ionicons name="navigate-circle-outline" size={18} color="#2563EB" />
             )}
@@ -479,7 +482,7 @@ const SearchCard = ({
           />
           {isSearching ? (
             <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <ActivityIndicator color="#FFFFFF" size="small" />
+              <PlayStoreWavyLoader color="#FFFFFF" size="small" />
               <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 14, marginLeft: 8 }}>Searching...</Text>
             </View>
           ) : (
@@ -504,7 +507,7 @@ const SearchCard = ({
 
       <Modal visible={showGuestModal} transparent animationType="slide" onRequestClose={() => setShowGuestModal(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
-          <View style={{ backgroundColor: "#FFFFFF", borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 32 }}>
+          <View style={{ backgroundColor: "#FFFFFF", borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 32 + insets.bottom }}>
             <View style={{ width: 40, height: 4, backgroundColor: "#E2E8F0", borderRadius: 2, alignSelf: "center", marginBottom: 16 }} />
 
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>

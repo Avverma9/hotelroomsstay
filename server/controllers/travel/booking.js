@@ -425,6 +425,12 @@ exports.bookCar = async (req, res) => {
         const ua = await OwnerAvailability.findOne({
           ownerId: String(resolvedDriverId),
           mode: 'unavailable',
+          // A car-specific block must not make the owner's other cars
+          // unavailable. A null carId remains an owner-wide block.
+          $or: [
+            { carId: null },
+            { carId: carId },
+          ],
           startDate: { $lte: new Date(carSnapshot.dropD) },
           endDate: { $gte: new Date(carSnapshot.pickupD) },
         }).lean();
@@ -716,7 +722,9 @@ exports.bookCar = async (req, res) => {
       },
     });
 
-    await sendTravelEmailSafe({
+    // Do not hold the booking response on external email delivery. The booking
+    // is already persisted; email/notification are best-effort side effects.
+    void sendTravelEmailSafe({
       email: customerEmail,
       subject: isConfirmed
         ? "Your Travel Booking is Confirmed"
@@ -726,7 +734,7 @@ exports.bookCar = async (req, res) => {
         : `Your booking request (ID: ${newBooking.bookingId}) has been received and is awaiting payment confirmation.`,
     });
 
-    await notifyTravelEventSafe({
+    void notifyTravelEventSafe({
       booking: newBooking,
       name: isConfirmed ? "Travel Booking Confirmed" : "Travel Booking Pending",
       message: isConfirmed

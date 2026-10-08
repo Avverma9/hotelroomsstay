@@ -390,7 +390,16 @@ const createBooking = async (req, res) => {
     const checkOut = new Date(checkOutDate);
     const roomCount = Number(numRooms);
     const requestedRoom = roomDetails?.[0];
-    const hotelForPricing = await hotelModel.findOne({ hotelId }).select("city destination rooms").lean();
+    const hotelForPricing = await hotelModel.findOne({ hotelId }).select("city destination rooms startDate endDate").lean();
+    if (!hotelForPricing) {
+      return res.status(404).json({ success: false, message: "Hotel not found" });
+    }
+    if (
+      (hotelForPricing.startDate && checkIn < new Date(hotelForPricing.startDate)) ||
+      (hotelForPricing.endDate && checkOut > new Date(hotelForPricing.endDate))
+    ) {
+      return res.status(409).json({ success: false, message: "Hotel is not available for the selected dates" });
+    }
     const requestedRoomId = String(requestedRoom?.roomId || "").trim();
     const persistedRoom = hotelForPricing?.rooms?.find((room) => [
       room?.roomId,
@@ -403,6 +412,21 @@ const createBooking = async (req, res) => {
     }
     if (Number.isNaN(checkIn.getTime()) || Number.isNaN(checkOut.getTime()) || checkOut <= checkIn) {
       return res.status(400).json({ success: false, message: "Valid check-in and check-out dates are required" });
+    }
+
+    const blockingHotelBookings = await bookingModel.find({
+      "hotelDetails.hotelId": hotelId,
+      bookingStatus: { $in: ["Confirmed", "Pending", "Checked-in"] },
+      checkInDate: { $lt: checkOut },
+      checkOutDate: { $gt: checkIn },
+    }).select("numRooms roomDetails").lean();
+    const blockedRoomsForType = blockingHotelBookings.reduce((sum, existing) => {
+      const matching = (existing.roomDetails || []).filter((room) => String(room?.roomId || "") === requestedRoomId);
+      return sum + (matching.length ? matching.reduce((n, room) => n + (Number(room?.quantity) || 1), 0) : 0);
+    }, 0);
+    const roomCapacity = Number(persistedRoom?.totalRooms || persistedRoom?.countRooms || 0);
+    if (roomCapacity > 0 && blockedRoomsForType + roomCount > roomCapacity) {
+      return res.status(409).json({ success: false, message: "Selected room is not available for the selected dates" });
     }
     const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
     const roomBaseTotal = toMoney(perRoomPrice * roomCount * nights);

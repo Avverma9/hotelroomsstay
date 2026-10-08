@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
   Modal,
   StatusBar,
 } from "react-native";
@@ -125,7 +124,6 @@ const Home = ({ navigation }) => {
       ).unwrap();
       navigation.navigate("Hotels", { searchQuery: title });
     } catch (err) {
-      Alert.alert("Search failed", err?.toString());
       navigation.navigate("Hotels", { searchQuery: title });
     } finally {
       if (isMountedRef.current) setIsSearching(false);
@@ -134,7 +132,6 @@ const Home = ({ navigation }) => {
 
   const handleSearch = async () => {
     if (!searchCity || searchCity.trim() === "") {
-      Alert.alert("Enter Location", "Please enter a city or location.");
       return;
     }
     const city = searchCity.trim();
@@ -151,7 +148,6 @@ const Home = ({ navigation }) => {
         countRooms,
       });
     } catch (err) {
-      Alert.alert("Search failed", err?.toString());
       navigation.navigate("Hotels", {
         searchQuery: city,
         checkInDate,
@@ -185,10 +181,6 @@ const Home = ({ navigation }) => {
       }
 
       if (permission?.status !== "granted") {
-        Alert.alert(
-          "Location permission required",
-          "Allow location access to auto-fill your city.",
-        );
         return;
       }
 
@@ -217,19 +209,11 @@ const Home = ({ navigation }) => {
         "";
 
       if (!cityName) {
-        Alert.alert(
-          "City not found",
-          "Could not detect your city from current location.",
-        );
         return;
       }
 
       setSearchCity(String(cityName).trim());
     } catch (error) {
-      Alert.alert(
-        "Location error",
-        "Unable to get your current city. Please try again.",
-      );
     } finally {
       if (isMountedRef.current) setIsLocatingCurrentLocation(false);
     }
@@ -302,7 +286,7 @@ const Home = ({ navigation }) => {
       </ScrollView>
       <Modal visible={showDateModal} transparent animationType="fade">
         <View className="flex-1 bg-black/60 justify-center items-center px-4">
-          <View className="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl">
+          <View className="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl" style={{ marginBottom: insets.bottom }}>
             <View className="flex-row justify-between items-center mb-4">
               <View>
                 <Text className="text-lg font-bold text-slate-900">

@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import PlayStoreWavyLoader from "./PlayStoreWavyLoader";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
 import { sendCancellationOTP, verifyCancellationOTP, resetCancellationOtpState } from "../store/slices/bookingSlice";
 
@@ -81,6 +83,7 @@ const InfoRow = ({ label, value, isLast, valueColor = "text-neutral-800" }) => (
 );
 
 export default function HotelBookingsDetailModal({ visible, onClose, booking }) {
+  const insets = useSafeAreaInsets();
   const dispatch = useDispatch();
   const sendOtpStatus = useSelector((state) => state.booking.sendOtpStatus);
   const sendOtpError = useSelector((state) => state.booking.sendOtpError);
@@ -175,7 +178,7 @@ export default function HotelBookingsDetailModal({ visible, onClose, booking }) 
             </TouchableOpacity>
           </View>
 
-          <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 + insets.bottom }} showsVerticalScrollIndicator={false}>
             
             {/* 1. Key Stats Grid */}
             <View className="flex-row flex-wrap bg-white p-4 mb-3 border-b border-neutral-200">
@@ -337,7 +340,7 @@ export default function HotelBookingsDetailModal({ visible, onClose, booking }) 
       <Modal animationType="slide" transparent visible={showCancelModal} onRequestClose={handleCloseCancelModal}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
           <View className="flex-1 bg-black/60 justify-end">
-            <View className="bg-white rounded-t-3xl p-5 pb-8">
+            <View className="bg-white rounded-t-3xl p-5" style={{ paddingBottom: 32 + insets.bottom }}>
               <View className="w-12 h-1.5 bg-neutral-300 rounded-full self-center mb-4" />
               <Text className="text-xl font-bold text-neutral-900 mb-2">Cancel Booking</Text>
               <Text className="text-sm text-neutral-500 mb-6">
@@ -407,7 +410,7 @@ export default function HotelBookingsDetailModal({ visible, onClose, booking }) 
                     className={`flex-1 rounded-xl h-12 flex-row items-center justify-center ${!cancellationReason.trim() || sendOtpStatus === "loading" ? "bg-neutral-300" : "bg-blue-600"}`}
                   >
                     {sendOtpStatus === "loading" ? (
-                      <ActivityIndicator size="small" color="white" />
+                      <PlayStoreWavyLoader size="small" color="white" />
                     ) : (
                       <Text className="text-white font-semibold text-sm">Send OTP</Text>
                     )}
@@ -419,7 +422,7 @@ export default function HotelBookingsDetailModal({ visible, onClose, booking }) 
                     className={`flex-1 rounded-xl h-12 flex-row items-center justify-center ${!otp.trim() || verifyOtpStatus === "loading" ? "bg-neutral-300" : "bg-red-500"}`}
                   >
                     {verifyOtpStatus === "loading" ? (
-                      <ActivityIndicator size="small" color="white" />
+                      <PlayStoreWavyLoader size="small" color="white" />
                     ) : (
                       <Text className="text-white font-semibold text-sm">Verify & Cancel</Text>
                     )}

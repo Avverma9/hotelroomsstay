@@ -24,8 +24,10 @@ import {
 import SearchCard from "../components/SearchCard";
 import SkeletonShimmer from "../components/skeleton/SkeletonShimmer";
 import { HotelCardSkeleton } from "../components/skeleton/HotelSkeleton";
+import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
 import Header from "../components/Header";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   extractHotelAmenities,
   getAmenityDisplayName,
@@ -43,6 +45,7 @@ const CARD_WIDTH = width - 32;
 const Hotels = ({ navigation, route }) => {
   const dispatch = useDispatch();
   const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
   const safeParams = route?.params || {};
   const {
     searchQuery,
@@ -369,6 +372,17 @@ const Hotels = ({ navigation, route }) => {
     const city = hotel.city || "Location";
     const rawRating = Number(hotel.rating || hotel.starRating || 4.2);
     const rating = Number.isFinite(rawRating) ? rawRating.toFixed(1) : "4.2";
+    const reviewCount = Number(hotel.reviewCount || hotel.reviews || 0);
+    const rooms = Array.isArray(hotel.rooms) ? hotel.rooms : [];
+    const availableRoomCount = rooms.reduce(
+      (total, room) => total + Math.max(0, Number(room?.countRooms ?? room?.totalRooms ?? 0)),
+      0,
+    );
+    const roomTypes = [...new Set(rooms.map((room) => String(room?.type || "").trim()).filter(Boolean))];
+    const bedTypes = [...new Set(rooms.map((room) => String(room?.bedTypes || "").trim()).filter(Boolean))];
+    const propertyType = Array.isArray(hotel.propertyType)
+      ? hotel.propertyType.find(Boolean)
+      : hotel.propertyType;
     const cardAmenities = getTopHotelAmenities(hotel, 3);
     const topAmenities = [
       ...cardAmenities,
@@ -407,12 +421,12 @@ const Hotels = ({ navigation, route }) => {
       <TouchableOpacity
         activeOpacity={0.9}
         onPress={openHotelDetails}
-        className="mx-4 mb-2.5 bg-white rounded-xl border border-slate-200 p-2"
+        className="mx-4 mb-3 bg-white rounded-2xl border border-slate-200 p-2.5"
       >
-        <View className="flex-row" style={{ minHeight: 120 }}>
+        <View className="flex-row" style={{ minHeight: 144 }}>
           <View
             className="w-[98px] rounded-[10px] overflow-hidden bg-slate-200 relative"
-            style={{ height: 120 }}
+            style={{ height: 144 }}
           >
             {mainImage ? (
               <Image
@@ -463,8 +477,18 @@ const Hotels = ({ navigation, route }) => {
                 </Text>
               </View>
 
+              <View className="flex-row items-center mt-1" style={{ gap: 6 }}>
+                <Text className="text-[10px] font-extrabold text-slate-500" numberOfLines={1}>
+                  {propertyType || "Stay"}
+                </Text>
+                <Text className="text-[10px] text-slate-300">•</Text>
+                <Text className="text-[10px] font-semibold text-slate-500" numberOfLines={1}>
+                  {reviewCount > 0 ? `${reviewCount} reviews` : "Guest rated"}
+                </Text>
+              </View>
+
               <View className="mt-1 flex-row flex-wrap" style={{ gap: 4 }}>
-                {topAmenities.map((amenity, idx) => (
+                {topAmenities.slice(0, 2).map((amenity, idx) => (
                   <View
                     key={`${amenity}-${idx}`}
                     className="px-1.5 py-0.5 rounded-full bg-slate-50 border border-slate-200"
@@ -480,6 +504,22 @@ const Hotels = ({ navigation, route }) => {
                     </Text>
                   </View>
                 ))}
+              </View>
+
+              <View className="mt-1.5 flex-row flex-wrap items-center" style={{ gap: 5 }}>
+                {!!roomTypes[0] && (
+                  <View className="flex-row items-center">
+                    <Ionicons name="bed-outline" size={11} color="#64748b" />
+                    <Text className="text-[10px] font-bold text-slate-600 ml-1" numberOfLines={1}>
+                      {roomTypes[0]}
+                    </Text>
+                  </View>
+                )}
+                {!!bedTypes[0] && (
+                  <Text className="text-[10px] font-semibold text-slate-500" numberOfLines={1}>
+                    {bedTypes[0]} bed
+                  </Text>
+                )}
               </View>
             </View>
 
@@ -499,6 +539,14 @@ const Hotels = ({ navigation, route }) => {
                     / night
                   </Text>
                 </View>
+                <Text className="text-[9px] font-semibold text-slate-500 mt-0.5" numberOfLines={1}>
+                  {localRooms} room{localRooms > 1 ? "s" : ""} · {Math.max(1, Math.ceil((new Date(localCheckOut) - new Date(localCheckIn)) / 86400000))} night{Math.ceil((new Date(localCheckOut) - new Date(localCheckIn)) / 86400000) > 1 ? "s" : ""} · GST included
+                </Text>
+                {availableRoomCount > 0 && (
+                  <Text className="text-[9px] font-black text-emerald-600 mt-0.5" numberOfLines={1}>
+                    {availableRoomCount} room{availableRoomCount > 1 ? "s" : ""} available
+                  </Text>
+                )}
                 {hasOffer && displayOriginalPrice > displayFinalPrice && (
                   <View
                     className="flex-row flex-wrap items-center mt-[1px]"
@@ -549,6 +597,10 @@ const Hotels = ({ navigation, route }) => {
   if (loading) {
     return (
       <View className="flex-1 bg-slate-50" style={{ paddingTop: topPadding }}>
+        <View className="items-center pt-3">
+          <PlayStoreWavyLoader size="medium" color="#0d3b8f" />
+          <Text className="text-[11px] text-slate-500 font-semibold mt-2">Loading hotels...</Text>
+        </View>
         {/* Header skeleton */}
         <View className="bg-white px-4 py-3 border-b border-slate-100">
           <SkeletonShimmer height={16} width="50%" radius={8} />
@@ -744,6 +796,7 @@ const Hotels = ({ navigation, route }) => {
 
             <ScrollView
               className="flex-1 px-5 pt-2"
+              contentContainerStyle={{ paddingBottom: 24 + insets.bottom }}
               showsVerticalScrollIndicator={false}
             >
               {/* Price Range */}
@@ -917,7 +970,7 @@ const Hotels = ({ navigation, route }) => {
             </ScrollView>
 
             {/* Footer Buttons */}
-            <View className="p-5 border-t border-slate-100 flex-row items-center gap-4 bg-white pb-8">
+            <View className="p-5 border-t border-slate-100 flex-row items-center gap-4 bg-white" style={{ paddingBottom: 20 + insets.bottom }}>
               <TouchableOpacity
                 onPress={clearFilters}
                 className="flex-1 py-3.5 items-center justify-center"

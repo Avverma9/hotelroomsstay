@@ -8,15 +8,17 @@ import {
   Image,
   Modal,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useDispatch, useSelector } from "react-redux";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePickerModal from "react-native-modal-datetime-picker";
 import {
   fetchTourList,
   filterToursByQuery,
 } from "../store/slices/tourSlice";
 import { TourCardSkeleton } from "../components/skeleton/TourSkeleton";
+import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
 import Header from "../components/Header";
 import { router } from "../utils/navigation";
 
@@ -60,6 +62,36 @@ const formatINR = (value) => {
   }
 };
 
+const formatTourDate = (value) => {
+  if (!value) return "Date not set";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date not set";
+  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+function FilterDropdown({ label, value, options, open, onToggle, onSelect }) {
+  return (
+    <View style={{ flex: 1, zIndex: open ? 30 : 1 }}>
+      <Text className="text-[10px] font-black tracking-wider text-slate-400 mb-1.5">{label}</Text>
+      <TouchableOpacity onPress={onToggle} className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 flex-row items-center justify-between">
+        <Text className="text-[12px] font-bold text-slate-700" numberOfLines={1}>{value}</Text>
+        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={14} color="#64748b" />
+      </TouchableOpacity>
+      {open && (
+        <View className="absolute top-[66px] left-0 right-0 bg-white rounded-xl border border-slate-200 overflow-hidden" style={{ elevation: 6, shadowColor: "#0f172a", shadowOpacity: 0.12, shadowRadius: 8 }}>
+          <ScrollView nestedScrollEnabled style={{ maxHeight: 150 }}>
+            {options.map((option) => (
+              <TouchableOpacity key={option.value} onPress={() => onSelect(option)} className="px-3 py-2.5 border-b border-slate-100">
+                <Text className="text-[12px] font-semibold text-slate-700">{option.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function PrimaryButton({ title, onPress }) {
   return (
     <TouchableOpacity
@@ -85,6 +117,13 @@ function TourCard({ tour, onPressDetails }) {
   const agency = tour?.travelAgencyName || "-";
   const nights = toNumber(tour?.nights) || 0;
   const days = toNumber(tour?.days) || 0;
+  const reviewCount = toNumber(tour?.reviewCount || tour?.reviews);
+  const vehicles = Array.isArray(tour?.vehicles) ? tour.vehicles : [];
+  const totalSeats = vehicles.reduce((sum, vehicle) => sum + toNumber(vehicle?.totalSeats), 0);
+  const vehicleLabel = vehicles[0]?.seaterType || (vehicles.length ? "Vehicle included" : "Vehicle on request");
+  const tourStart = tour?.tourStartDate || tour?.from;
+  const tourEnd = tour?.tourEndDate || tour?.to;
+  const tourAmenities = splitCsvText(tour?.amenities);
 
   const theme = splitCsvText(tour?.themes)[0] || "";
 
@@ -93,8 +132,8 @@ function TourCard({ tour, onPressDetails }) {
 
   return (
     <View className="mx-4 mb-2.5 bg-white rounded-xl border border-slate-200 p-2 overflow-hidden">
-      <View className="flex-row min-h-[140px]">
-        <View className="w-[98px] h-[140px] rounded-[10px] overflow-hidden bg-slate-200 relative">
+      <View className="flex-row min-h-[176px]">
+        <View className="w-[98px] h-[176px] rounded-[10px] overflow-hidden bg-slate-200 relative">
           {mainImage ? (
             <Image source={{ uri: mainImage }} className="w-full h-full" resizeMode="cover" />
           ) : (
@@ -143,6 +182,30 @@ function TourCard({ tour, onPressDetails }) {
                 </Text>
               </View>
             </View>
+
+            <View className="flex-row items-center mt-1.5" style={{ gap: 5 }}>
+              <Ionicons name="calendar-outline" size={11} color="#64748b" />
+              <Text className="text-[9px] font-bold text-slate-600" numberOfLines={1}>
+                {formatTourDate(tourStart)}{tourEnd ? ` – ${formatTourDate(tourEnd)}` : ""}
+              </Text>
+            </View>
+
+            <View className="flex-row flex-wrap mt-1.5" style={{ gap: 4 }}>
+              <View className="px-1.5 py-0.5 rounded-full bg-amber-50 border border-amber-100 flex-row items-center">
+                <Ionicons name="moon-outline" size={9} color="#b45309" />
+                <Text className="text-[9px] font-extrabold text-amber-700 ml-1">{nights}N / {days}D</Text>
+              </View>
+              <View className="px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 flex-row items-center">
+                <Ionicons name="bus-outline" size={9} color="#047857" />
+                <Text className="text-[9px] font-extrabold text-emerald-700 ml-1">{vehicleLabel}</Text>
+              </View>
+            </View>
+
+            {!!tourAmenities.length && (
+              <Text className="text-[9px] font-semibold text-slate-500 mt-1" numberOfLines={1}>
+                {tourAmenities.slice(0, 2).join(" • ")}{tourAmenities.length > 2 ? " + more" : ""}
+              </Text>
+            )}
           </View>
 
           <View className="flex-row items-end justify-between mt-2" style={{ minWidth: 0 }}>
@@ -156,6 +219,10 @@ function TourCard({ tour, onPressDetails }) {
                 {formatINR(price)}
               </Text>
               <Text className="text-[10px] font-semibold text-slate-500 mt-[-1px]">/ person</Text>
+              <Text className="text-[9px] font-semibold text-slate-400 mt-0.5" numberOfLines={1}>
+                {totalSeats > 0 ? `${totalSeats} seats` : "Seats on request"} • GST at checkout
+              </Text>
+              {reviewCount > 0 && <Text className="text-[9px] font-bold text-slate-500">{reviewCount} reviews</Text>}
             </View>
             <PrimaryButton title="View" onPress={onPressDetails} />
           </View>
@@ -166,6 +233,7 @@ function TourCard({ tour, onPressDetails }) {
 }
 
 export default function Tour({ navigation }) {
+  const insets = useSafeAreaInsets();
   const nav = navigation || router;
   const dispatch = useDispatch();
   const tabBarHeight = useBottomTabBarHeight();
@@ -181,6 +249,10 @@ export default function Tour({ navigation }) {
   const [tourMinRating, setTourMinRating] = useState(0);
   const [tourSelectedAmenities, setTourSelectedAmenities] = useState([]);
   const [selectedThemes, setSelectedThemes] = useState([]);
+  const [tourFromDate, setTourFromDate] = useState(null);
+  const [tourToDate, setTourToDate] = useState(null);
+  const [tourDatePicker, setTourDatePicker] = useState(null);
+  const [openFilterDropdown, setOpenFilterDropdown] = useState(null);
   const [sortOrderFilter, setSortOrderFilter] = useState("default");
   const [durationSortFilter, setDurationSortFilter] = useState("default");
 
@@ -208,6 +280,7 @@ export default function Tour({ navigation }) {
     if (normalizePlaceToken(fromCity)) count += 1;
     if (normalizePlaceToken(toCity)) count += 1;
     if (String(searchText || "").trim()) count += 1;
+    if (tourFromDate || tourToDate) count += 1;
 
     if (tourPriceRange[0] !== 0 || tourPriceRange[1] !== 50000) count += 1;
     if (tourMinRating > 0) count += 1;
@@ -227,6 +300,8 @@ export default function Tour({ navigation }) {
     tourMinRating,
     selectedThemes,
     tourSelectedAmenities,
+    tourFromDate,
+    tourToDate,
     sortOrderFilter,
     durationSortFilter,
   ]);
@@ -268,6 +343,8 @@ export default function Tour({ navigation }) {
       if (tourPriceRange[0] !== 0) payload.minPrice = tourPriceRange[0];
       if (tourPriceRange[1] !== 50000) payload.maxPrice = tourPriceRange[1];
       if (tourMinRating > 0) payload.minRating = tourMinRating;
+      if (tourFromDate) payload.fromDate = tourFromDate.toISOString().split("T")[0];
+      if (tourToDate) payload.toDate = tourToDate.toISOString().split("T")[0];
 
       if (durationSortFilter !== "default") {
         payload.sortBy = "nights";
@@ -310,6 +387,10 @@ export default function Tour({ navigation }) {
     setTourMinRating(0);
     setTourSelectedAmenities([]);
     setSelectedThemes([]);
+    setTourFromDate(null);
+    setTourToDate(null);
+    setTourDatePicker(null);
+    setOpenFilterDropdown(null);
     setSortOrderFilter("default");
     setDurationSortFilter("default");
     setFromCity("");
@@ -453,6 +534,10 @@ export default function Tour({ navigation }) {
 
         {isLoading && (
           <View>
+            <View className="items-center py-3">
+              <PlayStoreWavyLoader size="medium" color="#0d3b8f" />
+              <Text className="text-[11px] text-slate-500 font-semibold mt-2">Loading tours...</Text>
+            </View>
             {[...Array(5)].map((_, idx) => (
               <TourCardSkeleton key={`sk-${idx}`} />
             ))}
@@ -493,7 +578,7 @@ export default function Tour({ navigation }) {
 
       <Modal visible={showFilterModal} animationType="slide" transparent onRequestClose={() => setShowFilterModal(false)}>
         <View className="flex-1 bg-black/60 justify-end">
-          <View className="bg-white w-full rounded-t-3xl p-5 h-[82%]">
+          <View className="bg-white w-full rounded-t-3xl p-5 h-[82%]" style={{ paddingBottom: 20 + insets.bottom }}>
             <View className="flex-row justify-between items-center mb-4">
               <View>
                 <Text className="text-[18px] font-black text-slate-900">Filters</Text>
@@ -505,6 +590,54 @@ export default function Tour({ navigation }) {
             </View>
 
             <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+              <Text className="text-[13px] font-black text-slate-900 mb-3">Travel Dates</Text>
+              <View className="flex-row mb-5" style={{ gap: 10 }}>
+                <TouchableOpacity onPress={() => setTourDatePicker("from")} className="flex-1 rounded-xl border border-slate-200 px-3 py-3">
+                  <Text className="text-[10px] font-black text-slate-400">FROM</Text>
+                  <Text className="text-[13px] font-bold text-slate-700 mt-1">{tourFromDate ? tourFromDate.toLocaleDateString("en-GB") : "Select date"}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setTourDatePicker("to")} className="flex-1 rounded-xl border border-slate-200 px-3 py-3">
+                  <Text className="text-[10px] font-black text-slate-400">TO</Text>
+                  <Text className="text-[13px] font-bold text-slate-700 mt-1">{tourToDate ? tourToDate.toLocaleDateString("en-GB") : "Select date"}</Text>
+                </TouchableOpacity>
+              </View>
+              <Text className="text-[13px] font-black text-slate-900 mb-3">Quick Filters</Text>
+              <View className="flex-row mb-5" style={{ gap: 10 }}>
+                <FilterDropdown
+                  label="Theme"
+                  value={selectedThemes[0] || "Any theme"}
+                  open={openFilterDropdown === "theme"}
+                  onToggle={() => setOpenFilterDropdown((current) => current === "theme" ? null : "theme")}
+                  options={[{ label: "Any theme", value: "" }, ...tourThemesList.map((item) => ({ label: item, value: item }))]}
+                  onSelect={(option) => { setSelectedThemes(option.value ? [option.value] : []); setOpenFilterDropdown(null); }}
+                />
+                <FilterDropdown
+                  label="Amenity"
+                  value={tourSelectedAmenities[0] || "Any amenity"}
+                  open={openFilterDropdown === "amenity"}
+                  onToggle={() => setOpenFilterDropdown((current) => current === "amenity" ? null : "amenity")}
+                  options={[{ label: "Any amenity", value: "" }, ...tourAmenitiesList.map((item) => ({ label: item, value: item }))]}
+                  onSelect={(option) => { setTourSelectedAmenities(option.value ? [option.value] : []); setOpenFilterDropdown(null); }}
+                />
+              </View>
+              <View className="flex-row mb-5" style={{ gap: 10 }}>
+                <FilterDropdown
+                  label="Minimum rating"
+                  value={tourMinRating ? `${tourMinRating}+ stars` : "Any rating"}
+                  open={openFilterDropdown === "rating"}
+                  onToggle={() => setOpenFilterDropdown((current) => current === "rating" ? null : "rating")}
+                  options={[{ label: "Any rating", value: 0 }, ...[3, 4, 5].map((item) => ({ label: `${item}+ stars`, value: item }))]}
+                  onSelect={(option) => { setTourMinRating(option.value); setOpenFilterDropdown(null); }}
+                />
+                <FilterDropdown
+                  label="Duration sort"
+                  value={durationSortFilter === "default" ? "Default" : durationSortFilter === "asc" ? "Short first" : "Long first"}
+                  open={openFilterDropdown === "duration"}
+                  onToggle={() => setOpenFilterDropdown((current) => current === "duration" ? null : "duration")}
+                  options={[{ label: "Default", value: "default" }, { label: "Short first", value: "asc" }, { label: "Long first", value: "desc" }]}
+                  onSelect={(option) => { setDurationSortFilter(option.value); setOpenFilterDropdown(null); }}
+                />
+              </View>
               <Text className="text-[13px] font-black text-slate-900 mb-3">Price Range</Text>
               <View className="flex-row flex-wrap" style={{ gap: 10 }}>
                 {[0, 5000, 15000].map((start) => {
@@ -676,6 +809,30 @@ export default function Tour({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      <DateTimePickerModal
+        isVisible={tourDatePicker === "from"}
+        mode="date"
+        date={tourFromDate || new Date()}
+        onCancel={() => setTourDatePicker(null)}
+        onConfirm={(date) => {
+          setTourFromDate(date);
+          if (tourToDate && tourToDate <= date) setTourToDate(null);
+          setTourDatePicker(null);
+        }}
+      />
+      <DateTimePickerModal
+        isVisible={tourDatePicker === "to"}
+        mode="date"
+        date={tourToDate || tourFromDate || new Date()}
+        minimumDate={tourFromDate || new Date()}
+        onCancel={() => setTourDatePicker(null)}
+        onConfirm={(date) => {
+          if (tourFromDate && date <= tourFromDate) return;
+          setTourToDate(date);
+          setTourDatePicker(null);
+        }}
+      />
 
     </SafeAreaView>
   );
