@@ -322,3 +322,5 @@ export default function HomeScreenFrontCabs() {
     </View>
   );
 }
+
+// chnages were made here
