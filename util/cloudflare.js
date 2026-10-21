@@ -6,4 +6,3 @@ export const R2_VIEW_URL = "https://images.hotelroomsstay.com";
 
 export const getR2ViewUrl = (key) =>
   `${R2_VIEW_URL}/${String(key).split("/").map(encodeURIComponent).join("/")}`;
- 
