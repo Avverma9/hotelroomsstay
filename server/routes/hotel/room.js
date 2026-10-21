@@ -1,5 +1,5 @@
 const express = require('express');
-const { upload } = require('../../aws/upload');
+const { upload } = require('../../r2/upload');
 const router = express.Router()
 const rooms = require('../../controllers/hotel/room')
 

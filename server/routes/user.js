@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { upload } = require('../aws/upload');
+const { upload } = require('../r2/upload');
 const userController = require('../controllers/user');
 const { getUserDefaultCoupon, applyCoupon } = require('../controllers/coupons/coupon');
 

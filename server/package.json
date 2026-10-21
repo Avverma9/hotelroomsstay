@@ -11,9 +11,7 @@
         "seed:hotels": "node scripts/seedFullHotels.js",
         "seed:dummy-hotels": "node scripts/seedDummyHotels.js",
         "seed:cars": "node scripts/seedCarsFromCabDummy.js",
-        "test:partner-by-id": "node scripts/testPartnerById.js",
-        "configure:s3-cors": "node scripts/configure_s3_cors.js",
-        "test:s3-presigned-upload": "node scripts/test_presigned_s3_upload.js"
+        "test:partner-by-id": "node scripts/testPartnerById.js"
     },
     "keywords": [],
     "author": "",

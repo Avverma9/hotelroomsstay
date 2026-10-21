@@ -5,7 +5,7 @@ module.exports = (io) => {
     return {
         sendMessage: async (req, res) => {
             const { senderId, receiverId, content } = req.body;
-            const images = req.files ? req.files.map((file) => file.location) : [];
+            const images = req.files ? req.files.map((file) => file.view_url) : [];
 
             const newMessage = new messages({
                 sender: senderId,

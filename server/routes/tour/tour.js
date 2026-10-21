@@ -11,7 +11,7 @@ const {
   deleteTourImage,
   getAllVisitingPlaces,
 } = require("../../controllers/tour/tour");
-const { upload } = require("../../aws/upload");
+const { upload } = require("../../r2/upload");
 const enforceUploadLimits = require('../../middleware/enforceUploadLimits');
 const {
   createBooking,

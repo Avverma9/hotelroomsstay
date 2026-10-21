@@ -376,7 +376,7 @@ export default function HotelAdd() {
     try {
       /* 1 — Create hotel */
       const fd = new FormData()
-      // If images exist, upload them directly to S3 using presigned POSTs
+      // If images exist, upload them directly to Cloudflare R2 using presigned PUTs.
       let imagesUrls = []
       if (images.length) {
         try {
@@ -386,11 +386,11 @@ export default function HotelAdd() {
             const p = presigns[i]
             // presigned PUT URL — upload file with PUT and correct content-type
             await fetch(p.url, { method: 'PUT', body: images[i], headers: { 'Content-Type': images[i].type || 'application/octet-stream' } })
-            imagesUrls.push(p.publicUrl)
+            imagesUrls.push(p.view_url)
           }
         } catch (err) {
           console.error('Presigned upload failed', err)
-          throw new Error('Failed to upload images to S3')
+          throw new Error('Failed to upload images to Cloudflare R2')
         }
       }
       ;['hotelName','description','hotelOwnerName','destination','state','city','landmark',
@@ -400,7 +400,7 @@ export default function HotelAdd() {
       ].forEach((k) => fd.append(k, s(form[k])))
       if (form.startDate) fd.append('startDate', form.startDate)
       if (form.endDate)   fd.append('endDate',   form.endDate)
-      // prefer direct-s3 uploaded image URLs when available
+      // Prefer direct Cloudflare R2 uploaded image URLs when available.
       if (imagesUrls.length) {
         fd.append('images', JSON.stringify(imagesUrls))
       } else {
@@ -1134,7 +1134,7 @@ export default function HotelAdd() {
               : <><Plus size={14} /> Register My Property</>}
           </button>
           <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 11, color: '#c0b4a0', textAlign: 'center', marginTop: 14, fontStyle: 'italic' }}>
-            Images are uploaded securely to AWS S3. Your property will be reviewed before going live.
+            Images are uploaded securely to Cloudflare R2. Your property will be reviewed before going live.
           </p>
         </PanelCard>
       </div>

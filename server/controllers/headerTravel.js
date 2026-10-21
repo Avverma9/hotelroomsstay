@@ -6,7 +6,7 @@ exports.createLocation = async (req, res) => {
         if (!location) {
             return res.status(400).json({ error: 'Location is required' });
         }
-        const images = req.files.map((file) => file.location);
+        const images = req.files.map((file) => file.view_url);
         const created = await HeaderLocation.create({ location, images });
         res.status(201).json({ message: 'One more location added', created });
     } catch (error) {

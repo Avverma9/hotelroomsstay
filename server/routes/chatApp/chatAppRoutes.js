@@ -1,6 +1,6 @@
 const express = require('express');
 const { getContacts, addContact, deleteContact } = require('../../controllers/chatApp/contacts');
-const { upload } = require('../../aws/upload');
+const { upload } = require('../../r2/upload');
 const initChatControllers = require('../../controllers/chatApp/chat'); // import controller factory
 
 const setupChatRoutes = (io) => {

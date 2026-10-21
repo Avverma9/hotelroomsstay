@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { upload } = require('../../aws/upload');
+const { upload } = require('../../r2/upload');
 const bookingController = require('../../controllers/booking/booking');
 const auth = require('../../authentication/auth');
 router.post('/booking/:userId/:hotelId', upload, bookingController.createBooking); // site

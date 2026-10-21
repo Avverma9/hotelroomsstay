@@ -601,7 +601,7 @@ export default function AddNewHotel() {
         return
       }
 
-      // Images are sent as files in the same create-hotel request (server uploads them via multer-s3).
+      // Images are sent as files in the same create-hotel request (server uploads them to Cloudflare R2).
       images.forEach((image) => fd.append('images', image))
 
       // ✅ Hybrid Approach: Send amenities and policies in single call with error handling
@@ -1487,7 +1487,7 @@ export default function AddNewHotel() {
               : <><Plus size={14} /> Register Property</>}
           </button>
           <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 11, color: '#c0b4a0', textAlign: 'center', marginTop: 14, fontStyle: 'italic' }}>
-            Images are uploaded securely to AWS S3.
+            Images are uploaded securely to Cloudflare R2.
           </p>
         </PanelCard>
       </>

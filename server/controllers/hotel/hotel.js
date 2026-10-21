@@ -119,7 +119,7 @@ const createHotel = async (req, res) => {
       return res.status(409).json({ error: "Hotel already exists in this city" });
     }
 
-    // Accept images uploaded directly (client -> S3) as `req.body.images` (JSON string or array),
+    // Accept images uploaded directly (client -> R2) as `req.body.images` (JSON string or array),
     // or fall back to files uploaded via multer (`req.files`).
     let images = [];
     if (req.body && req.body.images) {
@@ -129,7 +129,7 @@ const createHotel = async (req, res) => {
         images = Array.isArray(req.body.images) ? req.body.images : [];
       }
     } else if (req.files) {
-      images = req.files.map((f) => f.location);
+      images = req.files.map((f) => f.view_url);
     }
     const hotelData = {
       ...rest,
@@ -179,13 +179,13 @@ const UpdateHotelMaster = async (req, res) => {
         if (f.fieldname.startsWith("roomImages:")) {
           const key = f.fieldname.split(":")[1];
           if (!roomUploadMap.has(key)) roomUploadMap.set(key, []);
-          roomUploadMap.get(key).push(f.location);
+          roomUploadMap.get(key).push(f.view_url);
         } else if (f.fieldname.startsWith("foodImages:")) {
           const key = f.fieldname.split(":")[1];
           if (!foodUploadMap.has(key)) foodUploadMap.set(key, []);
-          foodUploadMap.get(key).push(f.location);
+          foodUploadMap.get(key).push(f.view_url);
         } else if (f.fieldname === "images") {
-          hotelUploads.push(f.location);
+          hotelUploads.push(f.view_url);
         }
       });
     }

@@ -107,7 +107,7 @@ const registerUser = async (req, res) => {
     if (mobileExist) {
       return res.status(400).json({ message: "Mobile already existed" });
     }
-    const images = Array.isArray(req.files) ? req.files.map((file) => file.location) : [];
+    const images = Array.isArray(req.files) ? req.files.map((file) => file.view_url) : [];
     
     // BCrypt removed here - storing plain text password
     const created = await Dashboard.create({
@@ -573,7 +573,7 @@ const updatePartner = async function (req, res) {
   try {
     // Check if there are uploaded files
     if (req.files && req.files.length > 0) {
-      images = req.files.map((file) => file.location);
+      images = req.files.map((file) => file.view_url);
     } else {
       // If no files uploaded, retain existing images from the database
       const user = await Dashboard.findById(id);

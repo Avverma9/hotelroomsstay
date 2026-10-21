@@ -171,7 +171,7 @@ const createSignup = async function (req, res) {
       }
     }
 
-    const images = req.files ? req.files.map((file) => file.location) : [];
+    const images = req.files ? req.files.map((file) => file.view_url) : [];
 
     const userData = { images, ...req.body };
     if (userData.password) {
@@ -607,7 +607,7 @@ const update = async (req, res) => {
 
     let images = existingUser.images || [];
     if (req.files && req.files.length > 0) {
-      images = req.files.map((file) => file.location);
+      images = req.files.map((file) => file.view_url);
     }
 
     const updateData = { images };

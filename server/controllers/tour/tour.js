@@ -203,7 +203,7 @@ const matchesPlaceLoose = (rawPlaces, keyword) => {
 exports.createTour = async (req, res) => {
   try {
     const images = Array.isArray(req.files)
-      ? req.files.map((f) => f.location)
+      ? req.files.map((f) => f.view_url)
       : [];
 
     const body = { ...req.body };
@@ -284,7 +284,7 @@ exports.changeTourImage = async (req, res) => {
   const { id } = req.params;
   try {
     const images = Array.isArray(req.files)
-      ? req.files.map((f) => f.location)
+      ? req.files.map((f) => f.view_url)
       : [];
 
     const updated = await Tour.findByIdAndUpdate(

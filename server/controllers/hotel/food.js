@@ -5,7 +5,7 @@ const createFood = async function (req, res) {
   try {
     const { hotelId, price, ...foods } = req.body;
     const parcedPrice = Number(price);
-    const images = req.files.map((file) => file.location); // Assuming req.files is an array of file objects
+    const images = req.files.map((file) => file.view_url);
     const foodId = uuidv4().substr(0, 8); // Generate a unique foodId
     const created = { foodId, hotelId, ...foods, images, price:parcedPrice }; // Include images in the created object
 

@@ -7,10 +7,10 @@ exports.addOwner = async (req, res) => {
 
     const imagePromise = req.files
       ?.filter((file) => file.fieldname === "images")
-      .map((file) => file.location);
+      .map((file) => file.view_url);
     const dlImagePromise = req.files
       ?.filter((file) => file.fieldname === "dlImage")
-      .map((file) => file.location);
+      .map((file) => file.view_url);
 
     const existingOwnerPromise = Owner.findOne({ mobile });
 
@@ -121,10 +121,10 @@ exports.updateOwner = async (req, res) => {
   try {
     const imagesPromise = req.files
       ?.filter((file) => file.fieldname === "images")
-      .map((file) => file.location);
+      .map((file) => file.view_url);
     const dlImagePromise = req.files
       ?.filter((file) => file.fieldname === "dlImage")
-      .map((file) => file.location);
+      .map((file) => file.view_url);
     const findImagePromise = Owner.findById(id);
     const [images, dlImage, findImage] = await Promise.all([
       imagesPromise,

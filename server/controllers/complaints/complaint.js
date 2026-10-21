@@ -12,7 +12,7 @@ const createComplaint = async (req, res) => {
     const { userId, regarding, hotelName, hotelEmail, bookingId, status, issue, hotelId, complaintType, createdById } = req.body;
     
     // Get images from req.files (multipart upload) - will be empty array if no files
-    const images = req.files ? req.files.map((file) => file.location) : [];
+    const images = req.files ? req.files.map((file) => file.view_url) : [];
     
     try {
         // VALIDATION: Only userId, regarding, and issue are required

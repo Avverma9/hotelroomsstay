@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { upload } = require('../../aws/upload');
+const { upload } = require('../../r2/upload');
 const DashboardUser = require('../../controllers/dashboardUser');
 
 router.post('/create/dashboard/user', upload, DashboardUser.registerUser);

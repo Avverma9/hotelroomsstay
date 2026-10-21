@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createUploadMiddleware } = require('../../aws/upload');
+const { createUploadMiddleware } = require('../../r2/upload');
 const enforceUploadLimits = require('../../middleware/enforceUploadLimits');
 const hotelController = require('../../controllers/hotel/hotel');
 const { createHotelBulk } = require('../../controllers/hotel/bulkhotel');

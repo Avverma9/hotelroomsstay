@@ -2,7 +2,7 @@ const carousel = require("../models/carousel")
 
 const createBanner= async function(req,res){
     const {description}=req.body
-    const images= req.files.map((file)=>file.location)
+    const images= req.files.map((file)=>file.view_url)
     const created= await carousel.create({description,images})
     res.status(201).json(created)
 }

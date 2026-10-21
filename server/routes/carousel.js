@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { upload } = require("../aws/upload");
+const { upload } = require("../r2/upload");
 const carouselController = require("../controllers/carousel");
 
 router.post("/create/second/carousel", upload, carouselController.createBanner); // on panel

@@ -17,7 +17,7 @@ exports.createRooms = async (req, res) => {
             });
         }
 
-        const images = req.files.map((file) => file.location);
+        const images = req.files.map((file) => file.view_url);
 
         // Check if the hotel exists
         const existingHotel = await hotelModel.findOne({ hotelId });
@@ -77,7 +77,7 @@ exports.getRoomsByEmailId = async (req, res) => {
 };
 exports.updateRoomsByRoomId = async (req, res) => {
     const { roomId, type, bedTypes, price, countRooms, soldOut, totalRooms } = req.body;
-    const images = req.files ? req.files.map((file) => file.location) : [];
+    const images = req.files ? req.files.map((file) => file.view_url) : [];
 
     if (!roomId) {
         return res.status(400).json({ message: 'roomId is required' });

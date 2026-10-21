@@ -186,10 +186,10 @@ exports.addCar = async (req, res) => {
     const uploadedFiles = req.files || [];
     const images = uploadedFiles
       .filter((file) => file.fieldname === 'images')
-      .map((file) => file.location);
+      .map((file) => file.view_url);
     const dlImages = uploadedFiles
       .filter((file) => file.fieldname === 'dlImage')
-      .map((file) => file.location);
+      .map((file) => file.view_url);
 
     let parsedSeatConfig = [];
     if (seatConfig !== undefined) {
@@ -551,10 +551,10 @@ exports.updateCar = async (req, res) => {
     const uploadedFiles = req.files || [];
     const images = uploadedFiles
       .filter((file) => file.fieldname === 'images')
-      .map((file) => file.location);
+      .map((file) => file.view_url);
     const dlImages = uploadedFiles
       .filter((file) => file.fieldname === 'dlImage')
-      .map((file) => file.location);
+      .map((file) => file.view_url);
 
     data.images = images.length > 0 ? images : existingCar.images;
 
