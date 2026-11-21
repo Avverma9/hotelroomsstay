@@ -16,6 +16,7 @@ import {
 import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import PlaceAutocomplete from "../components/PlaceAutocomplete";
 import * as ImagePicker from "expo-image-picker";
 import axios from "axios";
 import { LinearGradient } from "expo-linear-gradient";
@@ -305,7 +306,7 @@ export default function RegisterPage({ navigation }) {
               <Field label="ADDRESS (OPTIONAL)">
                 <View style={styles.inputWrap}>
                   <Ionicons name="location-outline" size={16} color={THEME.textSubtle} style={styles.inputIcon} />
-                  <TextInput
+                  <PlaceAutocomplete
                     value={address}
                     onChangeText={setAddress}
                     placeholder="Enter city or full address"

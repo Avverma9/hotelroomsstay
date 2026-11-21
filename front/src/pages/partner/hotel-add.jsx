@@ -11,6 +11,7 @@ import {
 import baseURL from '../../utils/baseURL'
 import { useHotelCategories } from '../../utils/additional-fields/hotelCategories'
 import { usePropertyTypes } from '../../utils/additional-fields/propertyTypes'
+import PlaceAutocomplete from '../../components/PlaceAutocomplete'
 
 /* ── helpers ── */
 const s = (v) => String(v ?? '').trim()
@@ -536,7 +537,7 @@ export default function HotelAdd() {
         <SectionTitle icon={MapPin} label="Location & Address" color="#4e8c72" />
         <div style={g2}>
           <Field label="Destination / Region">
-            <input value={form.destination} onChange={set('destination')} placeholder="Jaipur, Goa, Shimla…" style={inp} onFocus={onFocus} onBlur={onBlur} />
+            <PlaceAutocomplete value={form.destination} onChange={set('destination')} placeholder="Jaipur, Goa, Shimla…" style={inp} onFocus={onFocus} onBlur={onBlur} />
           </Field>
           <Field label="Pin Code">
             <input type="number" value={form.pinCode} onChange={set('pinCode')} placeholder="302001" style={inp} onFocus={onFocus} onBlur={onBlur} />
@@ -545,12 +546,12 @@ export default function HotelAdd() {
             <input required value={form.state} onChange={set('state')} placeholder="Rajasthan" style={inp} onFocus={onFocus} onBlur={onBlur} />
           </Field>
           <Field label="City" required>
-            <input required value={form.city} onChange={set('city')} placeholder="Jaipur" style={inp} onFocus={onFocus} onBlur={onBlur} />
+            <PlaceAutocomplete required value={form.city} onChange={set('city')} placeholder="Jaipur" style={inp} onFocus={onFocus} onBlur={onBlur} />
           </Field>
         </div>
         <div style={{ marginTop: 18 }}>
           <Field label="Landmark / Street Address">
-            <input value={form.landmark} onChange={set('landmark')} placeholder="Near Hawa Mahal, Opposite City Centre Mall…" style={inp} onFocus={onFocus} onBlur={onBlur} />
+            <PlaceAutocomplete value={form.landmark} onChange={set('landmark')} placeholder="Near Hawa Mahal, Opposite City Centre Mall…" style={inp} onFocus={onFocus} onBlur={onBlur} />
           </Field>
         </div>
         <Divider label="GPS Coordinates" />

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, MapPin, Search } from 'lucide-react';
+import PlaceAutocomplete from '../../../components/PlaceAutocomplete';
 
 export default function SearchLocationModal({ isOpen, onClose, currentLocation, onApply }) {
   const [searchText, setSearchText] = useState(currentLocation);
@@ -26,8 +27,7 @@ export default function SearchLocationModal({ isOpen, onClose, currentLocation, 
         <div className="p-6">
           <div className="relative">
             <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
+            <PlaceAutocomplete
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               placeholder="Enter city, location or property name"

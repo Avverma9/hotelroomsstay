@@ -7,6 +7,7 @@ import {
   Save, ShieldCheck, Trash2, X, ChevronRight, ImagePlus,
 } from 'lucide-react'
 import Breadcrumb from '../../../components/breadcrumb'
+import PlaceAutocomplete from '../../../components/PlaceAutocomplete'
 import {
   clearHotelUpdateStatus,
   getHotelById,
@@ -450,18 +451,21 @@ const inputCls = {
   outline: 'none', transition: 'all .15s',
 }
 
-const FieldInput = ({ label, type = 'text', value, onChange, placeholder, required, min, max }) => (
+const FieldInput = ({ label, type = 'text', value, onChange, placeholder, required, min, max, autocomplete = false }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
     <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#94a3b8', fontFamily: "'DM Sans', sans-serif" }}>
       {label}{required && <span style={{ color: '#f43f5e', marginLeft: 3 }}>*</span>}
     </label>
-    <input
+    {autocomplete ? <PlaceAutocomplete
+      required={required} value={value} onChange={onChange} placeholder={placeholder || ''}
+      className="w-full" style={inputCls}
+    /> : <input
       type={type} required={required} min={min} max={max}
       value={value} onChange={onChange} placeholder={placeholder || ''}
       style={inputCls}
       onFocus={(e) => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.08)' }}
       onBlur={(e)  => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f8fafc'; e.target.style.boxShadow = 'none' }}
-    />
+    />}
   </div>
 )
 
@@ -1312,12 +1316,12 @@ function HotelEditPage() {
               <FieldInput label="Owner" value={hotelForm.owner} onChange={setHotelField('owner')} />
               <FieldInput label="Phone" value={hotelForm.phone} onChange={setHotelField('phone')} />
               <div style={{ gridColumn: '1 / -1' }}>
-                <FieldInput label="Address" value={hotelForm.address} onChange={setHotelField('address')} />
+                <FieldInput label="Address" value={hotelForm.address} onChange={setHotelField('address')} autocomplete />
               </div>
-              <FieldInput label="City" required value={hotelForm.city} onChange={setHotelField('city')} />
-              <FieldInput label="State" required value={hotelForm.state} onChange={setHotelField('state')} />
+              <FieldInput label="City" required value={hotelForm.city} onChange={setHotelField('city')} autocomplete />
+              <FieldInput label="State" required value={hotelForm.state} onChange={setHotelField('state')} autocomplete />
               <FieldInput label="Pin Code" value={hotelForm.pinCode} onChange={setHotelField('pinCode')} />
-              <FieldInput label="Destination" value={hotelForm.destination} onChange={setHotelField('destination')} placeholder="e.g. Shimla" />
+              <FieldInput label="Destination" value={hotelForm.destination} onChange={setHotelField('destination')} placeholder="e.g. Shimla" autocomplete />
               
               {/* Hotel Images Upload */}
               <div style={{ gridColumn: '1 / -1', marginTop: 8 }}>

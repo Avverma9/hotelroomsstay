@@ -14,13 +14,14 @@ import {
 import { updateProfileData, fetchProfileData } from '../../redux/slices/profileSlice';
 import { useLoader } from '../../utils/loader';
 import { useToast } from '../../utils/toast';
+import PlaceAutocomplete from '../../components/PlaceAutocomplete';
 
-const InputField = ({ icon, name, value, onChange, type = 'text', placeholder }) => (
+const InputField = ({ icon, name, value, onChange, type = 'text', placeholder, autocomplete = false }) => (
   <div className="relative">
     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
       <span className="text-slate-400">{icon}</span>
     </div>
-    <input
+    {autocomplete ? <PlaceAutocomplete
       type={type}
       name={name}
       id={name}
@@ -28,7 +29,15 @@ const InputField = ({ icon, name, value, onChange, type = 'text', placeholder })
       onChange={onChange}
       placeholder={placeholder}
       className="block w-full rounded-md border-slate-300 py-2.5 pl-10 pr-4 text-sm text-slate-800 placeholder-slate-400 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 transition-colors"
-    />
+    /> : <input
+      type={type}
+      name={name}
+      id={name}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      className="block w-full rounded-md border-slate-300 py-2.5 pl-10 pr-4 text-sm text-slate-800 placeholder-slate-400 shadow-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 transition-colors"
+    />}
   </div>
 );
 
@@ -157,6 +166,7 @@ export  default function ProfileUpdatePage () {
                 onChange={handleInputChange}
                 placeholder="Your Address"
                 icon={<HomeIcon sx={{ fontSize: 20 }} />}
+                autocomplete
             />
             <div className="sm:col-span-2">
                 <InputField

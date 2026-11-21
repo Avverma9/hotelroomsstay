@@ -12,6 +12,7 @@ import baseURL from "../../utils/baseURL";
 import alert from "../../utils/custom_alert/custom_alert";
 import { useHotelCategories } from "../../utils/additional-fields/hotelCategories";
 import { usePropertyTypes } from "../../utils/additional-fields/propertyTypes";
+import PlaceAutocomplete from "../../components/PlaceAutocomplete";
 import { useHotelAmenities } from "../../utils/additional-fields/hotelAmenities";
 import { useBedTypes } from "../../utils/additional-fields/bedTypes";
 import { useRoomTypes } from "../../utils/additional-fields/roomTypes";
@@ -525,7 +526,7 @@ export default function HotelPartnerForm() {
             </select>
           </Field>
           <Field label="Destination / Region">
-            <input className={inp} value={form.destination} onChange={set('destination')} placeholder="Jaipur, Goa, Shimla" />
+            <PlaceAutocomplete className={inp} value={form.destination} onChange={set('destination')} placeholder="Jaipur, Goa, Shimla" />
           </Field>
           <Field label="PIN Code" required>
             <input className={inp} maxLength={6} required value={form.pinCode}
@@ -535,7 +536,7 @@ export default function HotelPartnerForm() {
         </div>
         <div className="mt-4">
           <Field label="Landmark / Street Address">
-            <input className={inp} value={form.landmark} onChange={set('landmark')} placeholder="Near Hawa Mahal, Opposite City Centre Mall" />
+            <PlaceAutocomplete className={inp} value={form.landmark} onChange={set('landmark')} placeholder="Near Hawa Mahal, Opposite City Centre Mall" />
           </Field>
         </div>
         <Divider label="GPS Coordinates" />

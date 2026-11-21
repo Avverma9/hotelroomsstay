@@ -13,6 +13,7 @@ import {
   ChevronDown, ChevronRight,
   X, Hotel, List,
 } from 'lucide-react';
+import PlaceAutocomplete from '../../components/PlaceAutocomplete';
 
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-');
 
@@ -346,7 +347,7 @@ export default function Availability() {
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest text-zinc-400">City</label>
                   <div className="relative">
                     <MapPin size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
-                    <input
+                    <PlaceAutocomplete
                       list="availability-single-city-list"
                       required
                       value={singleForm.city}
@@ -466,7 +467,7 @@ export default function Availability() {
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest text-zinc-400">City</label>
                   <div className="relative">
                     <MapPin size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
-                    <input
+                    <PlaceAutocomplete
                       list="availability-city-list"
                       required
                       value={multiForm.city}

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import PlayStoreWavyLoader from "./PlayStoreWavyLoader";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import api from "../utils/api";
+import PlaceAutocomplete from "./PlaceAutocomplete";
 
 const DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 const MONTH_NAMES = [
@@ -257,41 +257,6 @@ const SearchCard = ({
   const insets = useSafeAreaInsets();
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [showDateModal, setShowDateModal] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const selectedSuggestionRef = useRef("");
-
-  useEffect(() => {
-    const query = String(searchCity || "").trim();
-    if (query.length < 2) {
-      setSuggestions([]);
-      return undefined;
-    }
-    if (selectedSuggestionRef.current === query) {
-      setSuggestions([]);
-      return undefined;
-    }
-    selectedSuggestionRef.current = "";
-
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      try {
-        if (!cancelled) setSuggestionsLoading(true);
-        const response = await api.get("/hotels/suggestions", { params: { q: query, limit: 8 } });
-        if (!cancelled) setSuggestions(response?.data?.data || []);
-      } catch {
-        if (!cancelled) setSuggestions([]);
-      } finally {
-        if (!cancelled) setSuggestionsLoading(false);
-      }
-    }, 250);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [searchCity]);
-
   const safeCheckIn = checkInDate || new Date();
   const safeCheckOut = checkOutDate || new Date(Date.now() + 86400000);
 
@@ -364,7 +329,7 @@ const SearchCard = ({
           }}
         >
           <Ionicons name="search-outline" size={19} color="#64748B" />
-          <TextInput
+          <PlaceAutocomplete
             placeholder="Where are you going?"
             placeholderTextColor="#94A3B8"
             value={searchCity}
@@ -382,8 +347,6 @@ const SearchCard = ({
             </TouchableOpacity>
           )}
 
-          {suggestionsLoading && <PlayStoreWavyLoader size="small" color="#2563EB" style={{ marginRight: 8 }} />}
-
           <TouchableOpacity
             onPress={onUseCurrentLocation}
             disabled={isLocatingCurrentLocation}
@@ -399,30 +362,6 @@ const SearchCard = ({
             </Text>
           </TouchableOpacity>
         </View>
-
-        {!!suggestions.length && (
-          <View style={{ position: "absolute", top: 68, left: 14, right: 14, zIndex: 100, elevation: 18, borderRadius: 14, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E2E8F0", overflow: "hidden", shadowColor: "#0F172A", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.14, shadowRadius: 14 }}>
-            {suggestions.map((suggestion, index) => (
-              <TouchableOpacity
-                key={`${suggestion.type}-${suggestion.value}-${index}`}
-                onPress={() => {
-                  selectedSuggestionRef.current = suggestion.value;
-                  setSearchCity(suggestion.value);
-                  setSuggestions([]);
-                }}
-                activeOpacity={0.75}
-                style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: index === suggestions.length - 1 ? 0 : 1, borderBottomColor: "#F1F5F9" }}
-              >
-                <Ionicons name={suggestion.type === "hotel" ? "business-outline" : "location-outline"} size={17} color="#2563EB" />
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={{ color: "#1E293B", fontSize: 13, fontWeight: "700" }}>{suggestion.label}</Text>
-                  <Text style={{ color: "#94A3B8", fontSize: 10, marginTop: 2 }}>{suggestion.type === "hotel" ? "Hotel" : "Destination"}</Text>
-                </View>
-                <Ionicons name="arrow-up-outline" size={15} color="#94A3B8" style={{ transform: [{ rotate: "45deg" }] }} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
 
         <View style={{ flexDirection: "row", marginTop: 10, gap: 10 }}>
           <TouchableOpacity

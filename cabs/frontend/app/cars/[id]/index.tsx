@@ -20,6 +20,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { getCarById, updateCar } from "../../../src/api";
 import type { Car } from "../../../src/api";
+import PlaceAutocomplete from "../../../src/PlaceAutocomplete";
 import { colors, IMAGES, radii, spacing } from "../../../src/theme";
 import Button from "../../../src/ui";
 
@@ -114,6 +115,7 @@ export default function CarEditScreen() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }} // Dynamic padding for bottom bar
+          keyboardShouldPersistTaps="handled"
         >
           {/* Image carousel */}
           <View style={[styles.imageWrap, { width }]}>
@@ -210,21 +212,19 @@ export default function CarEditScreen() {
               {editing ? (
                 <View style={styles.card}>
                   <Label>Pickup Point</Label>
-                  <TextInput
-                    style={styles.input}
+                  <PlaceAutocomplete
+                    inputStyle={styles.input}
                     value={pickupP}
                     onChangeText={setPickupP}
                     placeholder="e.g. New Delhi Railway Station"
-                    placeholderTextColor={colors.textLight}
                   />
 
                   <Label>Drop Point</Label>
-                  <TextInput
-                    style={styles.input}
+                  <PlaceAutocomplete
+                    inputStyle={styles.input}
                     value={dropP}
                     onChangeText={setDropP}
                     placeholder="e.g. Chandigarh Bus Stand"
-                    placeholderTextColor={colors.textLight}
                   />
 
                   {/* Side-by-Side inputs for Compactness */}

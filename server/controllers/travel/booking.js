@@ -1666,7 +1666,9 @@ exports.createManualBooking = async (req, res) => {
       await logNewRideEvent({
         car: bookingCar,
         booking: newBooking,
-        source: "MANUAL_BOOKING",
+        // RideHistory.source has a strict enum; manual bookings are still
+        // booking-created ride events.
+        source: "BOOKING",
         metadata: {
           createdBy: "owner",
           ownerName: req.user?.name || "Owner",

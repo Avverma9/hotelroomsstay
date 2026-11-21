@@ -481,23 +481,13 @@ function StatsTab({ rideHistoryData }: { rideHistoryData: RideHistoryByCarRespon
         <StatBox label="Fetched" value={filteredItems.length} color="#6366F1" bg="#EEF2FF" />
       </View>
 
-      {/* Route change full details */}
+      {/* Unified ride timeline: old and new route stay together in one card. */}
       <View style={styles.revenueCard}>
-        <Text style={styles.revenueTitle}>Route Change Full History</Text>
-        {routeChanges.length === 0 ? (
-          <Text style={styles.revenueLabel}>Abhi tak koi route change record nahi hai.</Text>
+        <Text style={styles.revenueTitle}>Ride History</Text>
+        {filteredItems.length === 0 ? (
+          <Text style={styles.revenueLabel}>Abhi tak koi ride history record nahi hai.</Text>
         ) : (
-          routeChanges.map((item) => <RouteChangeDetailRow key={item._id} item={item} />)
-        )}
-      </View>
-
-      {/* New rides quick list */}
-      <View style={styles.revenueCard}>
-        <Text style={styles.revenueTitle}>New Ride History</Text>
-        {newRides.length === 0 ? (
-          <Text style={styles.revenueLabel}>Abhi tak koi new ride record nahi hai.</Text>
-        ) : (
-          newRides.slice(0, 10).map((item) => <RideHistoryRow key={item._id} item={item} />)
+          filteredItems.map((item) => <RideHistoryCard key={item._id} item={item} />)
         )}
       </View>
 
@@ -520,27 +510,6 @@ function StatsTab({ rideHistoryData }: { rideHistoryData: RideHistoryByCarRespon
   );
 }
 
-function RideHistoryRow({ item }: { item: RideHistoryEvent }) {
-  const isRouteChanged = item.eventType === "ROUTE_CHANGED";
-  const title = isRouteChanged ? "Route Changed" : "New Ride Created";
-
-  const prev = item.previousRoute;
-  const next = item.newRoute || item.route;
-  const routeText = isRouteChanged
-    ? `${prev?.pickupP || "-"} -> ${prev?.dropP || "-"} to ${next?.pickupP || "-"} -> ${next?.dropP || "-"}`
-    : `${item.route?.pickupP || "-"} -> ${item.route?.dropP || "-"}`;
-
-  return (
-    <View style={styles.revenueRow}>
-      <View style={{ flex: 1, marginRight: spacing.sm }}>
-        <Text style={[styles.revenueLabel, { color: colors.text, fontWeight: "700" }]}>{title}</Text>
-        <Text style={styles.bookingDate} numberOfLines={1}>{routeText}</Text>
-      </View>
-      <Text style={[styles.revenueValue, { color: isRouteChanged ? "#D97706" : "#059669" }]}>#{item.bookingCode || item._id.slice(-5)}</Text>
-    </View>
-  );
-}
-
 function RouteChangeDetailRow({ item }: { item: RideHistoryEvent }) {
   const prev = item.previousRoute || {};
   const next = item.newRoute || item.route || {};
@@ -560,6 +529,50 @@ function RouteChangeDetailRow({ item }: { item: RideHistoryEvent }) {
 }
 
 // ─── Shared helper components ─────────────────────────────────────────────────
+function RideHistoryCard({ item }: { item: RideHistoryEvent }) {
+  const changed = item.eventType === "ROUTE_CHANGED";
+  const oldRoute = item.previousRoute;
+  const currentRoute = item.newRoute || item.route || {};
+  const fmt = (value?: string) => value
+    ? new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "-";
+  const routeLine = (route?: typeof currentRoute) => `${route?.pickupP || "-"}  →  ${route?.dropP || "-"}`;
+
+  return (
+    <View style={styles.historyCard}>
+      <View style={styles.historyCardHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.historyCardTitle}>{changed ? "Route Updated" : "New Ride Created"}</Text>
+          <Text style={styles.historyCardMeta}>#{item.bookingCode || item._id.slice(-5)}  ·  {fmt(item.createdAt)}</Text>
+        </View>
+        <View style={[styles.historyTag, { backgroundColor: changed ? "#FEF3C7" : "#D1FAE5" }]}>
+          <Text style={[styles.historyTagText, { color: changed ? "#B45309" : "#047857" }]}>
+            {changed ? "UPDATED" : "NEW"}
+          </Text>
+        </View>
+      </View>
+
+      {changed && oldRoute && (
+        <View style={styles.routeVersionBox}>
+          <View style={styles.versionHeader}>
+            <Text style={[styles.versionTag, { color: "#B45309", backgroundColor: "#FEF3C7" }]}>OLD RIDE</Text>
+            <Text style={styles.historyDate}>{fmt(oldRoute.pickupD)} → {fmt(oldRoute.dropD)}</Text>
+          </View>
+          <Text style={styles.historyRoute}>{routeLine(oldRoute)}</Text>
+        </View>
+      )}
+
+      <View style={[styles.routeVersionBox, { borderColor: changed ? "#A7F3D0" : colors.border, backgroundColor: changed ? "#F0FDF4" : colors.bg }]}>
+        <View style={styles.versionHeader}>
+          <Text style={[styles.versionTag, { color: "#047857", backgroundColor: "#D1FAE5" }]}>{changed ? "NEW RIDE" : "CURRENT RIDE"}</Text>
+          <Text style={styles.historyDate}>{fmt(currentRoute.pickupD)} → {fmt(currentRoute.dropD)}</Text>
+        </View>
+        <Text style={styles.historyRoute}>{routeLine(currentRoute)}</Text>
+      </View>
+    </View>
+  );
+}
+
 function StatusChip({ status }: { status: string }) {
   const cfg = statusColors[status] || { bg: "#F1F5F9", text: "#64748B" };
   return (
@@ -706,6 +719,17 @@ const styles = StyleSheet.create<any>({
   revenueRow:  { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border + "60" },
   revenueLabel:{ fontSize: 13, color: colors.textMuted },
   revenueValue:{ fontSize: 14, fontWeight: "700" },
+  historyCard: { borderWidth: 1, borderColor: colors.border, borderRadius: radii.lg, padding: spacing.sm, marginTop: spacing.sm, backgroundColor: colors.surface },
+  historyCardHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, marginBottom: spacing.sm },
+  historyCardTitle: { fontSize: 14, fontWeight: "800", color: colors.text },
+  historyCardMeta: { fontSize: 10, color: colors.textLight, marginTop: 3 },
+  historyTag: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  historyTagText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
+  routeVersionBox: { borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, padding: spacing.sm, marginTop: spacing.xs, backgroundColor: colors.bg },
+  versionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.xs },
+  versionTag: { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 3, fontSize: 9, fontWeight: "900" },
+  historyDate: { flex: 1, textAlign: "right", fontSize: 9, color: colors.textLight },
+  historyRoute: { marginTop: 6, fontSize: 13, fontWeight: "800", color: colors.text },
 
   trendCard:  { backgroundColor: colors.surface, borderRadius: radii.xl, padding: spacing.md },
   trendRow:   { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: 6 },

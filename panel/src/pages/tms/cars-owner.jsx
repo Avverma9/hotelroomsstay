@@ -32,6 +32,7 @@ import {
   updateOwner,
 } from "../../../redux/slices/tms/travel/car";
 import Breadcrumb from "../../components/breadcrumb";
+import PlaceAutocomplete from "../../components/PlaceAutocomplete";
 import { formatDate } from '../../utils/format';
 
 // --- Helpers ---
@@ -231,15 +232,15 @@ const OwnerEditModal = ({ owner, onClose, onSave, saving, saveError }) => {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label className={labelClass}>Full Address</label>
-                <input type="text" name="address" value={formData.address} onChange={handleChange} placeholder="12 Main Street, Sector 5" className={inputClass} />
+                <PlaceAutocomplete name="address" value={formData.address} onChange={handleChange} placeholder="12 Main Street, Sector 5" className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>City</label>
-                <input type="text" name="city" value={formData.city} onChange={handleChange} placeholder="Delhi" className={inputClass} />
+                <PlaceAutocomplete name="city" value={formData.city} onChange={handleChange} placeholder="Delhi" className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>State</label>
-                <input type="text" name="state" value={formData.state} onChange={handleChange} placeholder="Delhi" className={inputClass} />
+                <PlaceAutocomplete name="state" value={formData.state} onChange={handleChange} placeholder="Delhi" className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>Pin Code</label>
@@ -340,9 +341,9 @@ const OwnerCreateModal = ({ onClose, onSave, saving, saveError }) => {
         {saveError && <div className="border-b border-rose-100 bg-rose-50 px-6 py-3 text-sm font-bold text-rose-700">{saveError}</div>}
         <div className="grid gap-4 p-6 sm:grid-cols-2">
           {[['name', 'Full Name', 'text', true], ['mobile', 'Mobile Number', 'tel', true], ['email', 'Email Address', 'email'], ['dl', 'Driving Licence No.', 'text'], ['city', 'City', 'text'], ['state', 'State', 'text'], ['pinCode', 'Pin Code', 'text']].map(([name, label, type, required]) => (
-            <label key={name} className="block"><span className={labelClass}>{label}{required && <span className="text-rose-500"> *</span>}</span><input required={required} type={type} name={name} value={formData[name]} onChange={(event) => setFormData((current) => ({ ...current, [name]: event.target.value }))} className={inputClass} /></label>
+            <label key={name} className="block"><span className={labelClass}>{label}{required && <span className="text-rose-500"> *</span>}</span>{name === 'city' || name === 'state' ? <PlaceAutocomplete required={required} name={name} value={formData[name]} onChange={(event) => setFormData((current) => ({ ...current, [name]: event.target.value }))} className={inputClass} /> : <input required={required} type={type} name={name} value={formData[name]} onChange={(event) => setFormData((current) => ({ ...current, [name]: event.target.value }))} className={inputClass} />}</label>
           ))}
-          <label className="block sm:col-span-2"><span className={labelClass}>Full Address</span><input type="text" name="address" value={formData.address} onChange={(event) => setFormData((current) => ({ ...current, address: event.target.value }))} className={inputClass} /></label>
+          <label className="block sm:col-span-2"><span className={labelClass}>Full Address</span><PlaceAutocomplete name="address" value={formData.address} onChange={(event) => setFormData((current) => ({ ...current, address: event.target.value }))} className={inputClass} /></label>
         </div>
         <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
           <button type="button" onClick={onClose} disabled={saving} className="rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-slate-700 ring-1 ring-inset ring-slate-300">Cancel</button>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { ImagePlus, Loader2, MapPin, UploadCloud, X } from 'lucide-react'
 import Breadcrumb from '../../../components/breadcrumb'
+import PlaceAutocomplete from '../../../components/PlaceAutocomplete'
 import {
   addTravelLocation,
   clearLocationsStatus,
@@ -86,7 +87,7 @@ function AddLocations() {
             <div className="space-y-6">
               <div>
                 <p className="mb-2 text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">Location Name</p>
-                <input
+                <PlaceAutocomplete
                   required
                   value={location}
                   onChange={(event) => setLocation(event.target.value)}

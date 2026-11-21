@@ -13,6 +13,7 @@ import {
   TextInput,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
+import PlaceAutocomplete from "../components/PlaceAutocomplete";
 import { searchHotel } from "../store/slices/hotelSlice";
 import { getBeds, getRooms } from "../store/slices/additionalSlice";
 import { LinearGradient } from "expo-linear-gradient";
@@ -1022,12 +1023,12 @@ const Hotels = ({ navigation, route }) => {
             {/* Destination Input - Ultra Compact */}
             <View className="flex-row items-center bg-slate-50 border border-slate-200 rounded-xl px-3 h-11 mb-3">
               <Ionicons name="location" size={16} color="#0d3b8f" />
-              <TextInput
-                className="flex-1 ml-2 text-sm text-[#0f172a] font-bold"
+              <PlaceAutocomplete
                 placeholder="Destination?"
                 placeholderTextColor="#94a3b8"
                 value={localCity}
                 onChangeText={setLocalCity}
+                style={{ flex: 1, marginLeft: 8, fontSize: 14, color: "#0f172a", fontWeight: "700", padding: 0 }}
               />
             </View>
 

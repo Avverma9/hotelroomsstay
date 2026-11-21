@@ -41,15 +41,15 @@ const writeRideHistory = async (payload) => {
   }
 };
 
-const logNewRideEvent = async ({ car, booking, source = "BOOKING", metadata = {} }) => {
-  if (!car?._id || !car?.ownerId || !booking?._id) return null;
+const logNewRideEvent = async ({ car, booking, route, source = "BOOKING", metadata = {} }) => {
+  if (!car?._id || !car?.ownerId) return null;
   return writeRideHistory({
     carId: car._id,
     ownerId: car.ownerId,
     eventType: "NEW_RIDE",
-    bookingId: booking._id,
-    bookingCode: booking.bookingId || "",
-    route: routeSnapshotFrom(booking),
+    bookingId: booking?._id || null,
+    bookingCode: booking?.bookingId || "",
+    route: routeSnapshotFrom(route || booking || {}),
     source,
     metadata,
   });

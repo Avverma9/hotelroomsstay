@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Plus, Trash2, Save, X, Building2, MapPin, ListChecks, CalendarDays, Car, FileText, UploadCloud, Armchair, LayoutGrid } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { addTour } from '../../../redux/slices/tms/travel/tour/tour';
+import PlaceAutocomplete from '../../components/PlaceAutocomplete';
 
 const predefinedLayouts = [
   { id: '1x1', label: '1x1 (Sleeper/VIP)', left: 1, right: 1, aisle: true },
@@ -348,11 +349,11 @@ export default function TourForm() {
               </div>
               <div className="xl:col-span-1">
                 <label className={labelClass}>State/Region</label>
-                <input type="text" name="state" value={formData.state} onChange={handleInputChange} className={inputClass} placeholder="e.g. Rajasthan" />
+                <PlaceAutocomplete name="state" value={formData.state} onChange={handleInputChange} className={inputClass} placeholder="e.g. Rajasthan" />
               </div>
               <div className="xl:col-span-1">
                 <label className={labelClass}>City</label>
-                <input type="text" name="city" value={formData.city} onChange={handleInputChange} className={inputClass} placeholder="e.g. Jaipur" />
+                <PlaceAutocomplete name="city" value={formData.city} onChange={handleInputChange} className={inputClass} placeholder="e.g. Jaipur" />
               </div>
               <div className="md:col-span-3 xl:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>

@@ -24,6 +24,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getCarById, getSeatData, updateCar, createManualBooking } from "../../../src/api";
 import type { Car, Seat } from "../../../src/api";
+import PlaceAutocomplete from "../../../src/PlaceAutocomplete";
 import { colors, radii, spacing } from "../../../src/theme";
 import Button from "../../../src/ui";
 
@@ -183,7 +184,7 @@ export default function SeatManagementScreen() {
           <Text style={styles.emptyText}>This car doesn&apos;t have seat configuration yet.</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120 }}>
+        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
           {/* Summary chips */}
           <View style={styles.summaryRow}>
             <SummaryChip label="Total" value={seats.length} color="#6366F1" bg="#EEF2FF" />
@@ -243,7 +244,7 @@ export default function SeatManagementScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
               <Text style={styles.modalSubtitle}>
                 Seat: {selectedSeatForBooking?.seatNumber} · {selectedSeatForBooking?.seatType || "Standard"}
               </Text>
@@ -287,8 +288,8 @@ export default function SeatManagementScreen() {
 
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Pickup Location (Optional)</Text>
-                <TextInput
-                  style={styles.formInput}
+                <PlaceAutocomplete
+                  inputStyle={styles.formInput}
                   value={bookingForm.pickupLocation}
                   onChangeText={(v) => setBookingForm((p) => ({ ...p, pickupLocation: v }))}
                   placeholder="Enter pickup location"
@@ -298,8 +299,8 @@ export default function SeatManagementScreen() {
 
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Drop Location (Optional)</Text>
-                <TextInput
-                  style={styles.formInput}
+                <PlaceAutocomplete
+                  inputStyle={styles.formInput}
                   value={bookingForm.dropLocation}
                   onChangeText={(v) => setBookingForm((p) => ({ ...p, dropLocation: v }))}
                   placeholder="Enter drop location"

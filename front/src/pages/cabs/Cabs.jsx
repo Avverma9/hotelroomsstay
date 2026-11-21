@@ -5,6 +5,7 @@ import { useDispatch } from "react-redux";
 import { getAllCars } from "../../redux/slices/car"; 
 import { useNavigate } from "react-router-dom";
 import { useLoader } from "../../utils/loader";
+import PlaceAutocomplete from "../../components/PlaceAutocomplete";
 
 // --- ICONS (SVG) ---
 const Icons = {
@@ -244,11 +245,11 @@ const SearchModal = ({ isOpen, onClose, searchParams, setSearchParams, onSearch 
           <div className="space-y-3">
              <div className="relative group">
                 <Icons.MapPin className="absolute left-3 top-3.5 text-gray-400 w-5 h-5 group-focus-within:text-blue-500" />
-                <input type="text" placeholder="From (City)" value={searchParams.from} onChange={e => setSearchParams(p => ({...p, from: e.target.value}))} className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-medium" />
+                <PlaceAutocomplete placeholder="From (City)" value={searchParams.from} onChange={e => setSearchParams(p => ({...p, from: e.target.value}))} className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-medium" />
              </div>
              <div className="relative group">
                 <Icons.MapPin className="absolute left-3 top-3.5 text-gray-400 w-5 h-5 group-focus-within:text-blue-500" />
-                <input type="text" placeholder="To (City)" value={searchParams.to} onChange={e => setSearchParams(p => ({...p, to: e.target.value}))} className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-medium" />
+                <PlaceAutocomplete placeholder="To (City)" value={searchParams.to} onChange={e => setSearchParams(p => ({...p, to: e.target.value}))} className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-medium" />
              </div>
              <div className="grid grid-cols-2 gap-3">
                <div>

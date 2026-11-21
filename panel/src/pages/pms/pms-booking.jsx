@@ -41,6 +41,7 @@ import {
 } from '../../../redux/slices/pms/bookings'
 import Breadcrumb from '../../components/breadcrumb'
 import MasterFilter from '../../components/master-filter'
+import PlaceAutocomplete from '../../components/PlaceAutocomplete'
 import { formatDate, formatDateTime, formatCurrency, formatDateInput } from '../../utils/format'
 import { getPartnerById } from '../../../redux/slices/partner'
 
@@ -1080,7 +1081,7 @@ function BookingEditModal({
                     </div>
                     <div>
                       <div className="flex justify-between mb-1"><label className="text-[10px] font-semibold text-slate-500 uppercase">City</label></div>
-                      <input value={hotelDetails.hotelCity} onChange={(e) => setHotelDetails((prev) => ({ ...prev, hotelCity: e.target.value }))} disabled={isLocked} className={inputClass} />
+                      <PlaceAutocomplete value={hotelDetails.hotelCity} onChange={(e) => setHotelDetails((prev) => ({ ...prev, hotelCity: e.target.value }))} disabled={isLocked} className={inputClass} />
                     </div>
                     <div>
                       <div className="flex justify-between mb-1"><label className="text-[10px] font-semibold text-slate-500 uppercase">Owner Name</label></div>

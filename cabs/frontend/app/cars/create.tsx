@@ -16,9 +16,10 @@ import {
 } from "react-native";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { type Booking, type Car, getMyCars, checkCarOverlap, updateCar } from "../../src/api";
+import { type Booking, type Car, getMyCars, checkCarOverlap, updateCar, createRideFromCar } from "../../src/api";
 import { findConflicts } from "../../src/availability";
 import { useAuth } from "../../src/auth";
+import PlaceAutocomplete from "../../src/PlaceAutocomplete";
 import { colors, radii, spacing } from "../../src/theme";
 
 const VEHICLE_TYPES = ["Car", "Bike", "Bus"] as const;
@@ -213,7 +214,13 @@ export default function CreateRideScreen() {
         sharingType: sharingType,
       };
 
-      await updateCar(selectedCarId, payload);
+      if (isEditMode) {
+        await updateCar(selectedCarId, payload);
+      } else {
+        // Publishing a ride creates a new scheduled ride record. Updating the
+        // source car here used to overwrite the previous ride and its route.
+        await createRideFromCar(selectedCarId, payload);
+      }
       Alert.alert(
         isEditMode ? "Ride Updated" : "Ride Published",
         isEditMode ? "Your ride has been updated successfully." : "Your new ride has been published successfully.",
@@ -234,7 +241,7 @@ export default function CreateRideScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <KeyboardAvoidingView behavior={Platform.select({ ios: "padding", android: undefined })} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/bookings')}>
               <Ionicons name="chevron-back" size={22} color={colors.text} />
@@ -257,8 +264,14 @@ export default function CreateRideScreen() {
           </Section>
 
           <Section title="Route">
-            <Field label="Pickup Point" value={form.pickupP} onChangeText={(v: string) => setField("pickupP", v)} placeholder="New Delhi Railway Station" />
-            <Field label="Drop Point" value={form.dropP} onChangeText={(v: string) => setField("dropP", v)} placeholder="Jaipur Airport" />
+            <View style={styles.field}>
+              <Text style={styles.label}>Pickup Point</Text>
+              <PlaceAutocomplete value={form.pickupP} onChangeText={(v) => setField("pickupP", v)} placeholder="New Delhi Railway Station" inputStyle={styles.input} />
+            </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>Drop Point</Text>
+              <PlaceAutocomplete value={form.dropP} onChangeText={(v) => setField("dropP", v)} placeholder="Jaipur Airport" inputStyle={styles.input} />
+            </View>
             <DateTimeRow
               dateLabel="Pickup Date"
               timeLabel="Pickup Time"

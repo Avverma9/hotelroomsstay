@@ -4,7 +4,7 @@ const { markExpiredCarsUnavailable, isCarDateExpired } = require('../../utils/ca
 const CarOwner = require('../../models/travel/carOwner');
 const User = require('../../models/user');
 const DashboardUser = require('../../models/dashboardUser');
-const { logRouteChangedEvent, routeSnapshotFrom } = require('../../utils/rideHistory');
+const { logNewRideEvent, logRouteChangedEvent, routeSnapshotFrom } = require('../../utils/rideHistory');
 const { getGSTData } = require('../GST/gst');
 
 const getCabBaseFare = (car) => {
@@ -527,6 +527,76 @@ exports.getMyCars = async (req, res) => {
   } catch (error) {
     console.error('getMyCars error:', error);
     return res.status(500).json({ message: error.message });
+  }
+};
+
+// Create a new scheduled ride from an owner's existing vehicle. A ride is a
+// separate Car document because its route, dates, seats, and bookings have
+// their own lifecycle. The source vehicle is deliberately never updated.
+exports.createRideFromCar = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid source car id' });
+    }
+
+    const sourceCar = await Car.findById(id).lean();
+    const callerOwner = await resolveCallerOwner(req);
+    if (!sourceCar) return res.status(404).json({ message: 'Car not found' });
+    if (!callerOwner || String(callerOwner._id) !== String(sourceCar.ownerId)) {
+      return res.status(403).json({ message: 'Access denied: You do not own this car.' });
+    }
+
+    const data = { ...req.body };
+    const pickupD = toDate(data.pickupD);
+    const dropD = toDate(data.dropD);
+    if (!pickupD || !dropD || pickupD >= dropD) {
+      return res.status(400).json({ message: 'Valid pickupD and dropD are required, and dropD must be greater than pickupD' });
+    }
+
+    const seatConfig = (sourceCar.seatConfig || []).map((seat) => ({
+      seatType: seat.seatType,
+      seatNumber: seat.seatNumber,
+      seatPrice: seat.seatPrice,
+      isBooked: false,
+      bookedBy: '',
+    }));
+    const newCar = await Car.create({
+      make: sourceCar.make,
+      model: sourceCar.model,
+      vehicleNumber: sourceCar.vehicleNumber,
+      vehicleType: sourceCar.vehicleType,
+      year: sourceCar.year,
+      color: sourceCar.color,
+      mileage: sourceCar.mileage,
+      fuelType: sourceCar.fuelType,
+      transmission: sourceCar.transmission,
+      images: sourceCar.images || [],
+      ownerId: sourceCar.ownerId,
+      pickupP: String(data.pickupP || '').trim(),
+      dropP: String(data.dropP || '').trim(),
+      pickupD,
+      dropD,
+      price: Number(data.price) || 0,
+      perPersonCost: data.perPersonCost === undefined ? sourceCar.perPersonCost : Number(data.perPersonCost) || 0,
+      sharingType: data.sharingType || sourceCar.sharingType,
+      seater: seatConfig.length || sourceCar.seater,
+      seatConfig,
+      isAvailable: true,
+      runningStatus: 'Available',
+    });
+
+    await logNewRideEvent({
+      car: newCar,
+      route: newCar,
+      source: 'SYSTEM',
+      metadata: { event: 'RIDE_CREATED', sourceCarId: String(sourceCar._id) },
+    });
+
+    return res.status(201).json({ message: 'Ride created successfully', car: newCar });
+  } catch (error) {
+    console.error('createRideFromCar error:', error);
+    return res.status(500).json({ message: error.message || 'Could not create ride' });
   }
 };
 

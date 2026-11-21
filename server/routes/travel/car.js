@@ -11,6 +11,7 @@ const {
   getSeatsData,
   getCarByOwnerId,
   getMyCars,
+  createRideFromCar,
   releaseSeat,
 } = require('../../controllers/travel/cars');
 const auth = require('../../authentication/auth');
@@ -19,6 +20,7 @@ const router = express.Router();
 router.post('/add-a-car', upload, enforceUploadLimits({ maxFiles: 8, maxTotalSizeBytes: 40 * 1024 * 1024 }), addCar);
 router.get('/get-a-car/:id', getCarById);
 router.get('/get-my-cars', auth, getMyCars);
+router.post('/create-ride-from-car/:id', auth, createRideFromCar);
 router.get('/get-a-car/by-owner/:ownerId', getCarByOwnerId);
 router.get('/get-all-car', getAllCars);
 router.patch('/update-a-car/:id', auth, upload, enforceUploadLimits({ maxFiles: 8, maxTotalSizeBytes: 40 * 1024 * 1024 }), updateCar);

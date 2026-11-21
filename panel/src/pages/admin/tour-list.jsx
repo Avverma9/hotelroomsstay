@@ -19,6 +19,7 @@ import {
   Map as MapIcon,
 } from 'lucide-react'
 import Breadcrumb from '../../components/breadcrumb'
+import PlaceAutocomplete from '../../components/PlaceAutocomplete'
 import MasterFilter from '../../components/master-filter'
 import { tableClasses } from '../../components/admin-table'
 import {
@@ -145,17 +146,17 @@ const MasterFilterSidebar = ({ filters, onChange, onApply, onReset, isOpen, onCl
             {/* Location */}
             <FilterSection title="Location">
               <div className="space-y-3">
-                <input type="text" placeholder="Country" value={filters.country} onChange={(e) => onChange('country', e.target.value)} className={inputClass} />
-                <input type="text" placeholder="State" value={filters.state} onChange={(e) => onChange('state', e.target.value)} className={inputClass} />
-                <input type="text" placeholder="City" value={filters.city} onChange={(e) => onChange('city', e.target.value)} className={inputClass} />
+                <PlaceAutocomplete placeholder="Country" value={filters.country} onChange={(e) => onChange('country', e.target.value)} className={inputClass} />
+                <PlaceAutocomplete placeholder="State" value={filters.state} onChange={(e) => onChange('state', e.target.value)} className={inputClass} />
+                <PlaceAutocomplete placeholder="City" value={filters.city} onChange={(e) => onChange('city', e.target.value)} className={inputClass} />
               </div>
             </FilterSection>
 
             {/* Route */}
             <FilterSection title="Route (From - To)">
               <div className="grid grid-cols-2 gap-3">
-                <input type="text" placeholder="From" value={filters.fromWhere} onChange={(e) => onChange('fromWhere', e.target.value)} className={inputClass} />
-                <input type="text" placeholder="To" value={filters.to} onChange={(e) => onChange('to', e.target.value)} className={inputClass} />
+                <PlaceAutocomplete placeholder="From" value={filters.fromWhere} onChange={(e) => onChange('fromWhere', e.target.value)} className={inputClass} />
+                <PlaceAutocomplete placeholder="To" value={filters.to} onChange={(e) => onChange('to', e.target.value)} className={inputClass} />
               </div>
             </FilterSection>
 

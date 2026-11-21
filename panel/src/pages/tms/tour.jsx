@@ -34,6 +34,7 @@ import { fetchFilteredTours, getVehicleSeats, createBooking } from "../../../red
 import { getGST } from "../../../redux/slices/admin/gst";
 import { selectAuth } from "../../../redux/slices/authSlice";
 import { formatCurrency } from '../../utils/format';
+import PlaceAutocomplete from '../../components/PlaceAutocomplete';
 
 const DEFAULT_FILTERS = {
   q: "",
@@ -228,17 +229,17 @@ const FilterSidebar = ({ filters, onChange, onApply, onReset }) => {
           <div className="space-y-4">
             <div>
               <label className="mb-1.5 block text-[11px] font-bold uppercase text-slate-500">Departure From</label>
-              <input type="text" placeholder="e.g. Delhi" value={filters.fromWhere} onChange={(e) => onChange("fromWhere", e.target.value)} className={inputClass} />
+              <PlaceAutocomplete placeholder="e.g. Delhi" value={filters.fromWhere} onChange={(e) => onChange("fromWhere", e.target.value)} className={inputClass} />
             </div>
             <div>
               <label className="mb-1.5 block text-[11px] font-bold uppercase text-slate-500">Destination To</label>
-              <input type="text" placeholder="e.g. Manali" value={filters.to} onChange={(e) => onChange("to", e.target.value)} className={inputClass} />
+              <PlaceAutocomplete placeholder="e.g. Manali" value={filters.to} onChange={(e) => onChange("to", e.target.value)} className={inputClass} />
             </div>
           </div>
         </FilterSection>
 
         <FilterSection title="Operating City">
-          <input type="text" placeholder="e.g. Mumbai" value={filters.city} onChange={(e) => onChange("city", e.target.value)} className={inputClass} />
+          <PlaceAutocomplete placeholder="e.g. Mumbai" value={filters.city} onChange={(e) => onChange("city", e.target.value)} className={inputClass} />
         </FilterSection>
 
         <FilterSection title="Pricing Budget (₹)">

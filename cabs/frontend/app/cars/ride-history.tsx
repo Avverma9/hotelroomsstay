@@ -49,7 +49,9 @@ export default function RideHistoryScreen() {
         const incoming = result.items ?? [];
         setTotal(result.total ?? 0);
         setRides((prev) => (reset ? incoming : [...prev, ...incoming]));
-        if (!reset) setPage((p) => p + 1);
+        // Page 1 has just been loaded on reset; the next pagination request
+        // must start at page 2 instead of appending page 1 again.
+        setPage(reset ? 2 : (p) => p + 1);
       } catch (e: any) {
         setError(e?.response?.data?.message || "Failed to load ride history");
       } finally {

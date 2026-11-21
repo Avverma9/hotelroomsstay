@@ -22,7 +22,7 @@ import {
 } from "../../src/api";
 import type { Booking, Car, OwnerAvailability } from "../../src/api";
 import { useAuth } from "../../src/auth";
-import { colors, radii, spacing, statusColors } from "../../src/theme";
+import { colors, radii } from "../../src/theme";
 
 const ACTIVE_STATUSES = new Set(["PickupPending", "Available", "Ride in Progress"]);
 
@@ -114,7 +114,19 @@ export default function ProfileScreen() {
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
   useEffect(() => { if (user) loadAvailability(); }, [selectedMonth, user]);
 
-  const activeBookings = useMemo(() => bookings.filter((b) => ACTIVE_STATUSES.has(b.rideStatus || "") || b.bookingStatus === "Confirmed"), [bookings]);
+  // Active Rides is an owner/published-ride view, not a booking view.
+  // A ride can be available even when it has zero bookings.
+  const activeRides = useMemo(
+    () => cars.filter((car) => car.isAvailable !== false && car.runningStatus !== "Unavailable"),
+    [cars],
+  );
+  const activeBookings = useMemo(
+    () => bookings.filter((booking) =>
+      booking.bookingStatus === "Confirmed" ||
+      ["Available", "Ride in Progress"].includes(booking.rideStatus || "")
+    ),
+    [bookings],
+  );
   const monthDays = useMemo(() => {
     const start = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
     const end = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0);
@@ -129,10 +141,22 @@ export default function ProfileScreen() {
       const drop = new Date(b.dropD || b.pickupD || b.createdAt || 0);
       return pickup.getTime() <= dayEnd(day) && drop.getTime() >= dayStart(day);
     });
-    return { day, items, active: items.some((b) => ACTIVE_STATUSES.has(b.rideStatus || "") || b.bookingStatus === "Confirmed") };
-  }), [bookings, monthDays]);
+    const rides = cars.filter((car) => {
+      if (!car.pickupD || !car.dropD || car.isAvailable === false) return false;
+      const pickup = new Date(car.pickupD);
+      const drop = new Date(car.dropD);
+      return pickup.getTime() <= dayEnd(day) && drop.getTime() >= dayStart(day);
+    });
+    return {
+      day,
+      items,
+      rides,
+      active: rides.length > 0 || items.some((b) => ACTIVE_STATUSES.has(b.rideStatus || "") || b.bookingStatus === "Confirmed"),
+    };
+  }), [bookings, cars, monthDays]);
 
   const selectedSummary = useMemo(() => dayBuckets.find((bucket) => sameDay(bucket.day, selectedMonth)) || dayBuckets[0], [dayBuckets, selectedMonth]);
+  const selectedRides = selectedSummary?.rides || [];
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -173,21 +197,43 @@ export default function ProfileScreen() {
         </Section>
 
         {/* My Rides */}
-        <Section title="Active Rides" pad={PADDING_H} actionLabel="View All" onAction={() => router.push("/(tabs)/bookings")}>
+        <Section title="Active Rides" pad={PADDING_H} actionLabel="View All" onAction={() => router.push("/cars/my-rides" as any)}>
+          {loading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
+          ) : activeRides.length === 0 ? (
+            <EmptyState icon="flash-outline" title="No active rides" text="Your upcoming rides will appear here." />
+          ) : (
+            <FlatList
+              data={activeRides.slice(0, 3)}
+              keyExtractor={(item) => item._id}
+              scrollEnabled={false}
+              renderItem={({ item, index }) => (
+                <CarRideRow
+                  car={item}
+                  isLast={index === Math.min(activeRides.length, 3) - 1}
+                  onPress={() => router.push(`/cars/${item._id}` as any)}
+                />
+              )}
+            />
+          )}
+        </Section>
+
+        {/* Customer bookings are shown separately from published rides. */}
+        <Section title="Active Bookings" pad={PADDING_H} actionLabel="View All" onAction={() => router.push("/(tabs)/bookings")}>
           {loading ? (
             <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
           ) : activeBookings.length === 0 ? (
-            <EmptyState icon="flash-outline" title="No active rides" text="Your upcoming rides will appear here." />
+            <EmptyState icon="receipt-outline" title="No active bookings" text="Confirmed bookings will appear here." />
           ) : (
             <FlatList
               data={activeBookings.slice(0, 3)}
               keyExtractor={(item) => item._id}
               scrollEnabled={false}
               renderItem={({ item, index }) => (
-                <RideRow 
-                  booking={item} 
+                <BookingStatusRow
+                  booking={item}
                   isLast={index === Math.min(activeBookings.length, 3) - 1}
-                  onPress={() => router.push({ pathname: "/booking/[id]", params: { id: item._id, data: JSON.stringify(item) } })} 
+                  onPress={() => router.push({ pathname: "/booking/[id]", params: { id: item._id, data: JSON.stringify(item) } })}
                 />
               )}
             />
@@ -246,6 +292,7 @@ export default function ProfileScreen() {
               const buckets = dayBuckets.find((b) => sameDay(b.day, day));
               const hasActive = !!buckets?.active;
               const booked = buckets?.items.length || 0;
+              const hasRide = (buckets?.rides.length || 0) > 0;
               const ts = day.getTime();
               
               const isUnavail = availList.some(a => a.mode === 'unavailable' && ts >= new Date(a.startDate).setHours(0,0,0,0) && ts <= new Date(a.endDate).setHours(23,59,59,999));
@@ -281,7 +328,7 @@ export default function ProfileScreen() {
                     {day.getDate()}
                   </Text>
                   <Text style={[styles.dayMeta, hasActive && !isUnavail && styles.dayNumActive, isUnavail && styles.dayNumUnavail]}>
-                    {isUnavail ? 'Block' : isOwnerAvail ? 'Avail' : booked ? `${booked} rds` : ''}
+                    {isUnavail ? 'Block' : isOwnerAvail ? 'Avail' : booked ? `${booked} rds` : hasRide ? 'Ride' : ''}
                   </Text>
                 </TouchableOpacity>
               );
@@ -345,6 +392,26 @@ export default function ProfileScreen() {
               ))}
             </View>
           )}
+
+          {!calEditMode && selectedRides.length > 0 && (
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>Valid rides on this date</Text>
+              <Text style={styles.summaryText}>Pickup/drop date ke according active rides</Text>
+              {selectedRides.map((ride, i) => (
+                <TouchableOpacity
+                  key={ride._id}
+                  style={[styles.summaryItem, i > 0 && styles.borderTop]}
+                  onPress={() => router.push(`/cars/${ride._id}` as any)}
+                >
+                  <Text style={styles.summaryItemTitle}>{ride.make} {ride.model}</Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={styles.summaryItemMeta}>{ride.pickupP || "—"} <Ionicons name="arrow-forward" size={10} color={colors.textMuted} /> {ride.dropP || "—"}</Text>
+                    <Text style={styles.summaryStatusBadge}>Available</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </Section>
         
         <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
@@ -395,15 +462,37 @@ function QuickCard({ label, value, icon, onPress, w }: any) {
   );
 }
 
-function RideRow({ booking, onPress, isLast }: any) {
-  const cfg = statusColors[booking.rideStatus || "PickupPending"] || { bg: "#F1F5F9", text: "#64748B" };
+function CarRideRow({ car, onPress, isLast }: { car: Car; onPress: () => void; isLast: boolean }) {
+  const status = car.runningStatus || "Available";
   return (
     <TouchableOpacity style={[styles.rideRow, !isLast && styles.borderBottom]} onPress={onPress}>
       <View style={{ flex: 1, paddingRight: 8 }}>
-        <Text style={styles.rideTitle} numberOfLines={1}>{booking.make || booking.carDetails?.make || "Vehicle"} {booking.model || booking.carDetails?.model || ""}</Text>
-        <Text style={styles.rideMeta} numberOfLines={1}>{booking.pickupP || "—"} <Ionicons name="arrow-forward" size={10} color={colors.textMuted}/> {booking.dropP || "—"}</Text>
+        <Text style={styles.rideTitle} numberOfLines={1}>{car.make} {car.model}</Text>
+        <Text style={styles.rideMeta} numberOfLines={1}>
+          {car.pickupP || "—"} <Ionicons name="arrow-forward" size={10} color={colors.textMuted} /> {car.dropP || "—"}
+        </Text>
       </View>
-      <View style={[styles.badge, { backgroundColor: cfg.bg }]}><Text style={[styles.badgeText, { color: cfg.text }]}>{booking.rideStatus || "Pending"}</Text></View>
+      <View style={[styles.badge, { backgroundColor: "#D1FAE5" }]}>
+        <Text style={[styles.badgeText, { color: "#059669" }]}>{status}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function BookingStatusRow({ booking, onPress, isLast }: { booking: Booking; onPress: () => void; isLast: boolean }) {
+  const status = booking.rideStatus || booking.bookingStatus || "Confirmed";
+  const isInProgress = status === "Ride in Progress";
+  return (
+    <TouchableOpacity style={[styles.rideRow, !isLast && styles.borderBottom]} onPress={onPress}>
+      <View style={{ flex: 1, paddingRight: 8 }}>
+        <Text style={styles.rideTitle} numberOfLines={1}>{booking.passengerName || "Customer Booking"}</Text>
+        <Text style={styles.rideMeta} numberOfLines={1}>
+          {booking.pickupP || "—"} <Ionicons name="arrow-forward" size={10} color={colors.textMuted} /> {booking.dropP || "—"}
+        </Text>
+      </View>
+      <View style={[styles.badge, { backgroundColor: isInProgress ? "#DBEAFE" : "#D1FAE5" }]}>
+        <Text style={[styles.badgeText, { color: isInProgress ? "#2563EB" : "#059669" }]}>{status}</Text>
+      </View>
     </TouchableOpacity>
   );
 }

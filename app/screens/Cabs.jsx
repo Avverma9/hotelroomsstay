@@ -14,6 +14,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
+import PlaceAutocomplete from "../components/PlaceAutocomplete";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { fetchAllCabs, filterCabsByQuery } from "../store/slices/cabSlice";
 import CabsSkeleton from "../components/skeleton/CabsSkeleton";
@@ -520,7 +521,7 @@ export default function Cabs({ navigation }) {
 
             {/* Inputs */}
             <View style={{ flex: 1 }}>
-              <TextInput
+              <PlaceAutocomplete
                 value={route.pickup}
                 onChangeText={(t) => setRoute((p) => ({ ...p, pickup: t }))}
                 placeholder="Pickup location"
@@ -534,7 +535,7 @@ export default function Cabs({ navigation }) {
                 }}
               />
               <View style={{ height: 1, backgroundColor: "#e2e8f0" }} />
-              <TextInput
+              <PlaceAutocomplete
                 value={route.drop}
                 onChangeText={(t) => setRoute((p) => ({ ...p, drop: t }))}
                 placeholder="Drop location"

@@ -17,6 +17,7 @@ import PlayStoreWavyLoader from "../components/PlayStoreWavyLoader";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
+import PlaceAutocomplete from "../components/PlaceAutocomplete";
 import { useDispatch, useSelector } from "react-redux";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
@@ -1417,16 +1418,25 @@ const Profile = ({ route }) => {
                   <Text style={S.fieldLabel}>{label}</Text>
                   <View style={S.editFieldRow}>
                     <Ionicons name={icon} size={15} color={C.gold} />
-                    <TextInput
-                      value={updateForm[key]}
-                      onChangeText={(t) => setUpdateForm((p) => ({ ...p, [key]: key === "mobile" ? t.replace(/[^\d]/g, "") : t }))}
-                      placeholder={placeholder}
-                      placeholderTextColor={C.textDim}
-                      keyboardType={kb}
-                      autoCapitalize={kb === "email-address" ? "none" : "sentences"}
-                      secureTextEntry={secure}
-                      style={S.editFieldInput}
-                    />
+                    {key === "address" ? (
+                      <PlaceAutocomplete
+                        value={updateForm[key]}
+                        onChangeText={(t) => setUpdateForm((p) => ({ ...p, address: t }))}
+                        placeholder={placeholder}
+                        style={S.editFieldInput}
+                      />
+                    ) : (
+                      <TextInput
+                        value={updateForm[key]}
+                        onChangeText={(t) => setUpdateForm((p) => ({ ...p, [key]: key === "mobile" ? t.replace(/[^\d]/g, "") : t }))}
+                        placeholder={placeholder}
+                        placeholderTextColor={C.textDim}
+                        keyboardType={kb}
+                        autoCapitalize={kb === "email-address" ? "none" : "sentences"}
+                        secureTextEntry={secure}
+                        style={S.editFieldInput}
+                      />
+                    )}
                   </View>
                 </View>
               ))}

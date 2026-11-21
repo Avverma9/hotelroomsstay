@@ -12,6 +12,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useDispatch, useSelector } from "react-redux";
 import { Ionicons } from "@expo/vector-icons";
+import PlaceAutocomplete from "../components/PlaceAutocomplete";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import {
   fetchTourList,
@@ -475,24 +476,22 @@ export default function Tour({ navigation }) {
             <View className="mt-3 flex-row" style={{ gap: 10 }}>
               <View className="flex-1 h-11 rounded-2xl bg-[#fff4ef] border border-[#f3d5cb] px-3 flex-row items-center" style={{ gap: 8 }}>
                 <Ionicons name="radio-button-on" size={14} color="#10b981" />
-                <TextInput
+                <PlaceAutocomplete
                   value={fromCity}
                   onChangeText={setFromCity}
                   placeholder="From"
                   placeholderTextColor="#94a3b8"
-                  className="flex-1 text-slate-800 font-semibold"
-                  autoCorrect={false}
+                  style={{ flex: 1, color: "#1e293b", fontWeight: "600", padding: 0 }}
                 />
               </View>
               <View className="flex-1 h-11 rounded-2xl bg-[#fff4ef] border border-[#f3d5cb] px-3 flex-row items-center" style={{ gap: 8 }}>
                 <Ionicons name="location" size={14} color="#3b82f6" />
-                <TextInput
+                <PlaceAutocomplete
                   value={toCity}
                   onChangeText={setToCity}
                   placeholder="To"
                   placeholderTextColor="#94a3b8"
-                  className="flex-1 text-slate-800 font-semibold"
-                  autoCorrect={false}
+                  style={{ flex: 1, color: "#1e293b", fontWeight: "600", padding: 0 }}
                 />
               </View>
             </View>

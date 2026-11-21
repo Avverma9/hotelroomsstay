@@ -282,6 +282,12 @@ export async function updateCar(id: string, body: Partial<Car>) {
   return data as { success?: boolean; message?: string; car?: Car } & Car;
 }
 
+/** POST /travel/create-ride-from-car/:id — publish another ride for the same vehicle. */
+export async function createRideFromCar(id: string, body: Partial<Car>) {
+  const { data } = await travelApi.post(`/create-ride-from-car/${id}`, body);
+  return data as { message: string; car: Car };
+}
+
 /**
  * GET /travel/get-bookings-by/car/:carId
  * Returns paginated bookings for a specific car — owner-verified via JWT.

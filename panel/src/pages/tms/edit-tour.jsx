@@ -6,6 +6,7 @@ import {
   CheckCircle, Loader2,
 } from 'lucide-react'
 import { getTourById, updateTour } from '../../../redux/slices/tms/travel/tour/tour'
+import PlaceAutocomplete from '../../components/PlaceAutocomplete'
 
 const selectTour = (state) => state.tour
 
@@ -280,11 +281,11 @@ export default function EditTour() {
               </div>
               <div>
                 <Label>State</Label>
-                <input name="state" value={form.state} onChange={handleChange} className={inputCls} placeholder="State" />
+                <PlaceAutocomplete name="state" value={form.state} onChange={handleChange} className={inputCls} placeholder="State" />
               </div>
               <div>
                 <Label>City</Label>
-                <input name="city" value={form.city} onChange={handleChange} className={inputCls} placeholder="City" />
+                <PlaceAutocomplete name="city" value={form.city} onChange={handleChange} className={inputCls} placeholder="City" />
               </div>
               <div className="sm:col-span-3">
                 <Label>Visiting Places</Label>

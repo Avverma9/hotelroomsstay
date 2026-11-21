@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { addCar, updateCar, getCarById, getSeatsData, getOwnerById, getAllOwners, filterOwners, clearCarError, clearSelectedCar, clearSelectedOwner } from '../../../redux/slices/tms/travel/car';
 import Breadcrumb from '../../components/breadcrumb';
+import PlaceAutocomplete from '../../components/PlaceAutocomplete';
 
 const VEHICLE_TYPES = ['Bike', 'Car', 'Bus'];
 const SHARING_TYPES = ['Private', 'Shared'];
@@ -553,8 +554,8 @@ export default function AddCarForm({ isEditMode = false }) {
                 <div className="mt-6 border-t border-slate-100 pt-5">
                   <p className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">Route & Schedule</p>
                   <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                    <div><label className={labelClass}>Pickup Point</label><input type="text" {...field('pickupP')} placeholder="Delhi" /></div>
-                    <div><label className={labelClass}>Drop Point</label><input type="text" {...field('dropP')} placeholder="Agra" /></div>
+                    <div><label className={labelClass}>Pickup Point</label><PlaceAutocomplete {...field('pickupP')} placeholder="Delhi" className={inputClass} /></div>
+                    <div><label className={labelClass}>Drop Point</label><PlaceAutocomplete {...field('dropP')} placeholder="Agra" className={inputClass} /></div>
                     <div><label className={labelClass}>Pickup Date & Time</label><input type="datetime-local" {...field('pickupD')} /></div>
                     <div><label className={labelClass}>Drop Date & Time</label><input type="datetime-local" {...field('dropD')} /></div>
                   </div>
@@ -734,9 +735,9 @@ export default function AddCarForm({ isEditMode = false }) {
                     <div><label className={labelClass}>Driving Licence No.</label><input type="text" {...field('ownerDrivingLicence')} placeholder="DL0420220012345" /></div>
                     <div><label className={labelClass}>Aadhar</label><input type="text" {...field('ownerAadhar')} placeholder="123456789012" /></div>
                     <div><label className={labelClass}>PAN</label><input type="text" {...field('ownerPAN')} placeholder="ABCDE1234F" /></div>
-                    <div className="sm:col-span-2 lg:col-span-3"><label className={labelClass}>Address</label><input type="text" {...field('ownerAddress')} placeholder="12 Main Street, Sector 5" /></div>
-                    <div><label className={labelClass}>City</label><input type="text" {...field('ownerCity')} placeholder="Delhi" /></div>
-                    <div><label className={labelClass}>State</label><input type="text" {...field('ownerState')} placeholder="Delhi" /></div>
+                    <div className="sm:col-span-2 lg:col-span-3"><label className={labelClass}>Address</label><PlaceAutocomplete {...field('ownerAddress')} placeholder="12 Main Street, Sector 5" /></div>
+                    <div><label className={labelClass}>City</label><PlaceAutocomplete {...field('ownerCity')} placeholder="Delhi" /></div>
+                    <div><label className={labelClass}>State</label><PlaceAutocomplete {...field('ownerState')} placeholder="Delhi" /></div>
                     <div><label className={labelClass}>PIN Code</label><input type="number" {...field('ownerPinCode')} placeholder="110001" /></div>
                   </div>
                 </div>
